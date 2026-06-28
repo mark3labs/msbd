@@ -12,7 +12,10 @@
 # `devices: ["/dev/kvm:/dev/kvm"]` is honored.
 
 # ---- build stage ----------------------------------------------------------
-FROM golang:1.23-bookworm AS build
+# Build glibc doesn't matter for the FFI dlopen — the runtime base is what the
+# bundled .so links against. msbd is small and forward-compatible across glibc
+# versions, so we use the default (bookworm-based) golang image here.
+FROM golang:1.23 AS build
 
 ENV CGO_ENABLED=1
 WORKDIR /src
@@ -24,7 +27,10 @@ COPY . .
 RUN go build -ldflags="-s -w" -o /out/msbd ./cmd/msbd
 
 # ---- runtime stage --------------------------------------------------------
-FROM debian:bookworm-slim
+# Debian trixie (13) ships glibc 2.41. The microsandbox v0.6.0 FFI bundle links
+# against glibc 2.38 symbols, so older bases (bookworm = 2.36) fail to dlopen
+# it. Do NOT downgrade to bookworm/alpine.
+FROM debian:trixie-slim
 
 # ca-certificates: registry/TLS for image pulls + the msb+libkrunfw download.
 # libcap-ng0: the prebuilt `msb` supervisor links against libcap-ng.so.0.

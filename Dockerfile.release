@@ -7,10 +7,11 @@
 # every architecture's container.
 #
 # Runtime base: glibc (Debian slim). The microsandbox SDK's embedded FFI library
-# and the downloaded `msb` supervisor link against glibc >= 2.28; alpine/musl
-# won't work.
+# links against glibc 2.38 symbols (as of SDK v0.6.0), so the base must be at
+# least Debian trixie (13) / glibc 2.41. Bookworm (2.36) and Alpine/musl WILL
+# NOT WORK — the FFI dlopen fails with `GLIBC_2.38 not found`.
 
-FROM debian:bookworm-slim
+FROM debian:trixie-slim
 
 # ca-certificates — TLS for OCI registry pulls + the EnsureInstalled download.
 # libcap-ng0     — runtime dep of the prebuilt msb supervisor binary.
