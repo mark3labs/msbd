@@ -106,9 +106,13 @@ func (s *Service) Create(ctx context.Context, p CreateParams) (*Instance, error)
 	if len(p.Labels) > 0 {
 		opts = append(opts, msb.WithLabels(p.Labels))
 	}
-	if workdir != "" {
-		opts = append(opts, msb.WithWorkdir(workdir))
-	}
+	// Deliberately NOT passing WithWorkdir(p.Workdir): the SDK validates that
+	// the path already exists in the image's rootfs at boot, and refuses with
+	// "invalid config: workdir does not exist in guest" when it doesn't — a
+	// common case when callers pass an opinionated default like /workspace
+	// against an arbitrary OCI image. We mkdir+chdir below instead, which is
+	// strictly looser and matches Docker's behavior. The image's own WORKDIR
+	// still applies for the initial pwd when the caller didn't pin one.
 	if p.AutoStopSecs > 0 {
 		opts = append(opts, msb.WithIdleTimeout(time.Duration(p.AutoStopSecs)*time.Second))
 	}
@@ -122,12 +126,24 @@ func (s *Service) Create(ctx context.Context, p CreateParams) (*Instance, error)
 	}
 	s.reg.cache(name, sb)
 
-	// Resolve the box's REAL working directory. When the caller pinned a
-	// workdir we trust it; otherwise the image's own WORKDIR applies (e.g. the
-	// kit image starts in /workspace), so ask the guest with `pwd`. This is the
-	// value threaded back as the default exec cwd, mirroring the Daytona
-	// adapter's GetWorkingDir. Best-effort: fall back to "/" on any error.
+	// Resolve the box's REAL working directory.
+	//
+	//   1. Caller pinned a workdir: ensure it exists in the guest (mkdir -p),
+	//      then use it. This is what callers like shipagent expect when they
+	//      pass /workspace — the dir gets created if the image didn't ship it,
+	//      rather than the SDK refusing to boot.
+	//   2. No workdir pinned: trust the image's own WORKDIR by asking the guest
+	//      with `pwd` (matches the Daytona adapter's GetWorkingDir).
+	//
+	// Best-effort: fall back to defaultWorkdir on any error.
 	resolved := workdir
+	if resolved != "" {
+		quoted := shellQuote(resolved)
+		if _, perr := runShell(cctx, sb, ExecParams{Cmd: "mkdir -p " + quoted}); perr != nil {
+			// Don't fail Create on mkdir error — fall back to the image's WORKDIR.
+			resolved = ""
+		}
+	}
 	if resolved == "" {
 		if out, perr := runShell(cctx, sb, ExecParams{Cmd: "pwd"}); perr == nil {
 			if wd := strings.TrimSpace(out.Stdout); strings.HasPrefix(wd, "/") {
@@ -372,4 +388,10 @@ func parentDir(p string) string {
 		return ""
 	}
 	return p[:i]
+}
+
+// shellQuote wraps s in single quotes for safe inclusion in a /bin/sh command
+// line. Embedded single quotes are escaped via the standard `'\''` dance.
+func shellQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'"
 }
