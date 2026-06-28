@@ -118,7 +118,7 @@ func drain(j *job) {
 			return
 		case msb.ExecEventFailed:
 			if ev.Failure != nil {
-				j.stderr.WriteString(fmt.Sprintf("%v", ev.Failure))
+				fmt.Fprintf(&j.stderr, "%v", ev.Failure)
 			}
 			j.state = JobDead
 			j.mu.Unlock()
