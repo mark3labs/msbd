@@ -1,7 +1,7 @@
 # msbd — Microsandbox REST host
 
 <p align="center">
-  <em>A small HTTP server that turns <a href="https://microsandbox.dev">microsandbox</a> into a remote, language-agnostic sandbox backend.</em>
+  <em>A small HTTP server that wraps <a href="https://microsandbox.dev">microsandbox</a> and exposes its microVMs over a clean REST API.</em>
 </p>
 
 <p align="center">
@@ -13,14 +13,13 @@
 
 ## What is this?
 
-[microsandbox](https://github.com/superradcompany/microsandbox) is a fantastic local microVM runtime — fast, hardware-isolated sandboxes booted from OCI images via libkrun. The catch: it's **cgo-only** and the SDK boots VMs as **child processes of your application**, so embedding it in a long-running service couples your binary to libkrun, `/dev/kvm`, glibc, and a specific host.
+[microsandbox](https://github.com/superradcompany/microsandbox) is a local microVM runtime — fast, hardware-isolated sandboxes booted from OCI images via libkrun. It's terrific, but the SDK is in-process and Go-only.
 
-**msbd** is a thin daemon that wraps the microsandbox Go SDK and exposes a small REST API. Your application talks plain HTTP, msbd handles all the cgo + libkrun + `/dev/kvm` parts on its own host.
+**msbd** puts a small daemon and a REST API in front of it, so any language can drive microsandbox over plain HTTP. Run msbd once on a host that has `/dev/kvm`, then `curl` it (or generate a client from the OpenAPI spec) from wherever.
 
-- **One cgo binary, one KVM host.** Everything else is HTTP.
+- **Simple.** ~12 endpoints, OpenAPI 3.1 spec, JSON in/out, bearer auth.
 - **MicroVMs survive restarts.** Sandboxes are created detached; msbd reconnects them by name on boot.
-- **Native primitives.** Real exec sessions for async jobs, real file IO over the guest filesystem — no shell-sentinel hacks.
-- **Tiny surface.** ~12 endpoints, OpenAPI 3.1 spec, JSON in/out, bearer auth.
+- **Native primitives.** Real exec sessions for async jobs, real file IO over the guest filesystem.
 
 ## Quickstart
 
@@ -112,7 +111,7 @@ All via environment variables.
 | `MSBD_LISTEN` | `:8099` | HTTP listen address. |
 | `MSBD_API_KEY` | *(empty)* | Bearer token required on every request. **Empty = unauthenticated (dev only).** |
 | `MSBD_DEFAULT_IMAGE` | `microsandbox/python` | OCI image used when create omits `image`. |
-| `MSBD_PREBAKED` | `false` | Set `true` when the default image already ships your toolchain/agent; reported via `/v1/capabilities` so clients can skip provisioning. |
+| `MSBD_PREBAKED` | `false` | Set `true` when the default image already ships your toolchain; reported via `/v1/capabilities` so clients can skip provisioning. |
 | `MSBD_MAX_SANDBOXES` | `0` (unlimited) | Hard cap on concurrent sandboxes; rejects new creates above this with 507. |
 | `MSBD_CREATE_TIMEOUT_SECS` | `300` | Boot deadline (covers cold OCI pulls). |
 
@@ -120,7 +119,7 @@ All via environment variables.
 
 | Method & path | Purpose |
 |---|---|
-| `GET /healthz` · `GET /readyz` | Liveness · readiness (FFI + `/dev/kvm`). |
+| `GET /healthz` · `GET /readyz` | Liveness · readiness (runtime loaded + `/dev/kvm` accessible). |
 | `GET /v1/capabilities` | Backend features + default image + runtime version. |
 | `POST /v1/sandboxes` · `GET /v1/sandboxes` · `GET/DELETE /v1/sandboxes/{id}` | Lifecycle. |
 | `POST /v1/sandboxes/{id}/stop` · `.../start` | Pause / ensure-running. |
@@ -132,8 +131,8 @@ Full schemas: see [`openapi.yaml`](./openapi.yaml).
 
 ## Lifecycle semantics
 
-- **Detached by default.** Every sandbox is created with `WithDetached()`, so the microVM keeps running when msbd restarts.
-- **Reconnect at boot.** On startup msbd calls `ListSandboxes` and re-attaches by name. A sandbox that existed before the restart is still callable through the same id.
+- **Detached by default.** Every sandbox is created detached, so the microVM keeps running when msbd restarts.
+- **Reconnect at boot.** On startup msbd lists all known sandboxes and re-attaches by name. A sandbox that existed before the restart is still callable through the same id.
 - **Transparent resume.** `run`, `launch`, and `files/*` all ensure-running first — a paused box silently resumes on the next call. `exec` (one round-trip helpers) deliberately does not, so it stays cheap.
 - **Jobs are in-memory.** A job that was running when msbd restarts polls as `gone` (the VM survives; the streaming attach does not). Re-launch from the client side.
 - **Names are ids.** Sandbox names (≤128 bytes UTF-8) ARE the provider id. msbd generates them as `sbx_<16hex>`; you can also pass your own.
@@ -142,7 +141,6 @@ Full schemas: see [`openapi.yaml`](./openapi.yaml).
 
 ✅ A simple way to expose microsandbox over HTTP so any language can drive it.
 ✅ A single-host, single-tenant device server. Auth your real users *upstream*.
-✅ A drop-in for sandbox abstractions that already speak HTTP (e.g. shipagent's `sandbox.Provider`).
 
 ❌ Not a multi-host scheduler. Capacity = the one host.
 ❌ Not a multi-tenant platform with quotas, billing, RBAC. (Bring your own.)
@@ -152,10 +150,9 @@ Full schemas: see [`openapi.yaml`](./openapi.yaml).
 
 ```bash
 # Build
-CGO_ENABLED=1 go build -o ./tmp/msbd ./cmd/msbd
+go build -o ./tmp/msbd ./cmd/msbd
 
-# Run (NixOS: you may need to point ld at libcap-ng — see Dockerfile for
-# what's installed in production).
+# Run
 MSBD_API_KEY=devkey ./tmp/msbd
 
 # Test
@@ -171,11 +168,12 @@ internal/api/handlers.go      # per-endpoint handlers
 internal/api/dto.go           # wire shapes
 internal/core/service.go      # SDK-facing business logic
 internal/core/registry.go     # live handle cache + workdir cache + reconcile
-internal/core/jobs.go         # async job registry + ExecStream drain
+internal/core/jobs.go         # async job registry
 internal/core/version.go      # SDK / runtime version helpers
 openapi.yaml                  # the contract
-Dockerfile                    # glibc base, libcap-ng0, healthcheck
-docker-compose.yml            # example Dokploy/compose deploy
+Dockerfile                    # build from source
+Dockerfile.release            # used by goreleaser
+docker-compose.yml            # example compose deploy
 ```
 
 ## License
