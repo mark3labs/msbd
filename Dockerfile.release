@@ -1,0 +1,37 @@
+# Dockerfile.release — consumed by goreleaser's `dockers:` stanza.
+#
+# Unlike the top-level Dockerfile (which builds from source), this expects the
+# `msbd` binary to already be present in the build context — goreleaser drops
+# the per-arch binary it just compiled alongside this file and runs `docker build`
+# against it. That's how we get a multi-arch image without rebuilding Go inside
+# every architecture's container.
+#
+# Runtime base: glibc (Debian slim). The microsandbox SDK's embedded FFI library
+# and the downloaded `msb` supervisor link against glibc >= 2.28; alpine/musl
+# won't work.
+
+FROM debian:bookworm-slim
+
+# ca-certificates — TLS for OCI registry pulls + the EnsureInstalled download.
+# libcap-ng0     — runtime dep of the prebuilt msb supervisor binary.
+# curl           — used by the HEALTHCHECK + handy for ad-hoc debugging.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        libcap-ng0 \
+        curl \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY msbd /usr/local/bin/msbd
+
+# Persist the runtime (msb + libkrunfw) and OCI image cache across container
+# restarts. Operators should mount a named volume here.
+VOLUME ["/root/.microsandbox"]
+
+ENV MSBD_LISTEN=":8099"
+EXPOSE 8099
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=120s --retries=3 \
+    CMD curl -fsS http://localhost:8099/readyz || exit 1
+
+ENTRYPOINT ["msbd"]

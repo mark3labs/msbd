@@ -1,0 +1,30 @@
+# Example Dokploy / docker compose deployment for msbd.
+#
+# IMPORTANT: deploy this as a COMPOSE service (compose type "docker-compose"),
+# NOT a Swarm/Application — Swarm ignores `devices:` so /dev/kvm passthrough
+# would silently fail. The host must have /dev/kvm (bare-metal Linux or a VM
+# with nested virtualization enabled).
+
+services:
+  msbd:
+    build: .
+    # image: ghcr.io/<you>/msbd:latest   # or pull a published image
+    devices:
+      - "/dev/kvm:/dev/kvm"
+    # If /dev/kvm is NOT world-rw (0666) on the host, grant access instead:
+    # group_add:
+    #   - kvm            # or the numeric GID from `ls -l /dev/kvm`
+    environment:
+      MSBD_API_KEY: ${MSBD_API_KEY:?set MSBD_API_KEY}
+      MSBD_LISTEN: ":8099"
+      MSBD_DEFAULT_IMAGE: "ghcr.io/mark3labs/kit-sandbox:latest"
+      MSBD_PREBAKED: "true"        # default image ships an agent + toolchain
+      MSBD_MAX_SANDBOXES: "0"      # 0 = unlimited; set a host-safe ceiling
+    ports:
+      - "8099:8099"
+    volumes:
+      - msbd-data:/root/.microsandbox   # persist runtime + image cache
+    restart: unless-stopped
+
+volumes:
+  msbd-data: {}

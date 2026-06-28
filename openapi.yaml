@@ -1,0 +1,440 @@
+openapi: 3.1.0
+info:
+  title: msbd — Microsandbox REST host
+  version: 0.1.0
+  description: >
+    A standalone, self-hostable HTTP server that wraps the microsandbox Go SDK
+    (cgo + libkrun) and exposes a small REST API for managing fast, local
+    microVMs. Run it on a host that has /dev/kvm; clients then treat
+    microsandbox as a remote sandbox backend with no cgo on their side.
+
+
+    All endpoints except `/healthz` and `/readyz` require a bearer token.
+servers:
+  - url: http://localhost:8099
+    description: Local dev
+security:
+  - bearerAuth: []
+tags:
+  - name: meta
+    description: Health, readiness, capabilities
+  - name: lifecycle
+    description: Sandbox create / get / list / stop / start / delete
+  - name: exec
+    description: Synchronous command execution
+  - name: jobs
+    description: Asynchronous (background) command execution
+  - name: files
+    description: Native file IO
+
+paths:
+  /healthz:
+    get:
+      tags: [meta]
+      summary: Liveness probe
+      security: []
+      responses:
+        "200":
+          description: Process is up
+          content:
+            text/plain:
+              schema: { type: string, example: ok }
+
+  /readyz:
+    get:
+      tags: [meta]
+      summary: Readiness probe
+      description: >
+        Reports whether the host can actually boot microVMs: the FFI runtime is
+        loadable AND /dev/kvm is openable read/write.
+      security: []
+      responses:
+        "200":
+          description: Ready to boot sandboxes
+          content:
+            text/plain:
+              schema: { type: string, example: ready }
+        "503":
+          description: Not ready (runtime not loaded or /dev/kvm inaccessible)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorBody" }
+
+  /v1/capabilities:
+    get:
+      tags: [meta]
+      summary: Report backend features
+      responses:
+        "200":
+          description: Capabilities
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Capabilities" }
+
+  /v1/sandboxes:
+    post:
+      tags: [lifecycle]
+      summary: Create (boot) a sandbox
+      description: >
+        Boots a detached microVM from an OCI image. Cold first pull of a tag can
+        take minutes; cached boots are ~150ms. Returns the live instance.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateRequest" }
+      responses:
+        "201":
+          description: Sandbox created and running
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Instance" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "507":
+          description: Host at capacity (MSBD_MAX_SANDBOXES reached) or boot failed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorBody" }
+    get:
+      tags: [lifecycle]
+      summary: List all sandboxes
+      responses:
+        "200":
+          description: All known sandboxes (running or stopped)
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Instance" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /v1/sandboxes/{id}:
+    parameters:
+      - $ref: "#/components/parameters/SandboxId"
+    get:
+      tags: [lifecycle]
+      summary: Get one sandbox
+      responses:
+        "200":
+          description: Current state
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Instance" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [lifecycle]
+      summary: Delete (tear down) a sandbox
+      description: Stops the box if running, then removes it permanently.
+      responses:
+        "204": { description: Deleted }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/sandboxes/{id}/stop:
+    parameters:
+      - $ref: "#/components/parameters/SandboxId"
+    post:
+      tags: [lifecycle]
+      summary: Stop (pause) a sandbox
+      description: >
+        Pauses the VM (releases CPU/mem). Does not auto-resume; the next
+        run/launch/file call transparently resumes it.
+      responses:
+        "204": { description: Stopped }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/sandboxes/{id}/start:
+    parameters:
+      - $ref: "#/components/parameters/SandboxId"
+    post:
+      tags: [lifecycle]
+      summary: Start (ensure running) a sandbox
+      description: Idempotent ensure-running; boots a stopped box and waits until ready.
+      responses:
+        "204": { description: Running }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/sandboxes/{id}/exec:
+    parameters:
+      - $ref: "#/components/parameters/SandboxId"
+    post:
+      tags: [exec]
+      summary: Run a short command (one round-trip)
+      description: For quick provisioning helpers (mkdir, chmod, pwd). Does not ensure-running.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ExecRequest" }
+      responses:
+        "200":
+          description: Command finished
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExecResult" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/sandboxes/{id}/run:
+    parameters:
+      - $ref: "#/components/parameters/SandboxId"
+    post:
+      tags: [exec]
+      summary: Run a long command (blocking, ensure-running)
+      description: >
+        Safe for long commands (builds, installs, test suites). Transparently
+        resumes a paused box first. No server-imposed request ceiling — front
+        with a proxy that has a high read timeout, or none.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ExecRequest" }
+      responses:
+        "200":
+          description: Command finished
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExecResult" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/sandboxes/{id}/jobs:
+    parameters:
+      - $ref: "#/components/parameters/SandboxId"
+    post:
+      tags: [jobs]
+      summary: Launch a background command
+      description: >
+        Starts a command in the background and returns a job handle immediately.
+        Output is captured as it streams; poll for state and accumulated output.
+        Jobs are in-memory: after an msbd restart a prior job polls as "gone".
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ExecRequest" }
+      responses:
+        "202":
+          description: Job launched
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LaunchResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/sandboxes/{id}/jobs/{job}:
+    parameters:
+      - $ref: "#/components/parameters/SandboxId"
+      - name: job
+        in: path
+        required: true
+        schema: { type: string }
+        description: Job handle from the launch response.
+    get:
+      tags: [jobs]
+      summary: Poll a background job
+      responses:
+        "200":
+          description: Job status + output captured so far
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/JobStatus" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /v1/sandboxes/{id}/files/read:
+    parameters:
+      - $ref: "#/components/parameters/SandboxId"
+    post:
+      tags: [files]
+      summary: Read a file (base64)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/FileReadRequest" }
+      responses:
+        "200":
+          description: File contents, base64-encoded
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FileReadResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/sandboxes/{id}/files/write:
+    parameters:
+      - $ref: "#/components/parameters/SandboxId"
+    post:
+      tags: [files]
+      summary: Write a file (base64)
+      description: Creates parent directories as needed; overwrites existing files.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/FileWriteRequest" }
+      responses:
+        "204": { description: Written }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+
+  parameters:
+    SandboxId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, example: sbx_1ea598fdaabd2a46 }
+      description: Server-generated sandbox id (== microsandbox VM name).
+
+  responses:
+    Unauthorized:
+      description: Missing or invalid bearer token
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorBody" }
+    NotFound:
+      description: Sandbox not found
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorBody" }
+
+  schemas:
+    Resources:
+      type: object
+      description: Sizing knobs. Zero/omitted means provider default.
+      properties:
+        cpu: { type: number, description: vCPUs }
+        memory_mb: { type: integer, description: Memory in MiB }
+        disk_gb: { type: integer, description: Disk in GiB }
+
+    CreateRequest:
+      type: object
+      properties:
+        image:
+          type: string
+          description: OCI image reference. Empty → server default (MSBD_DEFAULT_IMAGE).
+          example: ghcr.io/mark3labs/kit-sandbox:latest
+        resources: { $ref: "#/components/schemas/Resources" }
+        auto_stop_secs:
+          type: integer
+          description: Idle seconds before auto-pause. 0 → provider default.
+        env:
+          type: object
+          additionalProperties: { type: string }
+        labels:
+          type: object
+          additionalProperties: { type: string }
+        workdir:
+          type: string
+          description: Pin the default cwd. Empty → the image's own WORKDIR is resolved.
+
+    Instance:
+      type: object
+      required: [id, state, workdir]
+      properties:
+        id: { type: string, example: sbx_1ea598fdaabd2a46 }
+        image: { type: string }
+        state:
+          type: string
+          enum: [running, stopped, starting, archived, deleted, error, unknown]
+        workdir: { type: string, example: /workspace }
+        uptime_seconds: { type: number }
+        cost_usd: { type: number, description: Always 0 (not reported). }
+        labels:
+          type: object
+          additionalProperties: { type: string }
+          nullable: true
+
+    ExecRequest:
+      type: object
+      required: [cmd]
+      properties:
+        cmd: { type: string, description: Shell command (run via /bin/sh -c). }
+        cwd: { type: string, description: Working directory. Empty → sandbox default. }
+        env:
+          type: object
+          additionalProperties: { type: string }
+        timeout_secs: { type: integer, description: Kill after N seconds. 0 → no cap. }
+
+    ExecResult:
+      type: object
+      required: [exit_code]
+      properties:
+        exit_code: { type: integer }
+        stdout: { type: string }
+        stderr: { type: string }
+
+    LaunchResponse:
+      type: object
+      required: [job, state]
+      properties:
+        job: { type: string, example: job_161ea411922c9921 }
+        state: { type: string, enum: [running] }
+
+    JobStatus:
+      type: object
+      required: [state]
+      properties:
+        state:
+          type: string
+          enum: [running, done, dead, gone]
+          description: >
+            running (partial output) · done (exit_code valid) · dead (killed,
+            no exit code) · gone (unknown job, e.g. after msbd restart).
+        exit_code: { type: integer, description: Valid only when state=done. }
+        stdout: { type: string }
+        stderr: { type: string }
+
+    FileReadRequest:
+      type: object
+      required: [path]
+      properties:
+        path: { type: string }
+        cwd: { type: string, description: Resolves a relative path. }
+
+    FileReadResponse:
+      type: object
+      required: [content_b64]
+      properties:
+        content_b64: { type: string, description: Base64-encoded file bytes. }
+
+    FileWriteRequest:
+      type: object
+      required: [path, content_b64]
+      properties:
+        path: { type: string }
+        cwd: { type: string }
+        content_b64: { type: string, description: Base64-encoded bytes to write. }
+
+    Capabilities:
+      type: object
+      properties:
+        prebaked_image:
+          type: boolean
+          description: Default image ships an agent + toolchain (skip provisioning).
+        native_file_io: { type: boolean }
+        native_sessions: { type: boolean }
+        reports_cost: { type: boolean }
+        default_image: { type: string }
+        runtime_version: { type: string }
+
+    ErrorBody:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: string, example: not_found }
+            message: { type: string }

@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+
+      - uses: golangci/golangci-lint-action@v8
+        with:
+          version: v2.10.1
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+
+      # cgo is required to build the microsandbox SDK; libcap-ng0 satisfies
+      # the runtime dep of the prebuilt msb supervisor binary. We don't boot
+      # microVMs here (no /dev/kvm on the GHA runner) — just compile + unit-test.
+      - name: Install build deps
+        run: sudo apt-get update && sudo apt-get install -y libcap-ng0
+
+      - run: go build ./...
+
+      - run: go test -race ./...

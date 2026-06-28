@@ -1,0 +1,153 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+version: 2
+
+project_name: msbd
+
+before:
+  hooks:
+    - go mod tidy
+
+# msbd is cgo (the microsandbox SDK uses #cgo + dlopen). Both Linux arches are
+# built with CGO_ENABLED=1; arm64 uses the aarch64 cross-toolchain installed
+# by the release workflow. macOS/Windows are intentionally not built —
+# microVM boot needs /dev/kvm, so the daemon is Linux-only by design.
+builds:
+  - id: msbd-linux-amd64
+    main: ./cmd/msbd
+    binary: msbd
+    env:
+      - CGO_ENABLED=1
+      - CC=gcc
+    goos: [linux]
+    goarch: [amd64]
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+
+  - id: msbd-linux-arm64
+    main: ./cmd/msbd
+    binary: msbd
+    env:
+      - CGO_ENABLED=1
+      - CC=aarch64-linux-gnu-gcc
+    goos: [linux]
+    goarch: [arm64]
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+
+archives:
+  - id: default
+    formats: [tar.gz]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - README.md
+      - LICENSE*
+      - openapi.yaml
+
+checksum:
+  name_template: checksums.txt
+
+# Multi-arch Docker images pushed to GHCR. Two per-arch builds + one manifest
+# that combines them, so consumers can just pull `ghcr.io/.../msbd:vX.Y.Z` and
+# get the right binary for their host.
+dockers:
+  - id: msbd-amd64
+    use: buildx
+    goos: linux
+    goarch: amd64
+    ids: [msbd-linux-amd64]
+    image_templates:
+      - "ghcr.io/mark3labs/msbd:{{ .Version }}-amd64"
+    dockerfile: Dockerfile.release
+    build_flag_templates:
+      - "--platform=linux/amd64"
+      - "--label=org.opencontainers.image.title={{ .ProjectName }}"
+      - "--label=org.opencontainers.image.description=Microsandbox REST host"
+      - "--label=org.opencontainers.image.version={{ .Version }}"
+      - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
+      - "--label=org.opencontainers.image.created={{ .Date }}"
+      - "--label=org.opencontainers.image.source=https://github.com/mark3labs/msbd"
+      - "--label=org.opencontainers.image.licenses=Apache-2.0"
+
+  - id: msbd-arm64
+    use: buildx
+    goos: linux
+    goarch: arm64
+    ids: [msbd-linux-arm64]
+    image_templates:
+      - "ghcr.io/mark3labs/msbd:{{ .Version }}-arm64"
+    dockerfile: Dockerfile.release
+    build_flag_templates:
+      - "--platform=linux/arm64"
+      - "--label=org.opencontainers.image.title={{ .ProjectName }}"
+      - "--label=org.opencontainers.image.description=Microsandbox REST host"
+      - "--label=org.opencontainers.image.version={{ .Version }}"
+      - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
+      - "--label=org.opencontainers.image.created={{ .Date }}"
+      - "--label=org.opencontainers.image.source=https://github.com/mark3labs/msbd"
+      - "--label=org.opencontainers.image.licenses=Apache-2.0"
+
+docker_manifests:
+  - name_template: "ghcr.io/mark3labs/msbd:{{ .Version }}"
+    image_templates:
+      - "ghcr.io/mark3labs/msbd:{{ .Version }}-amd64"
+      - "ghcr.io/mark3labs/msbd:{{ .Version }}-arm64"
+
+  - name_template: "ghcr.io/mark3labs/msbd:latest"
+    image_templates:
+      - "ghcr.io/mark3labs/msbd:{{ .Version }}-amd64"
+      - "ghcr.io/mark3labs/msbd:{{ .Version }}-arm64"
+
+release:
+  header: |
+    ## Installation
+
+    ### Docker (recommended)
+
+    ```bash
+    docker run --rm \
+      --device /dev/kvm \
+      -p 8099:8099 \
+      -e MSBD_API_KEY=changeme \
+      -v msbd-data:/root/.microsandbox \
+      ghcr.io/mark3labs/msbd:{{ .Tag }}
+    ```
+
+    ### Binary
+
+    Download the matching tarball below, extract `msbd`, then run on a host
+    with `/dev/kvm`. See the README for host requirements.
+
+changelog:
+  sort: asc
+  use: github
+  filters:
+    exclude:
+      - "^Merge"
+      - "^merge"
+      - "^wip"
+      - "^WIP"
+  groups:
+    - title: "Features"
+      regexp: '^.*?feat(\([[:word:]]+\))??!?:.+$'
+      order: 0
+    - title: "Bug Fixes"
+      regexp: '^.*?fix(\([[:word:]]+\))??!?:.+$'
+      order: 1
+    - title: "Documentation"
+      regexp: '^.*?docs(\([[:word:]]+\))??!?:.+$'
+      order: 2
+    - title: "Maintenance"
+      regexp: '^.*?(chore|refactor|style|ci|build)(\([[:word:]]+\))??!?:.+$'
+      order: 3
+    - title: "Other Changes"
+      order: 999
