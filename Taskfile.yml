@@ -77,7 +77,10 @@ tasks:
       - printf '%s\n' "{{.NEW_VERSION}}" > VERSION
       - git add VERSION
       - 'git commit -m "release: v{{.NEW_VERSION}}"'
-      - git tag "v{{.NEW_VERSION}}"
+      # -c tag.gpgsign=false keeps this a lightweight, non-interactive tag even
+      # when the user's global config sets tag.gpgsign=true (which would force a
+      # signed annotated tag and pop open an editor for the tag message).
+      - git -c tag.gpgsign=false tag "v{{.NEW_VERSION}}"
       - 'echo "Tagged v{{.NEW_VERSION}}. Push with: git push origin HEAD v{{.NEW_VERSION}}"'
 
   release:push:
