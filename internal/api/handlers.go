@@ -12,18 +12,15 @@ import (
 	"github.com/mark3labs/msbd/internal/core"
 )
 
-func (s *Server) handleCapabilities(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleVersion(w http.ResponseWriter, r *http.Request) {
 	rt := ""
 	if v, err := core.RuntimeVersion(); err == nil {
 		rt = v
 	}
-	writeJSON(w, http.StatusOK, CapabilitiesDTO{
-		PrebakedImage:  s.prebaked,
-		NativeFileIO:   true,
-		NativeSessions: true,
-		ReportsCost:    false,
+	writeJSON(w, http.StatusOK, VersionDTO{
 		DefaultImage:   s.svc.DefaultImage(),
 		RuntimeVersion: rt,
+		SDKVersion:     core.SDKVersion(),
 	})
 }
 
@@ -222,7 +219,6 @@ func toInstanceDTO(i *core.Instance) *InstanceDTO {
 		State:         i.State,
 		Workdir:       i.Workdir,
 		UptimeSeconds: i.UptimeSeconds,
-		CostUSD:       i.CostUSD,
 		Labels:        i.Labels,
 		CreatedAt:     rfc3339(i.CreatedAt),
 		UpdatedAt:     rfc3339(i.UpdatedAt),

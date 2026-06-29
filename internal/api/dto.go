@@ -2,21 +2,20 @@ package api
 
 import "encoding/json"
 
-// dto.go — the wire contract between shipagent's msbprovider adapter and msbd.
+// dto.go — the JSON wire contract for the msbd REST API.
 //
-// These JSON shapes deliberately mirror the provider-neutral value types in
-// shipagent's internal/services/sandbox/provider.go (CreateOpts, ExecRequest,
-// Instance, ExecResult, JobStatus, …) so the HTTP adapter is a near-1:1
-// translation with no semantic drift.
+// These shapes are the public interface every client (generated or hand-written)
+// depends on. Keep them in lockstep with openapi.yaml. Renaming or removing a
+// field is a breaking change — add a new field and deprecate instead.
 
-// ResourcesDTO mirrors sandbox.Resources. Zero means "provider default".
+// ResourcesDTO sizes a sandbox. Zero means "provider default".
 type ResourcesDTO struct {
 	CPU      float64 `json:"cpu"`
 	MemoryMB int     `json:"memory_mb"`
 	DiskGB   int     `json:"disk_gb"`
 }
 
-// CreateRequest mirrors sandbox.CreateOpts.
+// CreateRequest is the body for POST /v1/sandboxes.
 type CreateRequest struct {
 	Image         string            `json:"image"`
 	Resources     ResourcesDTO      `json:"resources"`
@@ -52,15 +51,14 @@ type MountDTO struct {
 	Readonly  bool   `json:"readonly"`
 }
 
-// InstanceDTO mirrors sandbox.Instance — the canonical resource returned by
-// every lifecycle endpoint.
+// InstanceDTO is the canonical sandbox resource returned by every lifecycle
+// endpoint.
 type InstanceDTO struct {
 	ID            string            `json:"id"`
 	Image         string            `json:"image"`
 	State         string            `json:"state"`
 	Workdir       string            `json:"workdir"`
 	UptimeSeconds float64           `json:"uptime_seconds"`
-	CostUSD       float64           `json:"cost_usd"`
 	Labels        map[string]string `json:"labels"`
 	CreatedAt     string            `json:"created_at"`
 	UpdatedAt     string            `json:"updated_at"`
@@ -72,7 +70,7 @@ type InspectDTO struct {
 	Config json.RawMessage `json:"config"`
 }
 
-// ExecRequestDTO mirrors sandbox.ExecRequest. TimeoutSecs == 0 means no cap.
+// ExecRequestDTO is the body for exec/run/jobs. TimeoutSecs == 0 means no cap.
 type ExecRequestDTO struct {
 	Cmd         string            `json:"cmd"`
 	Cwd         string            `json:"cwd"`
@@ -81,7 +79,7 @@ type ExecRequestDTO struct {
 	Stdin       bool              `json:"stdin"`
 }
 
-// ExecResultDTO mirrors sandbox.ExecResult.
+// ExecResultDTO is the result of a synchronous exec/run.
 type ExecResultDTO struct {
 	ExitCode int    `json:"exit_code"`
 	Stdout   string `json:"stdout"`
@@ -94,7 +92,7 @@ type LaunchResponse struct {
 	State string `json:"state"`
 }
 
-// JobStatusDTO mirrors sandbox.JobStatus. State ∈ running|done|dead|gone.
+// JobStatusDTO is the poll result for an async job. State ∈ running|done|dead|gone.
 type JobStatusDTO struct {
 	State    string `json:"state"`
 	ExitCode int    `json:"exit_code"`
@@ -111,22 +109,19 @@ type FileReadResponse struct {
 	ContentB64 string `json:"content_b64"`
 }
 
-// FileWriteRequest mirrors sandbox.FileWrite.
+// FileWriteRequest is the body for writing a file.
 type FileWriteRequest struct {
 	Path       string `json:"path"`
 	Cwd        string `json:"cwd"`
 	ContentB64 string `json:"content_b64"`
 }
 
-// CapabilitiesDTO mirrors sandbox.Capabilities plus runtime metadata used for
-// diagnostics and the settings UI.
-type CapabilitiesDTO struct {
-	PrebakedImage  bool   `json:"prebaked_image"`
-	NativeFileIO   bool   `json:"native_file_io"`
-	NativeSessions bool   `json:"native_sessions"`
-	ReportsCost    bool   `json:"reports_cost"`
+// VersionDTO reports the configured default image and the runtime/SDK versions
+// for diagnostics.
+type VersionDTO struct {
 	DefaultImage   string `json:"default_image"`
 	RuntimeVersion string `json:"runtime_version"`
+	SDKVersion     string `json:"sdk_version"`
 }
 
 // ---------------------------------------------------------------------------

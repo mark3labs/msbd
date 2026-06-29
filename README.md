@@ -55,7 +55,6 @@ curl -s -H "Authorization: Bearer devkey" \
   "state": "running",
   "workdir": "/",
   "uptime_seconds": 0,
-  "cost_usd": 0,
   "labels": null
 }
 ```
@@ -164,7 +163,6 @@ All via environment variables.
 | `MSBD_LISTEN` | `:8099` | HTTP listen address. |
 | `MSBD_API_KEY` | *(empty)* | Bearer token required on every request. **Empty = unauthenticated (dev only).** |
 | `MSBD_DEFAULT_IMAGE` | `microsandbox/python` | OCI image used when create omits `image`. |
-| `MSBD_PREBAKED` | `false` | Set `true` when the default image already ships your toolchain; reported via `/v1/capabilities` so clients can skip provisioning. |
 | `MSBD_MAX_SANDBOXES` | `0` (unlimited) | Hard cap on concurrent sandboxes; rejects new creates above this with 507. |
 | `MSBD_CREATE_TIMEOUT_SECS` | `300` | Boot deadline (covers cold OCI pulls). |
 | `MSBD_LOG_LEVEL` | `info` | Log verbosity: `debug`, `info`, `warn`, `error`. Output is colorized on a TTY, plain otherwise. |
@@ -175,9 +173,9 @@ All via environment variables.
 |---|---|
 | `GET /healthz` · `GET /readyz` | Liveness · readiness (runtime loaded + `/dev/kvm` accessible). |
 | `GET /docs` · `GET /openapi.yaml` | Swagger UI · raw OpenAPI spec (unauthenticated). |
-| `GET /v1/capabilities` | Backend features + default image + runtime version. |
+| `GET /v1/version` | Default image + runtime/SDK versions (diagnostics). |
 | `POST /v1/sandboxes` · `GET /v1/sandboxes` · `GET/DELETE /v1/sandboxes/{id}` | Lifecycle. Create accepts `user`, `hostname`, `network_policy`, `ports`, `secrets`, `mounts`. |
-| `GET /v1/sandboxes/{id}/inspect` | Full normalized metadata + raw SDK config blob. |
+| `GET /v1/sandboxes/{id}/inspect` | Sandbox metadata + raw SDK config blob. |
 | `POST /v1/sandboxes/{id}/stop` · `.../start` | Pause / ensure-running. |
 | `POST /v1/sandboxes/{id}/exec` · `.../run` | Synchronous exec — `exec` is short, `run` is long-safe and ensures-running. |
 | `POST /v1/sandboxes/{id}/jobs` · `GET /v1/sandboxes/{id}/jobs/{job}` | Async (background) jobs with streaming output buffers. |

@@ -17,8 +17,7 @@ services:
     environment:
       MSBD_API_KEY: ${MSBD_API_KEY:?set MSBD_API_KEY}
       MSBD_LISTEN: ":8099"
-      MSBD_DEFAULT_IMAGE: "ghcr.io/mark3labs/kit-sandbox:latest"
-      MSBD_PREBAKED: "true"        # default image ships an agent + toolchain
+      MSBD_DEFAULT_IMAGE: "microsandbox/python"
       MSBD_MAX_SANDBOXES: "0"      # 0 = unlimited; set a host-safe ceiling
     ports:
       - "8099:8099"

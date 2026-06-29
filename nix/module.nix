@@ -73,12 +73,6 @@ in
       description = "Sandbox create timeout in seconds (MSBD_CREATE_TIMEOUT_SECS).";
     };
 
-    prebaked = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = "Advertise the prebaked_image capability (MSBD_PREBAKED).";
-    };
-
     logLevel = lib.mkOption {
       type = lib.types.enum [ "debug" "info" "warn" "error" ];
       default = "info";
@@ -113,7 +107,6 @@ in
         MSBD_DEFAULT_IMAGE = cfg.defaultImage;
         MSBD_MAX_SANDBOXES = toString cfg.maxSandboxes;
         MSBD_CREATE_TIMEOUT_SECS = toString cfg.createTimeoutSecs;
-        MSBD_PREBAKED = lib.boolToString cfg.prebaked;
         MSBD_LOG_LEVEL = cfg.logLevel;
         # EnsureInstalled + the OCI image cache live here; StateDirectory below
         # maps it to /var/lib/msbd.

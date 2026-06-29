@@ -100,7 +100,6 @@ type Instance struct {
 	State         string
 	Workdir       string
 	UptimeSeconds float64
-	CostUSD       float64
 	Labels        map[string]string
 	CreatedAt     time.Time
 	UpdatedAt     time.Time
@@ -202,11 +201,10 @@ func (s *Service) Create(ctx context.Context, p CreateParams) (*Instance, error)
 	// Resolve the box's REAL working directory.
 	//
 	//   1. Caller pinned a workdir: ensure it exists in the guest (mkdir -p),
-	//      then use it. This is what callers like shipagent expect when they
-	//      pass /workspace — the dir gets created if the image didn't ship it,
+	//      then use it — the dir gets created if the image didn't ship it,
 	//      rather than the SDK refusing to boot.
 	//   2. No workdir pinned: trust the image's own WORKDIR by asking the guest
-	//      with `pwd` (matches the Daytona adapter's GetWorkingDir).
+	//      with `pwd`.
 	//
 	// Best-effort: fall back to defaultWorkdir on any error.
 	resolved := workdir
@@ -438,7 +436,7 @@ func (s *Service) SignalJob(ctx context.Context, id, job string, sig int) error 
 func (s *Service) instanceFromHandle(id string, h *msb.SandboxHandle) *Instance {
 	inst := &Instance{
 		ID:            id,
-		State:         mapStatus(h.Status()),
+		State:         sdkStatus(h.Status()),
 		UptimeSeconds: s.reg.uptime(id),
 	}
 	inst.CreatedAt = h.CreatedAt()

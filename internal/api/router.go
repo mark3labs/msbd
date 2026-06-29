@@ -17,21 +17,15 @@ import (
 
 // Server holds dependencies for the HTTP handlers.
 type Server struct {
-	svc      *core.Service
-	apiKey   string
-	ready    func() error // readiness probe (FFI loaded + /dev/kvm openable)
-	prebaked bool         // reported in /v1/capabilities
-	openapi  []byte       // raw openapi.yaml served at /openapi.yaml + /docs
+	svc     *core.Service
+	apiKey  string
+	ready   func() error // readiness probe (FFI loaded + /dev/kvm openable)
+	openapi []byte       // raw openapi.yaml served at /openapi.yaml + /docs
 }
 
 func NewServer(svc *core.Service, apiKey string, ready func() error) *Server {
 	return &Server{svc: svc, apiKey: apiKey, ready: ready}
 }
-
-// SetPrebaked configures the prebaked_image flag reported by /v1/capabilities.
-// Set true when MSBD_DEFAULT_IMAGE already ships kit + ssh + toolchain so
-// shipagent skips ensureKit/ensureSSHClient.
-func (s *Server) SetPrebaked(v bool) *Server { s.prebaked = v; return s }
 
 // Handler builds the routed http.Handler with middleware applied.
 func (s *Server) Handler() http.Handler {
@@ -54,7 +48,7 @@ func (s *Server) Handler() http.Handler {
 	})
 
 	// Meta.
-	mux.HandleFunc("GET /v1/capabilities", s.auth(s.handleCapabilities))
+	mux.HandleFunc("GET /v1/version", s.auth(s.handleVersion))
 
 	// API docs (unauthenticated; the spec is not a secret).
 	if len(s.openapi) > 0 {

@@ -5,7 +5,7 @@ package core
 // Launch starts an SDK ExecStream and a drain goroutine that accumulates
 // stdout/stderr and records the exit code. Poll reads the snapshot. Jobs are
 // in-memory only: after an msbd restart a previously-launched job is unknown
-// and Poll reports "gone" (the JobGone contract shipagent already handles).
+// and Poll reports "gone" (the JobGone contract).
 
 import (
 	"context"
@@ -18,7 +18,7 @@ import (
 	msb "github.com/superradcompany/microsandbox/sdk/go"
 )
 
-// Job lifecycle states (mirror shipagent's sandbox.Job* vocabulary).
+// Job lifecycle states.
 const (
 	JobRunning = "running"
 	JobDone    = "done"

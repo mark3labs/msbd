@@ -95,7 +95,6 @@ type serveOptions struct {
 	defaultImage  string
 	maxSandboxes  int
 	createTimeout time.Duration
-	prebaked      bool
 	logLevel      string
 }
 
@@ -130,8 +129,6 @@ interrupted (Ctrl-C / SIGTERM trigger a graceful drain).`,
 	f.DurationVar(&o.createTimeout, "create-timeout",
 		time.Duration(envInt("MSBD_CREATE_TIMEOUT_SECS", 300))*time.Second,
 		"Sandbox boot deadline, covers cold OCI pulls ($MSBD_CREATE_TIMEOUT_SECS)")
-	f.BoolVar(&o.prebaked, "prebaked", envBool("MSBD_PREBAKED"),
-		"Advertise the prebaked_image capability ($MSBD_PREBAKED)")
 	f.StringVar(&o.logLevel, "log-level", envOr("MSBD_LOG_LEVEL", "info"),
 		"Log verbosity: debug, info, warn, error ($MSBD_LOG_LEVEL)")
 
@@ -186,7 +183,6 @@ func runServe(ctx context.Context, o *serveOptions) error {
 
 	// 3) Serve.
 	srv := api.NewServer(svc, o.apiKey, readinessProbe).
-		SetPrebaked(o.prebaked).
 		SetOpenAPI(rootmsbd.OpenAPISpec)
 	httpSrv := &http.Server{
 		Addr:              o.listen,
@@ -239,11 +235,6 @@ func readinessProbe() error {
 	}
 	_ = f.Close()
 	return nil
-}
-
-func envBool(k string) bool {
-	v := strings.ToLower(strings.TrimSpace(os.Getenv(k)))
-	return v == "1" || v == "true" || v == "yes"
 }
 
 func envOr(k, def string) string {

@@ -18,16 +18,12 @@ import (
 	msb "github.com/superradcompany/microsandbox/sdk/go"
 )
 
-// Normalized sandbox states (mirror shipagent's sandbox.State* vocabulary). The
-// adapter passes these through verbatim, so the strings are part of the contract.
+// Sandbox states are passed through verbatim from the microsandbox SDK
+// (running, stopped, crashed, draining, paused). msbd does not normalize or
+// remap them, so Instance.state reflects the runtime's own vocabulary.
 const (
-	StateRunning  = "running"
-	StateStopped  = "stopped"
-	StateStarting = "starting"
-	StateArchived = "archived"
-	StateDeleted  = "deleted"
-	StateError    = "error"
-	StateUnknown  = "unknown"
+	StateRunning = "running"
+	StateUnknown = "unknown"
 )
 
 // ErrNotFound is returned when a sandbox name has no backing VM.
@@ -149,19 +145,11 @@ func (r *Registry) Reconcile(ctx context.Context) (int, error) {
 	return n, nil
 }
 
-// mapStatus converts an SDK SandboxStatus to the normalized vocabulary.
-func mapStatus(s msb.SandboxStatus) string {
-	switch s {
-	case msb.SandboxStatusRunning, msb.SandboxStatusDraining:
-		return StateRunning
-	case msb.SandboxStatusStopped, msb.SandboxStatusPaused:
-		return StateStopped
-	case msb.SandboxStatusCrashed:
-		return StateError
-	default:
-		if strings.TrimSpace(string(s)) == "" {
-			return StateUnknown
-		}
+// sdkStatus returns the SDK's raw status string, or "unknown" if empty. msbd
+// passes the runtime's vocabulary through untouched rather than normalizing it.
+func sdkStatus(s msb.SandboxStatus) string {
+	if strings.TrimSpace(string(s)) == "" {
 		return StateUnknown
 	}
+	return string(s)
 }

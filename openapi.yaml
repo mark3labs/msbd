@@ -17,7 +17,7 @@ security:
   - bearerAuth: []
 tags:
   - name: meta
-    description: Health, readiness, capabilities
+    description: Health, readiness, version
   - name: lifecycle
     description: Sandbox create / get / list / stop / start / delete
   - name: exec
@@ -72,16 +72,16 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorBody" }
 
-  /v1/capabilities:
+  /v1/version:
     get:
       tags: [meta]
-      summary: Report backend features
+      summary: Report the default image and runtime/SDK versions
       responses:
         "200":
-          description: Capabilities
+          description: Version + default image
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/Capabilities" }
+              schema: { $ref: "#/components/schemas/Version" }
 
   /v1/sandboxes:
     post:
@@ -891,7 +891,7 @@ components:
         image:
           type: string
           description: OCI image reference. Empty → server default (MSBD_DEFAULT_IMAGE).
-          example: ghcr.io/mark3labs/kit-sandbox:latest
+          example: microsandbox/python
         resources: { $ref: "#/components/schemas/Resources" }
         auto_stop_secs:
           type: integer
@@ -953,10 +953,10 @@ components:
         image: { type: string }
         state:
           type: string
-          enum: [running, stopped, starting, archived, deleted, error, unknown]
+          description: Raw microsandbox runtime status, passed through verbatim.
+          enum: [running, stopped, crashed, draining, paused, unknown]
         workdir: { type: string, example: /workspace }
         uptime_seconds: { type: number }
-        cost_usd: { type: number, description: Always 0 (not reported). }
         labels:
           type: object
           additionalProperties: { type: string }
@@ -1035,17 +1035,18 @@ components:
         cwd: { type: string }
         content_b64: { type: string, description: Base64-encoded bytes to write. }
 
-    Capabilities:
+    Version:
       type: object
       properties:
-        prebaked_image:
-          type: boolean
-          description: Default image ships an agent + toolchain (skip provisioning).
-        native_file_io: { type: boolean }
-        native_sessions: { type: boolean }
-        reports_cost: { type: boolean }
-        default_image: { type: string }
-        runtime_version: { type: string }
+        default_image:
+          type: string
+          description: OCI image used when create omits image.
+        runtime_version:
+          type: string
+          description: msb runtime (libkrun supervisor) version.
+        sdk_version:
+          type: string
+          description: microsandbox Go SDK version msbd is built against.
 
     FilePathRequest:
       type: object
