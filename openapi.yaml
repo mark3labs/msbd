@@ -883,7 +883,7 @@ components:
       properties:
         cpu: { type: number, description: vCPUs }
         memory_mb: { type: integer, description: Memory in MiB }
-        disk_gb: { type: integer, description: Disk in GiB }
+        disk_gb: { type: integer, description: Writable overlay upper size in GiB (OCI images). Zero uses the image default. }
 
     CreateRequest:
       type: object

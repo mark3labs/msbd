@@ -46,6 +46,7 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 		Image:         req.Image,
 		CPU:           req.Resources.CPU,
 		MemoryMB:      req.Resources.MemoryMB,
+		DiskGB:        req.Resources.DiskGB,
 		AutoStopSecs:  req.AutoStopSecs,
 		Env:           req.Env,
 		Labels:        req.Labels,
