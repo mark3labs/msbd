@@ -14,7 +14,7 @@ jobs:
 
       - uses: actions/setup-go@v6
         with:
-          go-version: "1.23"
+          go-version: "1.26"
 
       - uses: golangci/golangci-lint-action@v9
         with:
@@ -27,7 +27,7 @@ jobs:
 
       - uses: actions/setup-go@v6
         with:
-          go-version: "1.23"
+          go-version: "1.26"
 
       # cgo is required to build the microsandbox SDK; libcap-ng0 satisfies
       # the runtime dep of the prebuilt msb supervisor binary. We don't boot

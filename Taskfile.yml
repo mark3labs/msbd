@@ -17,17 +17,17 @@ tasks:
     silent: true
 
   build:
-    desc: Build the msbd binary to ./tmp/msbd (CGO)
+    desc: Build the msbd binary to ./bin/msbd (CGO)
     env:
       CGO_ENABLED: "1"
     cmds:
-      - go build -ldflags "-X main.version={{.VERSION}}" -o ./tmp/msbd ./cmd/msbd
+      - go build -ldflags "-X main.version={{.VERSION}}" -o ./bin/msbd ./cmd/msbd
 
   run:
     desc: Build and run msbd (set MSBD_API_KEY in your env first)
     deps: [build]
     cmds:
-      - ./tmp/msbd
+      - ./bin/msbd
 
   test:
     desc: Run unit tests
@@ -40,9 +40,20 @@ tasks:
       - go test -race ./...
 
   lint:
-    desc: Run golangci-lint
+    desc: Run golangci-lint and go vet
     cmds:
-      - golangci-lint run
+      - golangci-lint run ./...
+      - go vet ./...
+
+  fmt:
+    desc: Format all Go files
+    cmds:
+      - go fmt ./...
+
+  fmt:check:
+    desc: Check formatting (fails if files need formatting)
+    cmds:
+      - test -z "$(gofmt -l .)" || (echo "Files need formatting:" && gofmt -l . && exit 1)
 
   tidy:
     desc: Tidy go.mod / go.sum

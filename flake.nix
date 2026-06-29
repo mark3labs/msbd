@@ -38,6 +38,12 @@
         pkgs = nixpkgs.legacyPackages.${system};
         inherit (pkgs) lib;
 
+        # Pin the Go toolchain to 1.26 so the flake build can't drift below the
+        # go.mod directive when nixpkgs bumps its default go. Keep this in lockstep
+        # with go.mod, the Dockerfile (golang:1.26) and CI's go-version.
+        go = pkgs.go_1_26;
+        buildGoModule = pkgs.buildGoModule.override { inherit go; };
+
         # Libraries the *prebuilt* microsandbox FFI `.so` (go:embed'd into the
         # binary and extracted to ~/.microsandbox at runtime) and the
         # downloaded `msb` supervisor dlopen/link against. glibc (NOT musl) and
@@ -56,15 +62,16 @@
         # at build time is libdl (-ldl): the Rust FFI library is loaded via
         # dlopen at runtime, so no Rust toolchain is needed to compile msbd.
         # ---------------------------------------------------------------------
-        msbd = pkgs.buildGoModule {
+        msbd = buildGoModule {
           pname = "msbd";
           inherit version;
 
           src = lib.cleanSource ./.;
 
-          # Single direct dependency (the microsandbox SDK). If go.mod changes,
-          # run `nix build .#msbd` and replace this with the hash Nix reports.
-          vendorHash = "sha256-1HYRvsQRxkw/8AKONVggJD/BvoYJMaHggOutxf1hmZA=";
+          # Single direct dependency (the microsandbox SDK) plus the CLI/logging
+          # stack (cobra, fang, charmbracelet/log). If go.mod changes, run
+          # `nix build .#msbd` and replace this with the hash Nix reports.
+          vendorHash = "sha256-wnoOafmWc7FPa7fET123/TE1ovI6X6ttidNPOj3jnn4=";
 
           subPackages = [ "cmd/msbd" ];
 

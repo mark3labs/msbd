@@ -9,5 +9,10 @@ linters:
     - errcheck
     - govet
     - ineffassign
+    - modernize
     - staticcheck
     - unused
+
+formatters:
+  enable:
+    - gofmt

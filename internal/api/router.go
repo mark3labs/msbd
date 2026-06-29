@@ -5,11 +5,12 @@ package api
 
 import (
 	"encoding/json"
-	"log"
 	"net/http"
 	"runtime/debug"
 	"strings"
 	"time"
+
+	"github.com/charmbracelet/log"
 
 	"github.com/mark3labs/msbd/internal/core"
 )
@@ -150,7 +151,10 @@ func logMW(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		next.ServeHTTP(w, r)
-		log.Printf("%s %s %s", r.Method, r.URL.Path, time.Since(start).Round(time.Millisecond))
+		log.Info("request",
+			"method", r.Method,
+			"path", r.URL.Path,
+			"dur", time.Since(start).Round(time.Millisecond))
 	})
 }
 
@@ -158,7 +162,7 @@ func recoverMW(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			if rec := recover(); rec != nil {
-				log.Printf("panic: %v\n%s", rec, debug.Stack())
+				log.Error("panic recovered", "err", rec, "stack", string(debug.Stack()))
 				writeErr(w, http.StatusInternalServerError, "panic", "internal error")
 			}
 		}()

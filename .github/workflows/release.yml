@@ -21,7 +21,7 @@ jobs:
 
       - uses: actions/setup-go@v6
         with:
-          go-version: "1.23"
+          go-version: "1.26"
 
       # The git tag is the source of truth for the release version; the VERSION
       # file feeds the Nix flake (flakes can't read tags). Enforce they agree so

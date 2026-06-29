@@ -79,6 +79,12 @@ in
       description = "Advertise the prebaked_image capability (MSBD_PREBAKED).";
     };
 
+    logLevel = lib.mkOption {
+      type = lib.types.enum [ "debug" "info" "warn" "error" ];
+      default = "info";
+      description = "Log verbosity (MSBD_LOG_LEVEL).";
+    };
+
     environment = lib.mkOption {
       type = lib.types.attrsOf lib.types.str;
       default = { };
@@ -108,6 +114,7 @@ in
         MSBD_MAX_SANDBOXES = toString cfg.maxSandboxes;
         MSBD_CREATE_TIMEOUT_SECS = toString cfg.createTimeoutSecs;
         MSBD_PREBAKED = lib.boolToString cfg.prebaked;
+        MSBD_LOG_LEVEL = cfg.logLevel;
         # EnsureInstalled + the OCI image cache live here; StateDirectory below
         # maps it to /var/lib/msbd.
         HOME = "/var/lib/msbd";

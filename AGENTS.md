@@ -9,8 +9,9 @@ Module path: `github.com/mark3labs/msbd`.
 ## How it's wired up
 
 ```
-cmd/msbd/main.go         entrypoint: loadConfig → EnsureInstalled →
-                         core.NewService → svc.Reconcile → api.NewServer → ListenAndServe
+cmd/msbd/main.go         entrypoint: fang/cobra CLI → serve cmd → loadConfig →
+                         EnsureInstalled → core.NewService → svc.Reconcile →
+                         api.NewServer → ListenAndServe (graceful drain on signal)
 
 internal/core/           SDK-facing business logic. EVERY call to the
                          microsandbox SDK happens here (and only here).
@@ -30,7 +31,7 @@ The two-package split (`api` ↔ `core`) is the boundary that keeps DTO churn fr
 
 ## Layout
 
-- **`cmd/msbd/main.go`** — flag/env parse, `msb.EnsureInstalled` (downloads `msb` + `libkrunfw` into `~/.microsandbox/` on first run), startup reconcile, HTTP serve. Also defines the `/readyz` probe (FFI loaded + `/dev/kvm` openable r/w).
+- **`cmd/msbd/main.go`** — cobra CLI styled with `charmbracelet/fang`. The root command defaults to (and also exposes) a `serve` subcommand whose flags mirror the `MSBD_*` env vars (flag › env › default). `serve` does `msb.EnsureInstalled` (downloads `msb` + `libkrunfw` into `~/.microsandbox/` on first run), startup reconcile, then HTTP serve with graceful shutdown on Ctrl-C / SIGTERM. Also defines the `/readyz` probe (FFI loaded + `/dev/kvm` openable r/w).
 - **`assets.go`** (module root) — `//go:embed openapi.yaml` into `OpenAPISpec`. Lives at the root because `go:embed` can't reference a parent directory from `internal/api`. `main.go` hands the bytes to `Server.SetOpenAPI`.
 - **`internal/core/service.go`** — `Service` is the single owner of all SDK calls: lifecycle (`Create`/`Get`/`Inspect`/`List`/`Stop`/`Start`/`Delete`), exec (`Exec`/`Run`), jobs (`Launch`/`Poll` + `WriteJobStdin`/`CloseJobStdin`/`SignalJob`), file IO (`ReadFile`/`WriteFile`). Provider-neutral input/output types (`CreateParams`, `Instance`, `ExecParams`, `ExecResult`).
 - **`internal/core/fs.go`** — extended filesystem ops over `sb.FS()`: `ListDir`/`Stat`/`Exists`/`Mkdir`/`Remove`/`Copy`/`Rename` plus host transfer (`CopyFromHost`/`CopyToHost`). All route through `resolve()`.
@@ -78,6 +79,12 @@ The two-package split (`api` ↔ `core`) is the boundary that keeps DTO churn fr
 
 - `go test ./...` from the repo root. CI runs `go test -race ./...`.
 - Integration tests that actually boot a microVM need `/dev/kvm` and are not run in CI by default — gate them behind `-tags integration` if you add them.
+
+## Lint & toolchain
+
+- Go **1.26** (the `go` directive in `go.mod`, the `golang:1.26` build image, and CI's `go-version` all track this — bump them together).
+- `task lint` runs `golangci-lint run ./...` + `go vet ./...`. Config is `.golangci.yml` (golangci-lint v2): `errcheck`, `govet`, `ineffassign`, `modernize`, `staticcheck`, `unused`, with the `gofmt` formatter. `modernize` rewrites old idioms to current Go — run `task fmt` / `gofmt -w .` to apply formatting.
+- Build output goes to `./bin/` (gitignored). Use `task build`; never commit binaries.
 
 ## Releasing
 

@@ -15,7 +15,7 @@
 # Build glibc doesn't matter for the FFI dlopen — the runtime base is what the
 # bundled .so links against. msbd is small and forward-compatible across glibc
 # versions, so we use the default (bookworm-based) golang image here.
-FROM golang:1.23 AS build
+FROM golang:1.26 AS build
 
 ENV CGO_ENABLED=1
 WORKDIR /src

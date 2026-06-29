@@ -167,6 +167,7 @@ All via environment variables.
 | `MSBD_PREBAKED` | `false` | Set `true` when the default image already ships your toolchain; reported via `/v1/capabilities` so clients can skip provisioning. |
 | `MSBD_MAX_SANDBOXES` | `0` (unlimited) | Hard cap on concurrent sandboxes; rejects new creates above this with 507. |
 | `MSBD_CREATE_TIMEOUT_SECS` | `300` | Boot deadline (covers cold OCI pulls). |
+| `MSBD_LOG_LEVEL` | `info` | Log verbosity: `debug`, `info`, `warn`, `error`. Output is colorized on a TTY, plain otherwise. |
 
 ## REST API
 
@@ -214,15 +215,28 @@ Full schemas: see [`openapi.yaml`](./openapi.yaml).
 ## Development
 
 ```bash
-# Build
-go build -o ./tmp/msbd ./cmd/msbd
+# Build (or `task build`)
+go build -o ./bin/msbd ./cmd/msbd
 
-# Run
-MSBD_API_KEY=devkey ./tmp/msbd
+# Run (these are equivalent — the bare binary defaults to `serve`)
+MSBD_API_KEY=devkey ./bin/msbd
+./bin/msbd serve --api-key devkey --listen :8099
 
-# Test
+# Explore the CLI (styled help, version, shell completions)
+./bin/msbd --help
+./bin/msbd serve --help
+./bin/msbd --version
+
+# Lint, format, test (or `task lint` / `task fmt` / `task test`)
+golangci-lint run ./...
+gofmt -w .
 go test ./...
 ```
+
+The CLI is built on [cobra](https://github.com/spf13/cobra) and styled with
+[charmbracelet/fang](https://github.com/charmbracelet/fang). Every `MSBD_*` env
+var has a matching `serve` flag (flag overrides env overrides default), and
+Ctrl-C / SIGTERM trigger a graceful drain of in-flight requests.
 
 ### Repo layout
 
