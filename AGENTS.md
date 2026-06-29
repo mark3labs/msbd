@@ -21,7 +21,9 @@ internal/api/            HTTP surface. Routes, middleware (bearer auth,
                          the value types in core/.
 
 openapi.yaml             the wire contract. Source of truth for client
-                         generators and reviewers.
+                         generators and reviewers. Embedded into the binary
+                         via assets.go (//go:embed) and served at /openapi.yaml
+                         + /docs (Swagger UI).
 ```
 
 The two-package split (`api` ↔ `core`) is the boundary that keeps DTO churn from leaking into business logic and vice versa.
@@ -29,22 +31,31 @@ The two-package split (`api` ↔ `core`) is the boundary that keeps DTO churn fr
 ## Layout
 
 - **`cmd/msbd/main.go`** — flag/env parse, `msb.EnsureInstalled` (downloads `msb` + `libkrunfw` into `~/.microsandbox/` on first run), startup reconcile, HTTP serve. Also defines the `/readyz` probe (FFI loaded + `/dev/kvm` openable r/w).
-- **`internal/core/service.go`** — `Service` is the single owner of all SDK calls: lifecycle (`Create`/`Get`/`List`/`Stop`/`Start`/`Delete`), exec (`Exec`/`Run`), jobs (`Launch`/`Poll`), file IO (`ReadFile`/`WriteFile`). Provider-neutral input/output types (`CreateParams`, `Instance`, `ExecParams`, `ExecResult`).
+- **`assets.go`** (module root) — `//go:embed openapi.yaml` into `OpenAPISpec`. Lives at the root because `go:embed` can't reference a parent directory from `internal/api`. `main.go` hands the bytes to `Server.SetOpenAPI`.
+- **`internal/core/service.go`** — `Service` is the single owner of all SDK calls: lifecycle (`Create`/`Get`/`Inspect`/`List`/`Stop`/`Start`/`Delete`), exec (`Exec`/`Run`), jobs (`Launch`/`Poll` + `WriteJobStdin`/`CloseJobStdin`/`SignalJob`), file IO (`ReadFile`/`WriteFile`). Provider-neutral input/output types (`CreateParams`, `Instance`, `ExecParams`, `ExecResult`).
+- **`internal/core/fs.go`** — extended filesystem ops over `sb.FS()`: `ListDir`/`Stat`/`Exists`/`Mkdir`/`Remove`/`Copy`/`Rename` plus host transfer (`CopyFromHost`/`CopyToHost`). All route through `resolve()`.
+- **`internal/core/metrics.go`** — `Metrics(id)` and `AllMetrics()` point-in-time resource snapshots.
+- **`internal/core/logs.go`** — `Logs(id, LogQuery)` reads persisted stdout/stderr/output/system logs with tail + source filters.
+- **`internal/core/volume.go`** — named persistent volumes (`CreateVolume`/`ListVolumes`/`GetVolume`/`RemoveVolume`) and volume file IO. Volumes are independent of sandboxes (not cached in `Registry`); mount them at create via `CreateParams.Mounts`.
+- **`internal/core/image.go`** — cached OCI image inventory (`ListImages`/`InspectImage`/`RemoveImage`/`PruneImages`) over the SDK `msb.Image` factory.
+- **`internal/core/snapshot.go`** — sandbox rootfs snapshots over the `msb.Snapshot` factory (`Create`/`List`/`Get`/`Verify`/`Remove`/`Export`/`Import`/`Reindex`).
 - **`internal/core/registry.go`** — `Registry` is the in-process cache: name → live `*msb.Sandbox` handle, name → first-seen time (uptime), name → resolved native workdir. `resolve()` is the single choke point that folds **transparent resume** and **reconnect-after-restart** into every exec/run/file path. `Reconcile()` re-attaches to pre-existing VMs at boot.
-- **`internal/core/jobs.go`** — `JobRegistry` backs the async API. `launch` starts an `sb.ShellStream` and a drain goroutine that consumes `ExecHandle.Recv` events into per-job stdout/stderr ring buffers and records the exit code. In-memory only — jobs poll as `gone` after a msbd restart.
+- **`internal/core/jobs.go`** — `JobRegistry` backs the async API. `launch` starts an `sb.ShellStream` and a drain goroutine that consumes `ExecHandle.Recv` events into per-job stdout/stderr ring buffers and records the exit code. Optionally opens a stdin pipe (`ExecParams.Stdin`) for `writeStdin`/`closeStdin`/`signal`. In-memory only — jobs poll as `gone` after a msbd restart.
 - **`internal/core/version.go`** — `RuntimeVersion()` / `SDKVersion()` shims for diagnostics.
-- **`internal/api/router.go`** — stdlib `http.ServeMux` (Go 1.22+ pattern matching), bearer-auth middleware, panic recover, request logger. `SetPrebaked(bool)` toggles the `prebaked_image` flag reported in `/v1/capabilities`.
-- **`internal/api/handlers.go`** — one handler per endpoint, each a near-1:1 DTO ⇄ `core` translation.
+- **`internal/api/router.go`** — stdlib `http.ServeMux` (Go 1.22+ pattern matching), bearer-auth middleware, panic recover, request logger. `SetPrebaked(bool)` toggles the `prebaked_image` flag reported in `/v1/capabilities`; `SetOpenAPI([]byte)` enables `/docs` + `/openapi.yaml`.
+- **`internal/api/handlers.go`** — handlers for the core lifecycle/exec/jobs/files surface, each a near-1:1 DTO ⇄ `core` translation.
+- **`internal/api/handlers_ext.go`** — handlers for the extended surface: inspect, metrics, logs, extended filesystem, job stdin/signal, volumes, images, snapshots. Same `decode → svc.X → encode | notFoundOr` shape.
+- **`internal/api/docs.go`** — `/docs` Swagger UI page (CDN assets) + `/openapi.yaml` raw spec. Both are unauthenticated (the spec is not a secret).
 - **`internal/api/dto.go`** — the JSON wire shapes. **Keep in lockstep with `openapi.yaml` and downstream clients.**
 
 ## Adding a new endpoint
 
 1. Add (or reuse) DTOs in `internal/api/dto.go`. Tags: `json:"..."` — no `omitempty` on input fields that should appear in the schema.
-2. Add the business method to `internal/core/service.go`. Keep all SDK calls inside `core`.
-3. Add the handler in `internal/api/handlers.go`. Pattern: `decode → svc.X → encode | notFoundOr`.
-4. Wire the route in `internal/api/router.go` under the appropriate verb/path. Apply `s.auth(...)` unless the endpoint is health-only.
-5. Document it in `openapi.yaml` — schemas under `components/schemas`, response examples, error envelopes.
-6. Update the table in `README.md` if it's user-visible.
+2. Add the business method to `internal/core/`. Lifecycle/exec/jobs/file-IO go in `service.go`; otherwise use (or add) the topical file — `fs.go`, `metrics.go`, `logs.go`, `volume.go`, `image.go`, `snapshot.go`. Keep all SDK calls inside `core`.
+3. Add the handler in `internal/api/handlers.go` (core surface) or `internal/api/handlers_ext.go` (everything else). Pattern: `decode → svc.X → encode | notFoundOr`.
+4. Wire the route in `internal/api/router.go` under the appropriate verb/path. Apply `s.auth(...)` unless the endpoint is health- or docs-only.
+5. Document it in `openapi.yaml` — schemas under `components/schemas`, response examples, error envelopes. The spec is embedded, so a rebuild reflects it at `/docs`.
+6. Update the endpoint table in `README.md` if it's user-visible.
 
 ## Conventions & gotchas
 
@@ -59,6 +70,9 @@ The two-package split (`api` ↔ `core`) is the boundary that keeps DTO churn fr
 - **Errors flow through `notFoundOr`.** `core.ErrNotFound` → 404; anything else → 500 (or 507 from `Create` when capacity is hit). Always return a typed error from `core`, never an HTTP status.
 - **No `omitempty` on REST inputs.** It drops fields from the OpenAPI schema and breaks generated clients.
 - **DTO names are stable.** They're the wire contract — renaming a JSON field is a breaking change for every downstream client. Use a new field, deprecate, then remove.
+- **Volumes / images / snapshots aren't sandboxes.** They're standalone resources keyed by name/reference, not cached in `Registry` and not subject to `resolve()`. Their `core` methods call the SDK factories (`msb.Image`, `msb.Snapshot`) or `msb.*Volume` directly and map `GetX`-miss to `ErrNotFound`.
+- **Host-path operations touch the daemon's filesystem.** `files/copy-from-host`, `files/copy-to-host`, and `snapshots/export|import` read/write paths on the msbd host, not the guest. There's no allowlist enforced server-side yet — front them with auth and trust the caller.
+- **`/docs` and `/openapi.yaml` are unauthenticated.** They're registered without `s.auth(...)` only when `SetOpenAPI` was given a non-empty spec. The embedded `OpenAPISpec` is the same `openapi.yaml` at the module root.
 
 ## Tests
 

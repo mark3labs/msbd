@@ -83,6 +83,8 @@ curl -s -H "Authorization: Bearer devkey" \
 curl -s -H "Authorization: Bearer devkey" -X DELETE localhost:8099/v1/sandboxes/$ID
 ```
 
+> Browse the full API interactively at **`http://localhost:8099/docs`** (Swagger UI), or fetch the raw spec from `/openapi.yaml`. Both are unauthenticated.
+
 ## Nix
 
 msbd is packaged as a flake. cgo is enabled at build time, but the only thing
@@ -226,12 +228,21 @@ go test ./...
 
 ```
 cmd/msbd/main.go              # entrypoint — EnsureInstalled, reconcile, serve
+assets.go                     # //go:embed openapi.yaml (served at /docs)
 internal/api/router.go        # HTTP router + middleware (auth, recover, log)
-internal/api/handlers.go      # per-endpoint handlers
+internal/api/handlers.go      # core lifecycle/exec/jobs/files handlers
+internal/api/handlers_ext.go  # inspect, metrics, logs, fs, volumes, images, snapshots
+internal/api/docs.go          # Swagger UI (/docs) + raw spec (/openapi.yaml)
 internal/api/dto.go           # wire shapes
-internal/core/service.go      # SDK-facing business logic
+internal/core/service.go      # SDK-facing business logic (lifecycle/exec/jobs/files)
+internal/core/fs.go           # extended filesystem ops + host transfer
+internal/core/metrics.go      # point-in-time resource metrics
+internal/core/logs.go         # persisted log reads
+internal/core/volume.go       # named persistent volumes + volume file IO
+internal/core/image.go        # cached OCI image inventory
+internal/core/snapshot.go     # sandbox rootfs snapshots
 internal/core/registry.go     # live handle cache + workdir cache + reconcile
-internal/core/jobs.go         # async job registry
+internal/core/jobs.go         # async job registry (+ stdin/signal)
 internal/core/version.go      # SDK / runtime version helpers
 openapi.yaml                  # the contract
 VERSION                       # release version (single source of truth)
