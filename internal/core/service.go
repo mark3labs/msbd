@@ -55,11 +55,16 @@ func (s *Service) Reconcile(ctx context.Context) (int, error) { return s.reg.Rec
 // Lifecycle
 // ---------------------------------------------------------------------------
 
+// maxDiskGB bounds CreateParams.DiskGB so the GiB->MiB conversion stays within
+// the uint32 the SDK's WithOCIUpperSize option accepts (math.MaxUint32 / 1024).
+const maxDiskGB = 4194303
+
 // CreateParams is the provider-neutral create input.
 type CreateParams struct {
 	Image         string
 	CPU           float64
 	MemoryMB      int
+	DiskGB        int // writable overlay upper size, in GiB (OCI images)
 	AutoStopSecs  int
 	Env           map[string]string
 	Labels        map[string]string
@@ -124,6 +129,63 @@ func (s *Service) Create(ctx context.Context, p CreateParams) (*Instance, error)
 	name := newName()
 	workdir := strings.TrimSpace(p.Workdir)
 
+	opts, err := buildCreateOptions(p, image)
+	if err != nil {
+		return nil, err
+	}
+
+	cctx, cancel := context.WithTimeout(ctx, s.createTO)
+	defer cancel()
+
+	sb, err := msb.CreateSandbox(cctx, name, opts...)
+	if err != nil {
+		return nil, fmt.Errorf("create sandbox: %w", err)
+	}
+	s.reg.cache(name, sb)
+
+	// Resolve the box's REAL working directory.
+	//
+	//   1. Caller pinned a workdir: ensure it exists in the guest (mkdir -p),
+	//      then use it — the dir gets created if the image didn't ship it,
+	//      rather than the SDK refusing to boot.
+	//   2. No workdir pinned: trust the image's own WORKDIR by asking the guest
+	//      with `pwd`.
+	//
+	// Best-effort: fall back to defaultWorkdir on any error.
+	resolved := workdir
+	if resolved != "" {
+		quoted := shellQuote(resolved)
+		if _, perr := runShell(cctx, sb, ExecParams{Cmd: "mkdir -p " + quoted}); perr != nil {
+			// Don't fail Create on mkdir error — fall back to the image's WORKDIR.
+			resolved = ""
+		}
+	}
+	if resolved == "" {
+		if out, perr := runShell(cctx, sb, ExecParams{Cmd: "pwd"}); perr == nil {
+			if wd := strings.TrimSpace(out.Stdout); strings.HasPrefix(wd, "/") {
+				resolved = wd
+			}
+		}
+	}
+	resolved = defaultWorkdir(resolved)
+	s.reg.setWorkdir(name, resolved)
+
+	return &Instance{
+		ID:      name,
+		Image:   image,
+		State:   StateRunning,
+		Workdir: resolved,
+		Labels:  p.Labels,
+	}, nil
+}
+
+// buildCreateOptions translates the provider-neutral CreateParams into the
+// microsandbox SDK option slice. It is deterministic and free of side effects
+// (no SDK calls beyond constructing options), which keeps the CreateParams ->
+// SandboxOption mapping unit-testable without booting a microVM. It returns an
+// error for inputs that can't be represented safely (e.g. an out-of-range
+// disk size) rather than silently dropping or wrapping them.
+func buildCreateOptions(p CreateParams, image string) ([]msb.SandboxOption, error) {
 	opts := []msb.SandboxOption{
 		msb.WithImage(image),
 		msb.WithDetached(), // survive msbd restart
@@ -133,6 +195,17 @@ func (s *Service) Create(ctx context.Context, p CreateParams) (*Instance, error)
 	}
 	if p.CPU > 0 {
 		opts = append(opts, msb.WithCPUs(uint8(p.CPU)))
+	}
+	if p.DiskGB != 0 {
+		// API field is GiB; SDK option takes MiB (uint32). Reject negatives and
+		// values that would overflow the MiB conversion instead of wrapping.
+		if p.DiskGB < 0 {
+			return nil, fmt.Errorf("invalid disk_gb: %d (must be non-negative)", p.DiskGB)
+		}
+		if p.DiskGB > maxDiskGB {
+			return nil, fmt.Errorf("invalid disk_gb: %d (exceeds maximum of %d GiB)", p.DiskGB, maxDiskGB)
+		}
+		opts = append(opts, msb.WithOCIUpperSize(uint32(p.DiskGB)*1024))
 	}
 	if len(p.Env) > 0 {
 		opts = append(opts, msb.WithEnv(p.Env))
@@ -188,50 +261,7 @@ func (s *Service) Create(ctx context.Context, p CreateParams) (*Instance, error)
 	if p.AutoStopSecs > 0 {
 		opts = append(opts, msb.WithIdleTimeout(time.Duration(p.AutoStopSecs)*time.Second))
 	}
-
-	cctx, cancel := context.WithTimeout(ctx, s.createTO)
-	defer cancel()
-
-	sb, err := msb.CreateSandbox(cctx, name, opts...)
-	if err != nil {
-		return nil, fmt.Errorf("create sandbox: %w", err)
-	}
-	s.reg.cache(name, sb)
-
-	// Resolve the box's REAL working directory.
-	//
-	//   1. Caller pinned a workdir: ensure it exists in the guest (mkdir -p),
-	//      then use it — the dir gets created if the image didn't ship it,
-	//      rather than the SDK refusing to boot.
-	//   2. No workdir pinned: trust the image's own WORKDIR by asking the guest
-	//      with `pwd`.
-	//
-	// Best-effort: fall back to defaultWorkdir on any error.
-	resolved := workdir
-	if resolved != "" {
-		quoted := shellQuote(resolved)
-		if _, perr := runShell(cctx, sb, ExecParams{Cmd: "mkdir -p " + quoted}); perr != nil {
-			// Don't fail Create on mkdir error — fall back to the image's WORKDIR.
-			resolved = ""
-		}
-	}
-	if resolved == "" {
-		if out, perr := runShell(cctx, sb, ExecParams{Cmd: "pwd"}); perr == nil {
-			if wd := strings.TrimSpace(out.Stdout); strings.HasPrefix(wd, "/") {
-				resolved = wd
-			}
-		}
-	}
-	resolved = defaultWorkdir(resolved)
-	s.reg.setWorkdir(name, resolved)
-
-	return &Instance{
-		ID:      name,
-		Image:   image,
-		State:   StateRunning,
-		Workdir: resolved,
-		Labels:  p.Labels,
-	}, nil
+	return opts, nil
 }
 
 func (s *Service) Get(ctx context.Context, id string) (*Instance, error) {
