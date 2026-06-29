@@ -171,12 +171,24 @@ All via environment variables.
 | Method & path | Purpose |
 |---|---|
 | `GET /healthz` · `GET /readyz` | Liveness · readiness (runtime loaded + `/dev/kvm` accessible). |
+| `GET /docs` · `GET /openapi.yaml` | Swagger UI · raw OpenAPI spec (unauthenticated). |
 | `GET /v1/capabilities` | Backend features + default image + runtime version. |
-| `POST /v1/sandboxes` · `GET /v1/sandboxes` · `GET/DELETE /v1/sandboxes/{id}` | Lifecycle. |
+| `POST /v1/sandboxes` · `GET /v1/sandboxes` · `GET/DELETE /v1/sandboxes/{id}` | Lifecycle. Create accepts `user`, `hostname`, `network_policy`, `ports`, `secrets`, `mounts`. |
+| `GET /v1/sandboxes/{id}/inspect` | Full normalized metadata + raw SDK config blob. |
 | `POST /v1/sandboxes/{id}/stop` · `.../start` | Pause / ensure-running. |
 | `POST /v1/sandboxes/{id}/exec` · `.../run` | Synchronous exec — `exec` is short, `run` is long-safe and ensures-running. |
 | `POST /v1/sandboxes/{id}/jobs` · `GET /v1/sandboxes/{id}/jobs/{job}` | Async (background) jobs with streaming output buffers. |
+| `POST /v1/sandboxes/{id}/jobs/{job}/stdin` · `.../signal` | Write to a job's stdin (launch with `stdin:true`) · send a signal (≤0 = kill). |
 | `POST /v1/sandboxes/{id}/files/read` · `.../files/write` | Native file IO, base64-encoded. |
+| `POST /v1/sandboxes/{id}/files/{list,stat,exists,mkdir,remove,copy,rename}` | Extended filesystem operations. |
+| `POST /v1/sandboxes/{id}/files/{copy-from-host,copy-to-host}` | Copy between an allowlisted host path and the sandbox. |
+| `GET /v1/metrics` · `GET /v1/sandboxes/{id}/metrics` | Point-in-time resource metrics (all / one sandbox). |
+| `GET /v1/sandboxes/{id}/logs` | Read persisted stdout/stderr/system logs (`?tail=`, `?sources=`). |
+| `POST/GET /v1/volumes` · `GET/DELETE /v1/volumes/{name}` | Named persistent volumes. |
+| `POST /v1/volumes/{name}/files/{read,write,mkdir,remove,exists}` | Volume file IO. |
+| `GET /v1/images` · `GET /v1/images/inspect` · `DELETE /v1/images` · `POST /v1/images/prune` | Cached OCI image inventory. |
+| `POST/GET /v1/snapshots` · `GET/DELETE /v1/snapshots/{name}` · `.../verify` | Sandbox rootfs snapshots. |
+| `POST /v1/snapshots/{export,import,reindex}` | Export/import snapshot archives · rebuild the index. |
 
 Full schemas: see [`openapi.yaml`](./openapi.yaml).
 

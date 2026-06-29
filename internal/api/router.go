@@ -20,6 +20,7 @@ type Server struct {
 	apiKey   string
 	ready    func() error // readiness probe (FFI loaded + /dev/kvm openable)
 	prebaked bool         // reported in /v1/capabilities
+	openapi  []byte       // raw openapi.yaml served at /openapi.yaml + /docs
 }
 
 func NewServer(svc *core.Service, apiKey string, ready func() error) *Server {
@@ -54,10 +55,17 @@ func (s *Server) Handler() http.Handler {
 	// Meta.
 	mux.HandleFunc("GET /v1/capabilities", s.auth(s.handleCapabilities))
 
+	// API docs (unauthenticated; the spec is not a secret).
+	if len(s.openapi) > 0 {
+		mux.HandleFunc("GET /docs", s.handleDocs)
+		mux.HandleFunc("GET /openapi.yaml", s.handleOpenAPI)
+	}
+
 	// Lifecycle.
 	mux.HandleFunc("POST /v1/sandboxes", s.auth(s.handleCreate))
 	mux.HandleFunc("GET /v1/sandboxes", s.auth(s.handleList))
 	mux.HandleFunc("GET /v1/sandboxes/{id}", s.auth(s.handleGet))
+	mux.HandleFunc("GET /v1/sandboxes/{id}/inspect", s.auth(s.handleInspect))
 	mux.HandleFunc("DELETE /v1/sandboxes/{id}", s.auth(s.handleDelete))
 	mux.HandleFunc("POST /v1/sandboxes/{id}/stop", s.auth(s.handleStop))
 	mux.HandleFunc("POST /v1/sandboxes/{id}/start", s.auth(s.handleStart))
@@ -69,10 +77,55 @@ func (s *Server) Handler() http.Handler {
 	// Async jobs.
 	mux.HandleFunc("POST /v1/sandboxes/{id}/jobs", s.auth(s.handleLaunch))
 	mux.HandleFunc("GET /v1/sandboxes/{id}/jobs/{job}", s.auth(s.handlePoll))
+	mux.HandleFunc("POST /v1/sandboxes/{id}/jobs/{job}/stdin", s.auth(s.handleJobStdin))
+	mux.HandleFunc("POST /v1/sandboxes/{id}/jobs/{job}/signal", s.auth(s.handleJobSignal))
 
 	// File IO.
 	mux.HandleFunc("POST /v1/sandboxes/{id}/files/read", s.auth(s.handleReadFile))
 	mux.HandleFunc("POST /v1/sandboxes/{id}/files/write", s.auth(s.handleWriteFile))
+	mux.HandleFunc("POST /v1/sandboxes/{id}/files/list", s.auth(s.handleFileList))
+	mux.HandleFunc("POST /v1/sandboxes/{id}/files/stat", s.auth(s.handleFileStat))
+	mux.HandleFunc("POST /v1/sandboxes/{id}/files/exists", s.auth(s.handleFileExists))
+	mux.HandleFunc("POST /v1/sandboxes/{id}/files/mkdir", s.auth(s.handleFileMkdir))
+	mux.HandleFunc("POST /v1/sandboxes/{id}/files/remove", s.auth(s.handleFileRemove))
+	mux.HandleFunc("POST /v1/sandboxes/{id}/files/copy", s.auth(s.handleFileCopy))
+	mux.HandleFunc("POST /v1/sandboxes/{id}/files/rename", s.auth(s.handleFileRename))
+	mux.HandleFunc("POST /v1/sandboxes/{id}/files/copy-from-host", s.auth(s.handleFileCopyFromHost))
+	mux.HandleFunc("POST /v1/sandboxes/{id}/files/copy-to-host", s.auth(s.handleFileCopyToHost))
+
+	// Metrics.
+	mux.HandleFunc("GET /v1/metrics", s.auth(s.handleMetricsAll))
+	mux.HandleFunc("GET /v1/sandboxes/{id}/metrics", s.auth(s.handleMetrics))
+
+	// Logs.
+	mux.HandleFunc("GET /v1/sandboxes/{id}/logs", s.auth(s.handleLogs))
+
+	// Volumes.
+	mux.HandleFunc("POST /v1/volumes", s.auth(s.handleVolumeCreate))
+	mux.HandleFunc("GET /v1/volumes", s.auth(s.handleVolumeList))
+	mux.HandleFunc("GET /v1/volumes/{name}", s.auth(s.handleVolumeGet))
+	mux.HandleFunc("DELETE /v1/volumes/{name}", s.auth(s.handleVolumeDelete))
+	mux.HandleFunc("POST /v1/volumes/{name}/files/read", s.auth(s.handleVolumeReadFile))
+	mux.HandleFunc("POST /v1/volumes/{name}/files/write", s.auth(s.handleVolumeWriteFile))
+	mux.HandleFunc("POST /v1/volumes/{name}/files/mkdir", s.auth(s.handleVolumeMkdir))
+	mux.HandleFunc("POST /v1/volumes/{name}/files/remove", s.auth(s.handleVolumeRemoveFile))
+	mux.HandleFunc("POST /v1/volumes/{name}/files/exists", s.auth(s.handleVolumeExists))
+
+	// Images.
+	mux.HandleFunc("GET /v1/images", s.auth(s.handleImageList))
+	mux.HandleFunc("GET /v1/images/inspect", s.auth(s.handleImageInspect))
+	mux.HandleFunc("DELETE /v1/images", s.auth(s.handleImageRemove))
+	mux.HandleFunc("POST /v1/images/prune", s.auth(s.handleImagePrune))
+
+	// Snapshots.
+	mux.HandleFunc("POST /v1/snapshots", s.auth(s.handleSnapshotCreate))
+	mux.HandleFunc("GET /v1/snapshots", s.auth(s.handleSnapshotList))
+	mux.HandleFunc("GET /v1/snapshots/{name}", s.auth(s.handleSnapshotGet))
+	mux.HandleFunc("DELETE /v1/snapshots/{name}", s.auth(s.handleSnapshotDelete))
+	mux.HandleFunc("POST /v1/snapshots/{name}/verify", s.auth(s.handleSnapshotVerify))
+	mux.HandleFunc("POST /v1/snapshots/export", s.auth(s.handleSnapshotExport))
+	mux.HandleFunc("POST /v1/snapshots/import", s.auth(s.handleSnapshotImport))
+	mux.HandleFunc("POST /v1/snapshots/reindex", s.auth(s.handleSnapshotReindex))
 
 	return recoverMW(logMW(mux))
 }

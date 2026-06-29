@@ -20,6 +20,8 @@ import (
 	"github.com/mark3labs/msbd/internal/api"
 	"github.com/mark3labs/msbd/internal/core"
 
+	rootmsbd "github.com/mark3labs/msbd"
+
 	msb "github.com/superradcompany/microsandbox/sdk/go"
 )
 
@@ -65,7 +67,9 @@ func main() {
 	rcancel()
 
 	// 3) Serve.
-	srv := api.NewServer(svc, cfg.apiKey, readinessProbe).SetPrebaked(cfg.prebaked)
+	srv := api.NewServer(svc, cfg.apiKey, readinessProbe).
+		SetPrebaked(cfg.prebaked).
+		SetOpenAPI(rootmsbd.OpenAPISpec)
 	httpSrv := &http.Server{
 		Addr:              cfg.listen,
 		Handler:           srv.Handler(),

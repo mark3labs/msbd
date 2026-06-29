@@ -33,14 +33,32 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "bad_request", err.Error())
 		return
 	}
+	ports := make([]core.PortMapping, 0, len(req.Ports))
+	for _, p := range req.Ports {
+		ports = append(ports, core.PortMapping{HostPort: p.HostPort, GuestPort: p.GuestPort, Protocol: p.Protocol})
+	}
+	secrets := make([]core.SecretParam, 0, len(req.Secrets))
+	for _, se := range req.Secrets {
+		secrets = append(secrets, core.SecretParam{EnvVar: se.EnvVar, Value: se.Value})
+	}
+	mounts := make([]core.MountParam, 0, len(req.Mounts))
+	for _, m := range req.Mounts {
+		mounts = append(mounts, core.MountParam{GuestPath: m.GuestPath, Volume: m.Volume, Readonly: m.Readonly})
+	}
 	inst, err := s.svc.Create(r.Context(), core.CreateParams{
-		Image:        req.Image,
-		CPU:          req.Resources.CPU,
-		MemoryMB:     req.Resources.MemoryMB,
-		AutoStopSecs: req.AutoStopSecs,
-		Env:          req.Env,
-		Labels:       req.Labels,
-		Workdir:      req.Workdir,
+		Image:         req.Image,
+		CPU:           req.Resources.CPU,
+		MemoryMB:      req.Resources.MemoryMB,
+		AutoStopSecs:  req.AutoStopSecs,
+		Env:           req.Env,
+		Labels:        req.Labels,
+		Workdir:       req.Workdir,
+		User:          req.User,
+		Hostname:      req.Hostname,
+		NetworkPolicy: req.NetworkPolicy,
+		Ports:         ports,
+		Secrets:       secrets,
+		Mounts:        mounts,
 	})
 	if err != nil {
 		writeErr(w, http.StatusInsufficientStorage, "create_failed", err.Error())
@@ -109,6 +127,7 @@ func (s *Server) execOrRun(w http.ResponseWriter, r *http.Request, long bool) {
 		Cwd:     req.Cwd,
 		Env:     req.Env,
 		Timeout: time.Duration(req.TimeoutSecs) * time.Second,
+		Stdin:   req.Stdin,
 	}
 	var (
 		res *core.ExecResult
@@ -137,6 +156,7 @@ func (s *Server) handleLaunch(w http.ResponseWriter, r *http.Request) {
 		Cwd:     req.Cwd,
 		Env:     req.Env,
 		Timeout: time.Duration(req.TimeoutSecs) * time.Second,
+		Stdin:   req.Stdin,
 	})
 	if err != nil {
 		notFoundOr(w, err)
@@ -204,7 +224,17 @@ func toInstanceDTO(i *core.Instance) *InstanceDTO {
 		UptimeSeconds: i.UptimeSeconds,
 		CostUSD:       i.CostUSD,
 		Labels:        i.Labels,
+		CreatedAt:     rfc3339(i.CreatedAt),
+		UpdatedAt:     rfc3339(i.UpdatedAt),
 	}
+}
+
+// rfc3339 formats a time as RFC3339, or "" for the zero value.
+func rfc3339(t time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	return t.Format(time.RFC3339)
 }
 
 func notFoundOr(w http.ResponseWriter, err error) {

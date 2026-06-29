@@ -57,13 +57,40 @@ func (s *Service) Reconcile(ctx context.Context) (int, error) { return s.reg.Rec
 
 // CreateParams is the provider-neutral create input.
 type CreateParams struct {
-	Image        string
-	CPU          float64
-	MemoryMB     int
-	AutoStopSecs int
-	Env          map[string]string
-	Labels       map[string]string
-	Workdir      string
+	Image         string
+	CPU           float64
+	MemoryMB      int
+	AutoStopSecs  int
+	Env           map[string]string
+	Labels        map[string]string
+	Workdir       string
+	User          string
+	Hostname      string
+	NetworkPolicy string        // none | public-only | allow-all | non-local
+	Ports         []PortMapping // host:guest port forwards
+	Secrets       []SecretParam // injected env-var secrets
+	Mounts        []MountParam  // named-volume mounts by guest path
+}
+
+// PortMapping forwards a host port to a guest port.
+type PortMapping struct {
+	HostPort  int
+	GuestPort int
+	Protocol  string // "tcp" (default) | "udp"
+}
+
+// SecretParam injects a secret value as a guest environment variable. The value
+// never crosses the FFI into the guest as a literal — the runtime handles it.
+type SecretParam struct {
+	EnvVar string
+	Value  string
+}
+
+// MountParam mounts a named persistent volume at a guest path.
+type MountParam struct {
+	GuestPath string
+	Volume    string
+	Readonly  bool
 }
 
 // Instance is the provider-neutral resource shape.
@@ -75,6 +102,14 @@ type Instance struct {
 	UptimeSeconds float64
 	CostUSD       float64
 	Labels        map[string]string
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+}
+
+// InspectResult is the full config + metadata for one sandbox.
+type InspectResult struct {
+	Instance
+	ConfigJSON string
 }
 
 func (s *Service) Create(ctx context.Context, p CreateParams) (*Instance, error) {
@@ -105,6 +140,44 @@ func (s *Service) Create(ctx context.Context, p CreateParams) (*Instance, error)
 	}
 	if len(p.Labels) > 0 {
 		opts = append(opts, msb.WithLabels(p.Labels))
+	}
+	if u := strings.TrimSpace(p.User); u != "" {
+		opts = append(opts, msb.WithUser(u))
+	}
+	if hn := strings.TrimSpace(p.Hostname); hn != "" {
+		opts = append(opts, msb.WithHostname(hn))
+	}
+	if net := networkConfig(p.NetworkPolicy); net != nil {
+		opts = append(opts, msb.WithNetwork(net))
+	}
+	if len(p.Ports) > 0 {
+		bindings := make([]msb.PortBinding, 0, len(p.Ports))
+		for _, pm := range p.Ports {
+			proto := msb.PortProtocolTCP
+			if strings.EqualFold(pm.Protocol, "udp") {
+				proto = msb.PortProtocolUDP
+			}
+			bindings = append(bindings, msb.PortBinding{
+				HostPort:  uint16(pm.HostPort),
+				GuestPort: uint16(pm.GuestPort),
+				Protocol:  proto,
+			})
+		}
+		opts = append(opts, msb.WithPortBindings(bindings...))
+	}
+	if len(p.Secrets) > 0 {
+		secrets := make([]msb.SecretEntry, 0, len(p.Secrets))
+		for _, se := range p.Secrets {
+			secrets = append(secrets, msb.SecretEntry{EnvVar: se.EnvVar, Value: se.Value})
+		}
+		opts = append(opts, msb.WithSecrets(secrets...))
+	}
+	if len(p.Mounts) > 0 {
+		mounts := make(map[string]msb.MountConfig, len(p.Mounts))
+		for _, mp := range p.Mounts {
+			mounts[mp.GuestPath] = msb.Mount.Named(mp.Volume, msb.MountOptions{Readonly: mp.Readonly})
+		}
+		opts = append(opts, msb.WithMounts(mounts))
 	}
 	// Deliberately NOT passing WithWorkdir(p.Workdir): the SDK validates that
 	// the path already exists in the image's rootfs at boot, and refuses with
@@ -171,6 +244,18 @@ func (s *Service) Get(ctx context.Context, id string) (*Instance, error) {
 	return s.instanceFromHandle(id, h), nil
 }
 
+// Inspect returns the full SDK config JSON plus normalized metadata.
+func (s *Service) Inspect(ctx context.Context, id string) (*InspectResult, error) {
+	h, err := msb.GetSandbox(ctx, id)
+	if err != nil {
+		return nil, ErrNotFound
+	}
+	return &InspectResult{
+		Instance:   *s.instanceFromHandle(id, h),
+		ConfigJSON: h.ConfigJSON(),
+	}, nil
+}
+
 func (s *Service) List(ctx context.Context) ([]Instance, error) {
 	handles, err := msb.ListSandboxes(ctx)
 	if err != nil {
@@ -235,6 +320,7 @@ type ExecParams struct {
 	Cwd     string
 	Env     map[string]string
 	Timeout time.Duration
+	Stdin   bool // open a stdin pipe (jobs only)
 }
 
 type ExecResult struct {
@@ -330,6 +416,21 @@ func (s *Service) Poll(id, job string) (*JobStatus, error) {
 	return s.jobs.poll(id, job)
 }
 
+// WriteJobStdin writes bytes to a running job's stdin pipe.
+func (s *Service) WriteJobStdin(id, job string, data []byte) error {
+	return s.jobs.writeStdin(id, job, data)
+}
+
+// CloseJobStdin closes a running job's stdin pipe (EOF).
+func (s *Service) CloseJobStdin(id, job string) error {
+	return s.jobs.closeStdin(id, job)
+}
+
+// SignalJob sends a signal to a running job (sig <= 0 means kill).
+func (s *Service) SignalJob(ctx context.Context, id, job string, sig int) error {
+	return s.jobs.signal(ctx, id, job, sig)
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -340,6 +441,8 @@ func (s *Service) instanceFromHandle(id string, h *msb.SandboxHandle) *Instance 
 		State:         mapStatus(h.Status()),
 		UptimeSeconds: s.reg.uptime(id),
 	}
+	inst.CreatedAt = h.CreatedAt()
+	inst.UpdatedAt = h.UpdatedAt()
 	if cfg, err := h.Config(); err == nil && cfg != nil {
 		inst.Image = cfg.Image
 		inst.Workdir = cfg.Workdir
@@ -382,6 +485,23 @@ func resolvePath(path, cwd string) string {
 	return cwd + path
 }
 
+// networkConfig maps a policy preset name to an SDK NetworkConfig, or nil for
+// the empty/default case.
+func networkConfig(policy string) *msb.NetworkConfig {
+	switch strings.ToLower(strings.TrimSpace(policy)) {
+	case "none":
+		return &msb.NetworkConfig{Policy: msb.NetworkPolicyPresetNone}
+	case "public-only", "public_only":
+		return &msb.NetworkConfig{Policy: msb.NetworkPolicyPresetPublicOnly}
+	case "allow-all", "allow_all":
+		return &msb.NetworkConfig{Policy: msb.NetworkPolicyPresetAllowAll}
+	case "non-local", "non_local":
+		return &msb.NetworkConfig{Policy: msb.NetworkPolicyPresetNonLocal}
+	default:
+		return nil
+	}
+}
+
 func parentDir(p string) string {
 	i := strings.LastIndex(p, "/")
 	if i <= 0 {
@@ -391,7 +511,7 @@ func parentDir(p string) string {
 }
 
 // shellQuote wraps s in single quotes for safe inclusion in a /bin/sh command
-// line. Embedded single quotes are escaped via the standard `'\''` dance.
+// line. Embedded single quotes are escaped via the standard `'\”` dance.
 func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'"
 }

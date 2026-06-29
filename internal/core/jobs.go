@@ -40,6 +40,7 @@ type job struct {
 	stdout   strings.Builder
 	stderr   strings.Builder
 	handle   *msb.ExecHandle
+	stdin    *msb.ExecSink
 }
 
 func (j *job) snapshot() *JobStatus {
@@ -75,6 +76,9 @@ func (r *JobRegistry) launch(ctx context.Context, sandboxID string, sb *msb.Sand
 	if p.Timeout > 0 {
 		execOpts = append(execOpts, msb.WithExecTimeout(p.Timeout))
 	}
+	if p.Stdin {
+		execOpts = append(execOpts, msb.WithExecStdinPipe())
+	}
 	// ShellStream: /bin/sh -c <cmd>, streamed.
 	h, err := sb.ShellStream(ctx, p.Cmd, execOpts...)
 	if err != nil {
@@ -82,6 +86,9 @@ func (r *JobRegistry) launch(ctx context.Context, sandboxID string, sb *msb.Sand
 	}
 	jobID := newJobID()
 	j := &job{state: JobRunning, handle: h}
+	if p.Stdin {
+		j.stdin = h.TakeStdin()
+	}
 	r.mu.Lock()
 	r.jobs[key(sandboxID, jobID)] = j
 	r.mu.Unlock()
@@ -142,6 +149,62 @@ func (r *JobRegistry) poll(sandboxID, jobID string) (*JobStatus, error) {
 		return &JobStatus{State: JobGone}, nil
 	}
 	return j.snapshot(), nil
+}
+
+// writeStdin writes bytes to a running job's stdin pipe. Returns ErrNotFound if
+// the job is unknown, or an error if the job was not launched with a stdin pipe.
+func (r *JobRegistry) writeStdin(sandboxID, jobID string, data []byte) error {
+	r.mu.RLock()
+	j := r.jobs[key(sandboxID, jobID)]
+	r.mu.RUnlock()
+	if j == nil {
+		return ErrNotFound
+	}
+	if j.stdin == nil {
+		return fmt.Errorf("job %s has no stdin pipe (launch with stdin=true)", jobID)
+	}
+	if _, err := j.stdin.Write(data); err != nil {
+		return fmt.Errorf("write stdin: %w", err)
+	}
+	return nil
+}
+
+// closeStdin closes a running job's stdin pipe (signals EOF to the process).
+func (r *JobRegistry) closeStdin(sandboxID, jobID string) error {
+	r.mu.RLock()
+	j := r.jobs[key(sandboxID, jobID)]
+	r.mu.RUnlock()
+	if j == nil {
+		return ErrNotFound
+	}
+	if j.stdin == nil {
+		return fmt.Errorf("job %s has no stdin pipe", jobID)
+	}
+	if err := j.stdin.Close(); err != nil {
+		return fmt.Errorf("close stdin: %w", err)
+	}
+	return nil
+}
+
+// signal sends a signal to a running job's process. A negative or zero signal
+// number is treated as a kill request.
+func (r *JobRegistry) signal(ctx context.Context, sandboxID, jobID string, sig int) error {
+	r.mu.RLock()
+	j := r.jobs[key(sandboxID, jobID)]
+	r.mu.RUnlock()
+	if j == nil {
+		return ErrNotFound
+	}
+	if sig <= 0 {
+		if err := j.handle.Kill(ctx); err != nil {
+			return fmt.Errorf("kill job %s: %w", jobID, err)
+		}
+		return nil
+	}
+	if err := j.handle.Signal(ctx, sig); err != nil {
+		return fmt.Errorf("signal job %s: %w", jobID, err)
+	}
+	return nil
 }
 
 func (r *JobRegistry) dropSandbox(sandboxID string) {

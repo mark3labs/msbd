@@ -26,6 +26,18 @@ tags:
     description: Asynchronous (background) command execution
   - name: files
     description: Native file IO
+  - name: metrics
+    description: Resource metrics
+  - name: logs
+    description: Persisted sandbox logs
+  - name: volumes
+    description: Named persistent volumes
+  - name: images
+    description: Cached OCI image inventory
+  - name: snapshots
+    description: Sandbox rootfs snapshots
+  - name: docs
+    description: Interactive API documentation
 
 paths:
   /healthz:
@@ -282,6 +294,550 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
 
+  /v1/sandboxes/{id}/inspect:
+    parameters:
+      - $ref: "#/components/parameters/SandboxId"
+    get:
+      tags: [lifecycle]
+      summary: Inspect a sandbox
+      description: Returns normalized metadata plus the raw SDK config blob.
+      responses:
+        "200":
+          description: Full config + metadata
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Inspect" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/sandboxes/{id}/jobs/{job}/stdin:
+    parameters:
+      - $ref: "#/components/parameters/SandboxId"
+      - { name: job, in: path, required: true, schema: { type: string } }
+    post:
+      tags: [jobs]
+      summary: Write to a job's stdin
+      description: >
+        Writes to the stdin pipe of a job launched with `stdin: true`. Supply
+        `data` (UTF-8) or `data_b64` (base64). Set `close_after` to send EOF.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/JobStdinRequest" }
+      responses:
+        "204": { description: Written }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/sandboxes/{id}/jobs/{job}/signal:
+    parameters:
+      - $ref: "#/components/parameters/SandboxId"
+      - { name: job, in: path, required: true, schema: { type: string } }
+    post:
+      tags: [jobs]
+      summary: Signal a job
+      description: Sends a signal to the job's process. `signal <= 0` means kill.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/JobSignalRequest" }
+      responses:
+        "204": { description: Signalled }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/sandboxes/{id}/files/list:
+    parameters: [ { $ref: "#/components/parameters/SandboxId" } ]
+    post:
+      tags: [files]
+      summary: List a directory
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/FilePathRequest" }
+      responses:
+        "200":
+          description: Directory entries
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FileListResponse" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/sandboxes/{id}/files/stat:
+    parameters: [ { $ref: "#/components/parameters/SandboxId" } ]
+    post:
+      tags: [files]
+      summary: Stat a path
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/FilePathRequest" }
+      responses:
+        "200":
+          description: Path metadata
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FileStatResponse" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/sandboxes/{id}/files/exists:
+    parameters: [ { $ref: "#/components/parameters/SandboxId" } ]
+    post:
+      tags: [files]
+      summary: Check whether a path exists
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/FilePathRequest" }
+      responses:
+        "200":
+          description: Existence
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FileExistsResponse" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/sandboxes/{id}/files/mkdir:
+    parameters: [ { $ref: "#/components/parameters/SandboxId" } ]
+    post:
+      tags: [files]
+      summary: Create a directory
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/FilePathRequest" }
+      responses:
+        "204": { description: Created }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/sandboxes/{id}/files/remove:
+    parameters: [ { $ref: "#/components/parameters/SandboxId" } ]
+    post:
+      tags: [files]
+      summary: Remove a file or directory
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/FileRemoveRequest" }
+      responses:
+        "204": { description: Removed }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/sandboxes/{id}/files/copy:
+    parameters: [ { $ref: "#/components/parameters/SandboxId" } ]
+    post:
+      tags: [files]
+      summary: Copy a file within the sandbox
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/FileCopyRequest" }
+      responses:
+        "204": { description: Copied }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/sandboxes/{id}/files/rename:
+    parameters: [ { $ref: "#/components/parameters/SandboxId" } ]
+    post:
+      tags: [files]
+      summary: Rename a file or directory
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/FileCopyRequest" }
+      responses:
+        "204": { description: Renamed }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/sandboxes/{id}/files/copy-from-host:
+    parameters: [ { $ref: "#/components/parameters/SandboxId" } ]
+    post:
+      tags: [files]
+      summary: Copy an allowlisted host path into the sandbox
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/HostCopyRequest" }
+      responses:
+        "204": { description: Copied }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/sandboxes/{id}/files/copy-to-host:
+    parameters: [ { $ref: "#/components/parameters/SandboxId" } ]
+    post:
+      tags: [files]
+      summary: Copy a sandbox path to an allowlisted host destination
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/HostCopyRequest" }
+      responses:
+        "204": { description: Copied }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/metrics:
+    get:
+      tags: [metrics]
+      summary: Metrics for all running sandboxes
+      responses:
+        "200":
+          description: Per-sandbox metrics
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Metrics" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /v1/sandboxes/{id}/metrics:
+    parameters: [ { $ref: "#/components/parameters/SandboxId" } ]
+    get:
+      tags: [metrics]
+      summary: Metrics for one running sandbox
+      responses:
+        "200":
+          description: Point-in-time metrics
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Metrics" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/sandboxes/{id}/logs:
+    parameters:
+      - $ref: "#/components/parameters/SandboxId"
+      - { name: tail, in: query, schema: { type: integer }, description: Return only the last N lines. }
+      - { name: sources, in: query, schema: { type: string }, description: "Comma-separated: stdout,stderr,output,system." }
+    get:
+      tags: [logs]
+      summary: Read persisted logs
+      responses:
+        "200":
+          description: Log entries
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LogsResponse" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/volumes:
+    post:
+      tags: [volumes]
+      summary: Create a named volume
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VolumeCreateRequest" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Volume" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    get:
+      tags: [volumes]
+      summary: List named volumes
+      responses:
+        "200":
+          description: All volumes
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Volume" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /v1/volumes/{name}:
+    parameters: [ { $ref: "#/components/parameters/VolumeName" } ]
+    get:
+      tags: [volumes]
+      summary: Inspect one volume
+      responses:
+        "200":
+          description: Volume
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Volume" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [volumes]
+      summary: Remove a volume
+      responses:
+        "204": { description: Removed }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/volumes/{name}/files/read:
+    parameters: [ { $ref: "#/components/parameters/VolumeName" } ]
+    post:
+      tags: [volumes]
+      summary: Read a file from a volume (base64)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VolumeFileRequest" }
+      responses:
+        "200":
+          description: File contents
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FileReadResponse" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/volumes/{name}/files/write:
+    parameters: [ { $ref: "#/components/parameters/VolumeName" } ]
+    post:
+      tags: [volumes]
+      summary: Write a file to a volume (base64)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VolumeFileRequest" }
+      responses:
+        "204": { description: Written }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/volumes/{name}/files/mkdir:
+    parameters: [ { $ref: "#/components/parameters/VolumeName" } ]
+    post:
+      tags: [volumes]
+      summary: Create a directory in a volume
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VolumeFileRequest" }
+      responses:
+        "204": { description: Created }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/volumes/{name}/files/remove:
+    parameters: [ { $ref: "#/components/parameters/VolumeName" } ]
+    post:
+      tags: [volumes]
+      summary: Remove a file or directory from a volume
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VolumeFileRequest" }
+      responses:
+        "204": { description: Removed }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/volumes/{name}/files/exists:
+    parameters: [ { $ref: "#/components/parameters/VolumeName" } ]
+    post:
+      tags: [volumes]
+      summary: Check whether a path exists in a volume
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VolumeFileRequest" }
+      responses:
+        "200":
+          description: Existence
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FileExistsResponse" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/images:
+    get:
+      tags: [images]
+      summary: List cached images
+      responses:
+        "200":
+          description: Cached images
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Image" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    delete:
+      tags: [images]
+      summary: Remove a cached image
+      parameters:
+        - { name: reference, in: query, required: true, schema: { type: string } }
+        - { name: force, in: query, schema: { type: boolean } }
+      responses:
+        "204": { description: Removed }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /v1/images/inspect:
+    get:
+      tags: [images]
+      summary: Inspect a cached image
+      parameters:
+        - { name: reference, in: query, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Image config + layers
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ImageDetail" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/images/prune:
+    post:
+      tags: [images]
+      summary: Remove image artifacts unused by any sandbox
+      responses:
+        "200":
+          description: Prune report
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ImagePruneReport" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /v1/snapshots:
+    post:
+      tags: [snapshots]
+      summary: Create a snapshot from a stopped sandbox
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SnapshotCreateRequest" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Snapshot" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    get:
+      tags: [snapshots]
+      summary: List indexed snapshots
+      responses:
+        "200":
+          description: Snapshots
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Snapshot" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /v1/snapshots/{name}:
+    parameters: [ { $ref: "#/components/parameters/SnapshotName" } ]
+    get:
+      tags: [snapshots]
+      summary: Inspect a snapshot
+      responses:
+        "200":
+          description: Snapshot
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Snapshot" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [snapshots]
+      summary: Remove a snapshot
+      parameters:
+        - { name: force, in: query, schema: { type: boolean } }
+      responses:
+        "204": { description: Removed }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /v1/snapshots/{name}/verify:
+    parameters: [ { $ref: "#/components/parameters/SnapshotName" } ]
+    post:
+      tags: [snapshots]
+      summary: Verify snapshot integrity
+      responses:
+        "200":
+          description: Verify report
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SnapshotVerifyResponse" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/snapshots/export:
+    post:
+      tags: [snapshots]
+      summary: Export a snapshot to an allowlisted host archive
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SnapshotExportRequest" }
+      responses:
+        "204": { description: Exported }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /v1/snapshots/import:
+    post:
+      tags: [snapshots]
+      summary: Import a snapshot archive from an allowlisted host path
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SnapshotImportRequest" }
+      responses:
+        "201":
+          description: Imported
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Snapshot" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /v1/snapshots/reindex:
+    post:
+      tags: [snapshots]
+      summary: Rebuild the local snapshot index
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SnapshotReindexRequest" }
+      responses:
+        "200":
+          description: Reindex result
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SnapshotReindexResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /docs:
+    get:
+      tags: [docs]
+      summary: Swagger UI
+      security: []
+      responses:
+        "200":
+          description: Interactive API documentation (HTML)
+          content:
+            text/html:
+              schema: { type: string }
+
+  /openapi.yaml:
+    get:
+      tags: [docs]
+      summary: This OpenAPI document
+      security: []
+      responses:
+        "200":
+          description: The raw OpenAPI spec
+          content:
+            application/yaml:
+              schema: { type: string }
+
 components:
   securitySchemes:
     bearerAuth:
@@ -295,6 +851,18 @@ components:
       required: true
       schema: { type: string, example: sbx_1ea598fdaabd2a46 }
       description: Server-generated sandbox id (== microsandbox VM name).
+    VolumeName:
+      name: name
+      in: path
+      required: true
+      schema: { type: string }
+      description: Named volume name.
+    SnapshotName:
+      name: name
+      in: path
+      required: true
+      schema: { type: string }
+      description: Snapshot name or digest.
 
   responses:
     Unauthorized:
@@ -337,6 +905,45 @@ components:
         workdir:
           type: string
           description: Pin the default cwd. Empty → the image's own WORKDIR is resolved.
+        user:
+          type: string
+          description: Guest user to run as.
+        hostname:
+          type: string
+          description: Guest hostname.
+        network_policy:
+          type: string
+          enum: [none, public-only, allow-all, non-local]
+          description: Network egress preset. Empty → provider default.
+        ports:
+          type: array
+          items: { $ref: "#/components/schemas/PortMapping" }
+        secrets:
+          type: array
+          items: { $ref: "#/components/schemas/Secret" }
+        mounts:
+          type: array
+          items: { $ref: "#/components/schemas/Mount" }
+
+    PortMapping:
+      type: object
+      properties:
+        host_port: { type: integer }
+        guest_port: { type: integer }
+        protocol: { type: string, enum: [tcp, udp] }
+
+    Secret:
+      type: object
+      properties:
+        env_var: { type: string }
+        value: { type: string }
+
+    Mount:
+      type: object
+      properties:
+        guest_path: { type: string }
+        volume: { type: string, description: Named volume to mount. }
+        readonly: { type: boolean }
 
     Instance:
       type: object
@@ -354,6 +961,17 @@ components:
           type: object
           additionalProperties: { type: string }
           nullable: true
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    Inspect:
+      allOf:
+        - $ref: "#/components/schemas/Instance"
+        - type: object
+          properties:
+            config:
+              description: Raw SDK config blob (provider-specific JSON).
+              nullable: true
 
     ExecRequest:
       type: object
@@ -365,6 +983,7 @@ components:
           type: object
           additionalProperties: { type: string }
         timeout_secs: { type: integer, description: Kill after N seconds. 0 → no cap. }
+        stdin: { type: boolean, description: "Jobs only: open a stdin pipe for the process." }
 
     ExecResult:
       type: object
@@ -427,6 +1046,248 @@ components:
         reports_cost: { type: boolean }
         default_image: { type: string }
         runtime_version: { type: string }
+
+    FilePathRequest:
+      type: object
+      required: [path]
+      properties:
+        path: { type: string }
+        cwd: { type: string, description: Resolves a relative path. }
+
+    FileRemoveRequest:
+      type: object
+      required: [path]
+      properties:
+        path: { type: string }
+        cwd: { type: string }
+        recursive: { type: boolean, description: Remove a directory and its contents. }
+
+    FileCopyRequest:
+      type: object
+      required: [src, dst]
+      properties:
+        src: { type: string }
+        dst: { type: string }
+        cwd: { type: string }
+
+    HostCopyRequest:
+      type: object
+      required: [host_path, guest_path]
+      properties:
+        host_path: { type: string, description: Allowlisted host path. }
+        guest_path: { type: string }
+        cwd: { type: string }
+
+    FileEntry:
+      type: object
+      properties:
+        path: { type: string }
+        kind: { type: string, enum: [file, directory, symlink, other] }
+        size: { type: integer }
+        mode: { type: integer }
+
+    FileListResponse:
+      type: object
+      required: [entries]
+      properties:
+        entries:
+          type: array
+          items: { $ref: "#/components/schemas/FileEntry" }
+
+    FileStatResponse:
+      type: object
+      properties:
+        path: { type: string }
+        size: { type: integer }
+        mode: { type: integer }
+        mod_time: { type: string, format: date-time }
+        is_dir: { type: boolean }
+
+    FileExistsResponse:
+      type: object
+      required: [exists]
+      properties:
+        exists: { type: boolean }
+
+    JobStdinRequest:
+      type: object
+      properties:
+        data: { type: string, description: UTF-8 text to write. }
+        data_b64: { type: string, description: Base64 bytes (takes precedence over data). }
+        close_after: { type: boolean, description: Close stdin (EOF) after writing. }
+
+    JobSignalRequest:
+      type: object
+      required: [signal]
+      properties:
+        signal: { type: integer, description: Signal number; <= 0 means kill. }
+
+    Metrics:
+      type: object
+      properties:
+        id: { type: string }
+        cpu_percent: { type: number }
+        memory_bytes: { type: integer }
+        memory_available_bytes: { type: integer, nullable: true }
+        memory_host_resident_bytes: { type: integer, nullable: true }
+        memory_limit_bytes: { type: integer }
+        disk_read_bytes: { type: integer }
+        disk_write_bytes: { type: integer }
+        net_rx_bytes: { type: integer }
+        net_tx_bytes: { type: integer }
+        upper_used_bytes: { type: integer, nullable: true }
+        upper_free_bytes: { type: integer, nullable: true }
+        uptime_seconds: { type: number }
+
+    LogEntry:
+      type: object
+      properties:
+        source: { type: string, enum: [stdout, stderr, output, system] }
+        timestamp: { type: string, format: date-time }
+        text: { type: string }
+        cursor: { type: string, description: Opaque resume token. }
+
+    LogsResponse:
+      type: object
+      required: [entries]
+      properties:
+        entries:
+          type: array
+          items: { $ref: "#/components/schemas/LogEntry" }
+
+    VolumeCreateRequest:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        kind: { type: string, enum: [dir, disk], description: Storage backing. Empty → dir. }
+        size_mb: { type: integer, description: Disk-backed size in MiB. }
+        quota_mb: { type: integer }
+        labels:
+          type: object
+          additionalProperties: { type: string }
+
+    Volume:
+      type: object
+      required: [name, path, kind]
+      properties:
+        name: { type: string }
+        path: { type: string }
+        kind: { type: string, enum: [dir, disk] }
+        quota_mb: { type: integer, nullable: true }
+        used_bytes: { type: integer }
+        capacity_bytes: { type: integer, nullable: true }
+        disk_format: { type: string, nullable: true }
+        disk_fstype: { type: string, nullable: true }
+        labels:
+          type: object
+          additionalProperties: { type: string }
+        created_at: { type: string, format: date-time }
+
+    VolumeFileRequest:
+      type: object
+      required: [path]
+      properties:
+        path: { type: string, description: Path relative to the volume root. }
+        content_b64: { type: string, description: Base64 bytes (write only). }
+        recursive: { type: boolean, description: Remove a directory recursively. }
+
+    Image:
+      type: object
+      properties:
+        reference: { type: string }
+        manifest_digest: { type: string }
+        architecture: { type: string }
+        os: { type: string }
+        layer_count: { type: integer }
+        size_bytes: { type: integer, nullable: true }
+        created_at: { type: string, format: date-time }
+        last_used_at: { type: string, format: date-time }
+
+    ImageDetail:
+      allOf:
+        - $ref: "#/components/schemas/Image"
+        - type: object
+          properties:
+            config:
+              type: object
+              nullable: true
+            layers:
+              type: array
+              items: { type: object }
+
+    ImagePruneReport:
+      type: object
+      properties:
+        image_refs_removed: { type: integer }
+        manifests_removed: { type: integer }
+        layers_removed: { type: integer }
+        fsmeta_removed: { type: integer }
+        vmdk_removed: { type: integer }
+        bytes_reclaimed: { type: integer, nullable: true }
+
+    SnapshotCreateRequest:
+      type: object
+      required: [source_sandbox]
+      properties:
+        source_sandbox: { type: string, description: Name of a stopped sandbox. }
+        name: { type: string }
+        path: { type: string, description: Explicit host output path (optional). }
+        labels:
+          type: object
+          additionalProperties: { type: string }
+        force: { type: boolean }
+        record_integrity: { type: boolean }
+
+    Snapshot:
+      type: object
+      required: [digest, image_ref, format, path]
+      properties:
+        digest: { type: string }
+        name: { type: string, nullable: true }
+        parent_digest: { type: string, nullable: true }
+        image_ref: { type: string }
+        format: { type: string }
+        size_bytes: { type: integer, nullable: true }
+        path: { type: string }
+        created_at: { type: string, format: date-time }
+
+    SnapshotExportRequest:
+      type: object
+      required: [name_or_path, out_path]
+      properties:
+        name_or_path: { type: string }
+        out_path: { type: string, description: Allowlisted host archive path. }
+        with_parents: { type: boolean }
+        with_image: { type: boolean }
+        plain_tar: { type: boolean }
+
+    SnapshotImportRequest:
+      type: object
+      required: [archive, dest]
+      properties:
+        archive: { type: string, description: Allowlisted host archive path. }
+        dest: { type: string }
+
+    SnapshotReindexRequest:
+      type: object
+      properties:
+        dir: { type: string, description: Snapshot directory to reindex. Empty → default. }
+
+    SnapshotReindexResponse:
+      type: object
+      required: [indexed]
+      properties:
+        indexed: { type: integer }
+
+    SnapshotVerifyResponse:
+      type: object
+      properties:
+        digest: { type: string }
+        path: { type: string }
+        upper_kind: { type: string }
+        upper_algorithm: { type: string }
+        upper_digest: { type: string }
 
     ErrorBody:
       type: object
