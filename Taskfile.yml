@@ -1,0 +1,90 @@
+# Taskfile for msbd. https://taskfile.dev
+#
+# Install: https://taskfile.dev/installation/ (or `nix run nixpkgs#go-task`).
+# Run `task` with no args to list available tasks.
+version: "3"
+
+vars:
+  # Single source of truth for the version lives in the VERSION file.
+  VERSION:
+    sh: tr -d '[:space:]' < VERSION
+
+tasks:
+  default:
+    desc: List available tasks
+    cmds:
+      - task --list
+    silent: true
+
+  build:
+    desc: Build the msbd binary to ./tmp/msbd (CGO)
+    env:
+      CGO_ENABLED: "1"
+    cmds:
+      - go build -ldflags "-X main.version={{.VERSION}}" -o ./tmp/msbd ./cmd/msbd
+
+  run:
+    desc: Build and run msbd (set MSBD_API_KEY in your env first)
+    deps: [build]
+    cmds:
+      - ./tmp/msbd
+
+  test:
+    desc: Run unit tests
+    cmds:
+      - go test ./...
+
+  test:race:
+    desc: Run tests with the race detector (matches CI)
+    cmds:
+      - go test -race ./...
+
+  lint:
+    desc: Run golangci-lint
+    cmds:
+      - golangci-lint run
+
+  tidy:
+    desc: Tidy go.mod / go.sum
+    cmds:
+      - go mod tidy
+
+  version:
+    desc: Print the current version (from the VERSION file)
+    cmds:
+      - echo "{{.VERSION}}"
+    silent: true
+
+  # ---------------------------------------------------------------------------
+  # Release: atomically bump VERSION, commit, tag, and push. The version is
+  # typed exactly once (NEW_VERSION=...), so the VERSION file and the git tag
+  # can't drift — which is what the CI guard in release.yml enforces.
+  #
+  #   task release NEW_VERSION=1.2.3
+  # ---------------------------------------------------------------------------
+  release:
+    desc: 'Cut a release: task release NEW_VERSION=1.2.3'
+    requires:
+      vars: [NEW_VERSION]
+    preconditions:
+      - sh: '[ -z "$(git status --porcelain)" ]'
+        msg: "working tree is dirty — commit or stash changes before releasing"
+      - sh: 'echo "{{.NEW_VERSION}}" | grep -Eq "^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$"'
+        msg: "NEW_VERSION must be semver, e.g. 1.2.3 (no leading v)"
+      - sh: '! git rev-parse -q --verify "refs/tags/v{{.NEW_VERSION}}" >/dev/null'
+        msg: "tag v{{.NEW_VERSION}} already exists"
+    cmds:
+      - printf '%s\n' "{{.NEW_VERSION}}" > VERSION
+      - git add VERSION
+      - 'git commit -m "release: v{{.NEW_VERSION}}"'
+      - git tag "v{{.NEW_VERSION}}"
+      - 'echo "Tagged v{{.NEW_VERSION}}. Push with: git push origin HEAD v{{.NEW_VERSION}}"'
+
+  release:push:
+    desc: 'Cut a release and push it: task release:push NEW_VERSION=1.2.3'
+    requires:
+      vars: [NEW_VERSION]
+    cmds:
+      - task: release
+        vars: { NEW_VERSION: "{{.NEW_VERSION}}" }
+      - git push origin HEAD "v{{.NEW_VERSION}}"

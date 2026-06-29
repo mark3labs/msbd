@@ -23,6 +23,20 @@ jobs:
         with:
           go-version: "1.23"
 
+      # The git tag is the source of truth for the release version; the VERSION
+      # file feeds the Nix flake (flakes can't read tags). Enforce they agree so
+      # `nix build` off a tag reports the same number GoReleaser publishes.
+      - name: Verify VERSION matches tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          file="$(tr -d '[:space:]' < VERSION)"
+          if [ "$tag" != "$file" ]; then
+            echo "::error::tag v$tag does not match VERSION file ($file). Bump VERSION before tagging."
+            exit 1
+          fi
+          echo "version $tag OK"
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v4
 

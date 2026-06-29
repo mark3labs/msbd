@@ -4,6 +4,11 @@
 *.test
 *.out
 
+# Nix
+/result
+/result-*
+/.direnv/
+
 # Local data
 /msbd
 /.microsandbox/

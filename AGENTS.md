@@ -67,7 +67,9 @@ The two-package split (`api` ↔ `core`) is the boundary that keeps DTO churn fr
 
 ## Releasing
 
-Tag a commit `vX.Y.Z` and push — GoReleaser builds linux/amd64 + linux/arm64 binaries, multi-arch Docker images pushed to `ghcr.io/mark3labs/msbd`, and a GitHub release with the rendered changelog. See `.github/workflows/release.yml` and `.goreleaser.yaml`.
+Bump the `VERSION` file to `X.Y.Z`, commit, then tag a commit `vX.Y.Z` and push — or just run `task release:push NEW_VERSION=X.Y.Z`, which does the bump+commit+tag+push atomically. GoReleaser builds linux/amd64 + linux/arm64 binaries, multi-arch Docker images pushed to `ghcr.io/mark3labs/msbd`, and a GitHub release with the rendered changelog. See `Taskfile.yml`, `.github/workflows/release.yml` and `.goreleaser.yaml`.
+
+The tag is the source of truth for the version. `cmd/msbd/main.go` declares `version`/`commit`/`date` package vars; GoReleaser injects them from the tag via `-ldflags -X main.*`. The Nix flake reads the version from the `VERSION` file (flakes can't see git tags) and `commit`/`date` from flake metadata. A CI guard fails the release if `v$(cat VERSION)` doesn't match the pushed tag, so both build paths report the same number.
 
 CGO is enabled in the release build because the SDK is cgo. Cross-compilation across CPU architectures uses native runners (one job per arch) so we don't have to chase a cross-compiling C toolchain.
 
@@ -75,4 +77,4 @@ CGO is enabled in the release build because the SDK is cgo. Cross-compilation ac
 
 - Upstream: [`microsandbox`](https://github.com/superradcompany/microsandbox) (the runtime + Go SDK we wrap).
 - Spec: [`openapi.yaml`](./openapi.yaml).
-- Deploy: [`Dockerfile`](./Dockerfile), [`docker-compose.yml`](./docker-compose.yml).
+- Deploy: [`Dockerfile`](./Dockerfile), [`docker-compose.yml`](./docker-compose.yml), [`flake.nix`](./flake.nix) (Nix package + NixOS module).

@@ -23,11 +23,20 @@ import (
 	msb "github.com/superradcompany/microsandbox/sdk/go"
 )
 
+// Build metadata, injected at link time via -ldflags "-X main.version=...".
+// Defaults apply to plain `go build` / `go run` (no ldflags). GoReleaser and
+// the Nix flake both override version; commit/date are release-only.
+var (
+	version = "dev"
+	commit  = "none"
+	date    = "unknown"
+)
+
 func main() {
 	cfg := loadConfig()
 
-	log.Printf("msbd starting — SDK %s, listen %s, default image %q",
-		core.SDKVersion(), cfg.listen, cfg.defaultImage)
+	log.Printf("msbd %s (commit %s, built %s) starting — SDK %s, listen %s, default image %q",
+		version, commit, date, core.SDKVersion(), cfg.listen, cfg.defaultImage)
 
 	// 1) Ensure the msb + libkrunfw runtime is present (downloads on first run).
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)

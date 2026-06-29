@@ -83,6 +83,57 @@ curl -s -H "Authorization: Bearer devkey" \
 curl -s -H "Authorization: Bearer devkey" -X DELETE localhost:8099/v1/sandboxes/$ID
 ```
 
+## Nix
+
+msbd is packaged as a flake. cgo is enabled at build time, but the only thing
+the C side links is `libdl` — the microsandbox Rust FFI library is `dlopen`'d at
+_runtime_, so no Rust toolchain is needed to build msbd.
+
+```bash
+# Build the binary
+nix build github:mark3labs/msbd
+
+# Run it (uses the FHS-wrapped variant — works on NixOS too)
+nix run github:mark3labs/msbd
+```
+
+**Why the FHS wrapper?** msbd itself is a normal Nix-built binary, but the `msb`
+supervisor it downloads on first run and the embedded FFI `.so` it extracts are
+vanilla glibc binaries that expect a dynamic loader at `/lib64/ld-linux-*.so.2`
+and `libcap-ng.so.0` on a standard path. Plain NixOS has neither, so the
+`msbd-fhs` package (what `nix run` and the NixOS module use) provides that FHS
+layout. On a regular glibc distro (Debian/Ubuntu/Fedora) the plain `msbd`
+package is enough.
+
+Flake outputs:
+
+| Output | What |
+|---|---|
+| `packages.default` / `packages.msbd` | The bare cgo binary (good on any glibc distro). |
+| `packages.msbd-fhs` | FHS-wrapped binary for NixOS hosts. |
+| `devShells.default` | Go + gcc + the runtime libs, `CGO_ENABLED=1`. |
+| `nixosModules.default` | `services.msbd` — runs it as a hardened systemd service with `/dev/kvm` access. |
+
+As a NixOS service:
+
+```nix
+{
+  inputs.msbd.url = "github:mark3labs/msbd";
+
+  # in your system config:
+  imports = [ msbd.nixosModules.default ];
+  services.msbd = {
+    enable = true;
+    listen = ":8099";
+    apiKeyFile = "/run/secrets/msbd.env";   # systemd EnvironmentFile with MSBD_API_KEY=...
+    openFirewall = true;
+  };
+}
+```
+
+The module joins the service to the `kvm` group, allows `/dev/kvm`, and keeps the
+runtime + image cache under `/var/lib/msbd`.
+
 ## Host requirements
 
 msbd boots real microVMs, so **the host machine must have working hardware virtualization**:
@@ -171,10 +222,35 @@ internal/core/registry.go     # live handle cache + workdir cache + reconcile
 internal/core/jobs.go         # async job registry
 internal/core/version.go      # SDK / runtime version helpers
 openapi.yaml                  # the contract
+VERSION                       # release version (single source of truth)
+Taskfile.yml                  # dev + release tasks (go-task)
+flake.nix                     # Nix package + dev shell + NixOS module
 Dockerfile                    # build from source
 Dockerfile.release            # used by goreleaser
 docker-compose.yml            # example compose deploy
 ```
+
+### Releasing
+
+The git tag is the source of truth for the version. Use the release task so the
+`VERSION` file and the tag are bumped atomically (you type the version once):
+
+```bash
+task release NEW_VERSION=1.2.3      # bump VERSION, commit, tag locally
+git push origin HEAD v1.2.3         # push to trigger the release workflow
+
+# or in one shot:
+task release:push NEW_VERSION=1.2.3
+```
+
+The task refuses to run on a dirty tree, validates semver, and won't clobber an
+existing tag. The release workflow then verifies `v$(cat VERSION)` equals the
+pushed tag and fails on mismatch.
+
+GoReleaser injects the version from the tag (`-X main.version`); the Nix flake
+reads the same number from `VERSION` (flakes can't see git tags), so `nix build`
+off a tagged checkout reports an identical version. `commit`/`date` are filled
+from the tag's revision in both paths.
 
 ## License
 
