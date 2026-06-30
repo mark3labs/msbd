@@ -69,6 +69,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /v1/sandboxes/{id}/exec", s.auth(s.handleExec))
 	mux.HandleFunc("POST /v1/sandboxes/{id}/run", s.auth(s.handleRun))
 
+	// Interactive terminal (WebSocket upgrade). Bearer auth via header or
+	// ?key= query param (browsers can't set headers on a WS upgrade).
+	mux.HandleFunc("GET /v1/sandboxes/{id}/terminal", s.authWS(s.handleTerminal))
+
 	// Async jobs.
 	mux.HandleFunc("POST /v1/sandboxes/{id}/jobs", s.auth(s.handleLaunch))
 	mux.HandleFunc("GET /v1/sandboxes/{id}/jobs/{job}", s.auth(s.handlePoll))
@@ -133,6 +137,27 @@ func (s *Server) auth(next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 		tok := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+		if subtleEqual(tok, s.apiKey) {
+			next(w, r)
+			return
+		}
+		writeErr(w, http.StatusUnauthorized, "unauthorized", "invalid or missing bearer token")
+	}
+}
+
+// authWS is auth for WebSocket upgrade endpoints: it accepts the bearer token
+// from the Authorization header OR a ?key= query parameter, since browsers
+// cannot set request headers on a WebSocket handshake.
+func (s *Server) authWS(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if s.apiKey == "" { // no key configured → open (dev only)
+			next(w, r)
+			return
+		}
+		tok := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+		if tok == "" {
+			tok = r.URL.Query().Get("key")
+		}
 		if subtleEqual(tok, s.apiKey) {
 			next(w, r)
 			return

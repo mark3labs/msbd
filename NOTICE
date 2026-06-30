@@ -1,0 +1,45 @@
+msbd
+Copyright 2026 Mark III Labs, LLC
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+---
+
+This software wraps the microsandbox Go SDK:
+
+  microsandbox — https://github.com/superradcompany/microsandbox
+  Copyright Super Rad Company <development@superrad.company>
+  Licensed under the Apache License, Version 2.0.
+
+The microsandbox SDK's embedded FFI library is redistributed as part of that
+SDK Go module under the Apache License, Version 2.0.
+
+---
+
+RUNTIME COMPONENT NOTICE (libkrunfw / libkrun)
+
+msbd does NOT bundle or link the microVM runtime. On first run, the
+microsandbox SDK's EnsureInstalled downloads the `msb` supervisor and
+`libkrunfw` from the upstream microsandbox GitHub release matching the pinned
+SDK version, into ~/.microsandbox/ on the host that runs msbd.
+
+libkrunfw and libkrun are licensed under the GNU Lesser General Public License
+(LGPL). They are obtained, installed, and executed on the end user's host at
+runtime — they are not part of, statically linked into, or distributed with the
+msbd binary or container image. Operators who choose to redistribute those
+downloaded runtime artifacts are responsible for complying with their LGPL
+terms.
+
+---
+
+Third-party Go dependencies are distributed under their own permissive
+licenses (Apache-2.0, MIT, BSD-2-Clause). See each module's LICENSE in the
+module cache or its upstream repository:
+
+  github.com/superradcompany/microsandbox/sdk/go   Apache-2.0
+  github.com/spf13/cobra                            Apache-2.0
+  github.com/charmbracelet/fang                     MIT
+  github.com/charmbracelet/log                      MIT
+  github.com/fxamacker/cbor/v2                       MIT
+  github.com/x448/float16                           MIT
+  github.com/gorilla/websocket                       BSD-2-Clause

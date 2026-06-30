@@ -20,6 +20,7 @@
 - **Simple.** ~12 endpoints, OpenAPI 3.1 spec, JSON in/out, bearer auth.
 - **MicroVMs survive restarts.** Sandboxes are created detached; msbd reconnects them by name on boot.
 - **Native primitives.** Real exec sessions for async jobs, real file IO over the guest filesystem.
+- **Interactive terminals.** A real kernel-PTY shell over WebSocket — colors, line editing, window resize, and full-screen TUIs (vim, top) all work.
 
 ## Quickstart
 
@@ -178,6 +179,7 @@ All via environment variables.
 | `GET /v1/sandboxes/{id}/inspect` | Sandbox metadata + raw SDK config blob. |
 | `POST /v1/sandboxes/{id}/stop` · `.../start` | Pause / ensure-running. |
 | `POST /v1/sandboxes/{id}/exec` · `.../run` | Synchronous exec — `exec` is short, `run` is long-safe and ensures-running. |
+| `GET /v1/sandboxes/{id}/terminal` | Interactive **kernel-PTY** terminal over **WebSocket** (binary stdin/stdout; text control frames for resize/signal). Colors, line editing, resize, vim/top all work. Auth via header or `?key=`. |
 | `POST /v1/sandboxes/{id}/jobs` · `GET /v1/sandboxes/{id}/jobs/{job}` | Async (background) jobs with streaming output buffers. |
 | `POST /v1/sandboxes/{id}/jobs/{job}/stdin` · `.../signal` | Write to a job's stdin (launch with `stdin:true`) · send a signal (≤0 = kill). |
 | `POST /v1/sandboxes/{id}/files/read` · `.../files/write` | Native file IO, base64-encoded. |
@@ -198,7 +200,7 @@ Full schemas: see [`openapi.yaml`](./openapi.yaml).
 - **Detached by default.** Every sandbox is created detached, so the microVM keeps running when msbd restarts.
 - **Reconnect at boot.** On startup msbd lists all known sandboxes and re-attaches by name. A sandbox that existed before the restart is still callable through the same id.
 - **Transparent resume.** `run`, `launch`, and `files/*` all ensure-running first — a paused box silently resumes on the next call. `exec` (one round-trip helpers) deliberately does not, so it stays cheap.
-- **Jobs are in-memory.** A job that was running when msbd restarts polls as `gone` (the VM survives; the streaming attach does not). Re-launch from the client side.
+- **Jobs and terminals are in-memory.** A job that was running when msbd restarts polls as `gone`, and an open terminal's WebSocket simply closes (the VM survives; the streaming attach does not). Re-launch / reconnect from the client side.
 - **Names are ids.** Sandbox names (≤128 bytes UTF-8) ARE the provider id. msbd generates them as `sbx_<16hex>`; you can also pass your own.
 
 ## What it is, what it isn't
@@ -244,9 +246,12 @@ assets.go                     # //go:embed openapi.yaml (served at /docs)
 internal/api/router.go        # HTTP router + middleware (auth, recover, log)
 internal/api/handlers.go      # core lifecycle/exec/jobs/files handlers
 internal/api/handlers_ext.go  # inspect, metrics, logs, fs, volumes, images, snapshots
+internal/api/terminal.go      # interactive terminal WebSocket handler
 internal/api/docs.go          # Swagger UI (/docs) + raw spec (/openapi.yaml)
 internal/api/dto.go           # wire shapes
 internal/core/service.go      # SDK-facing business logic (lifecycle/exec/jobs/files)
+internal/core/terminal.go     # interactive PTY terminal: Session interface + OpenTerminal
+internal/core/terminal_agent.go # kernel-PTY backend over the raw agent protocol (CBOR)
 internal/core/fs.go           # extended filesystem ops + host transfer
 internal/core/metrics.go      # point-in-time resource metrics
 internal/core/logs.go         # persisted log reads
@@ -289,4 +294,6 @@ from the tag's revision in both paths.
 
 ## License
 
-Apache-2.0
+Apache-2.0 — see [`LICENSE`](./LICENSE) and [`NOTICE`](./NOTICE).
+
+msbd wraps the [microsandbox](https://github.com/superradcompany/microsandbox) Go SDK (also Apache-2.0). The microVM runtime it drives — `msb` + `libkrunfw` (LGPL) — is **not** bundled with msbd; the SDK downloads it to `~/.microsandbox/` on first run. See [`NOTICE`](./NOTICE) for details.

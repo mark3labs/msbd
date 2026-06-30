@@ -214,6 +214,72 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
 
+  /v1/sandboxes/{id}/terminal:
+    parameters:
+      - $ref: "#/components/parameters/SandboxId"
+    get:
+      tags: [exec]
+      summary: Interactive terminal (WebSocket upgrade)
+      description: >
+        Upgrades the connection to a WebSocket that bridges a terminal emulator
+        (e.g. xterm.js) to a shell running inside the guest. This is NOT a JSON
+        endpoint; it returns `101 Switching Protocols`.
+
+
+        Wire protocol — client → server: a **binary** frame carries raw stdin
+        bytes (keystrokes); a **text** frame carries a JSON control message,
+        either `{"type":"resize","rows":40,"cols":120}` or
+        `{"type":"signal","signal":2}` (2 = SIGINT). Server → client: a
+        **binary** frame carries raw terminal output; a **text** frame carries
+        a JSON event, currently only `{"type":"exit","exit_code":0}` sent just
+        before the socket closes.
+
+
+        Auth: send the bearer token via the `Authorization` header, or — for
+        browser clients that cannot set headers on a WebSocket handshake — as
+        the `key` query parameter.
+
+
+        The shell runs on a real kernel PTY in the guest, so colors, line
+        editing, window resize (via the `resize` control frame), job control,
+        and full-screen TUIs (vim, top) all work.
+      parameters:
+        - name: cmd
+          in: query
+          required: false
+          schema: { type: string }
+          description: Command line to run. Empty launches `/bin/sh -i`; non-empty runs via `/bin/sh -c`.
+        - name: cwd
+          in: query
+          required: false
+          schema: { type: string }
+          description: Working directory for the session.
+        - name: rows
+          in: query
+          required: false
+          schema: { type: integer, minimum: 0, maximum: 65535 }
+          description: Initial PTY rows (default 24).
+        - name: cols
+          in: query
+          required: false
+          schema: { type: integer, minimum: 0, maximum: 65535 }
+          description: Initial PTY columns (default 80).
+        - name: term
+          in: query
+          required: false
+          schema: { type: string, default: "xterm-256color" }
+          description: $TERM value to export in the session.
+        - name: key
+          in: query
+          required: false
+          schema: { type: string }
+          description: Bearer token, for WebSocket clients that cannot set the Authorization header.
+      responses:
+        "101":
+          description: Switching Protocols — WebSocket established
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
   /v1/sandboxes/{id}/jobs:
     parameters:
       - $ref: "#/components/parameters/SandboxId"
