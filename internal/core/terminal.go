@@ -16,8 +16,9 @@ import (
 
 // TerminalParams configures an interactive terminal session.
 type TerminalParams struct {
-	// Cmd is the command line to run. Empty launches an interactive login
-	// shell (`/bin/sh -i`); a non-empty value runs via `/bin/sh -c <cmd>`.
+	// Cmd is the command line to run. Empty launches the image's default
+	// interactive shell, falling back to `/bin/sh -i`; a non-empty value runs
+	// via `/bin/sh -c <cmd>`.
 	Cmd string
 	Cwd string
 	Env map[string]string

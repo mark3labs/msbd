@@ -50,6 +50,7 @@ The two-package split (`api` ↔ `core`) is the boundary that keeps DTO churn fr
 - **`internal/api/handlers_ext.go`** — handlers for the extended surface: inspect, metrics, logs, extended filesystem, job stdin/signal, volumes, images, snapshots. Same `decode → svc.X → encode | notFoundOr` shape.
 - **`internal/api/terminal.go`** — the `GET /v1/sandboxes/{id}/terminal` WebSocket handler. Opens a `core.Session` BEFORE upgrading (so an unknown sandbox surfaces as a clean `404`, not a flapping socket), then splices the WebSocket ↔ `Session`: binary frames = stdin/stdout bytes, text frames = JSON control (`resize`/`signal`) in / events (`exit`) out. Uses `github.com/gorilla/websocket`. Auth via `authWS` (header or `?key=`). The guest PTY emits canonical CRLF, so output passes through verbatim.
 - **`internal/api/docs.go`** — `/docs` Swagger UI page (CDN assets) + `/openapi.yaml` raw spec. Both are unauthenticated (the spec is not a secret).
+- **`internal/dashboard/`** — the optional web UI mounted at `/dashboard`. `dashboard.go` registers all routes on the api mux (via `Server.SetDashboard`) and applies its own **optional HTTP Basic auth** (`--dashboard-user`/`--dashboard-pass`; both empty = open). It talks ONLY to `core.Service` — like `api`, it never imports the SDK. Pages/fragments are [templ](https://templ.guide) (`views/*.templ`) built from vendored [templui](https://templui.io) components (`components/`, added by the `templui` CLI), styled with Tailwind, and driven by [Datastar](https://data-star.dev): handlers (`handlers_*.go`) are SSE endpoints that `PatchElementTempl` fragments into the page. `views/models.go` holds display-only view structs (handlers map `core.*` → these). All static assets — the **committed** `assets/css/output.css`, the vendored Datastar + xterm runtimes, and the templui component JS — are `//go:embed`'d (`embed.go`) and served from the embedded FS, so a plain `go build` is self-contained. The terminal page (`views/terminal.templ`) is a standalone xterm.js page that bridges to the existing `/v1/sandboxes/{id}/terminal` WebSocket (forwarding the API key as `?key=`, since the dashboard's Basic auth is separate from `MSBD_API_KEY`).
 - **`internal/api/dto.go`** — the JSON wire shapes. **Keep in lockstep with `openapi.yaml` and downstream clients.**
 
 ## Adding a new endpoint
@@ -78,6 +79,21 @@ The two-package split (`api` ↔ `core`) is the boundary that keeps DTO churn fr
 - **Host-path operations touch the daemon's filesystem.** `files/copy-from-host`, `files/copy-to-host`, and `snapshots/export|import` read/write paths on the msbd host, not the guest. There's no allowlist enforced server-side yet — front them with auth and trust the caller.
 - **`/docs` and `/openapi.yaml` are unauthenticated.** They're registered without `s.auth(...)` only when `SetOpenAPI` was given a non-empty spec. The embedded `OpenAPISpec` is the same `openapi.yaml` at the module root.
 - **The terminal rides a reverse-engineered wire protocol.** `internal/core/terminal_agent.go` hand-encodes the microsandbox agent protocol (CBOR over `AgentClient`), whose schema is NOT a public SDK API — the `wireMessage`/`wireExec*` structs and `mtExec*`/`protocolVersion` constants mirror upstream `crates/protocol/lib`. The format is pinned to the SDK version (the embedded FFI and downloaded `msb` runtime both track it), so it can't drift at runtime, but a deliberate SDK bump can change it. `TestPinnedSDKVersion` (in `terminal_agent_test.go`) fails on any SDK version change: re-verify the constants/structs against the new protocol crate, confirm the terminal works end-to-end, then bump `verifiedSDKVersion`.
+
+## Working on the dashboard
+
+The dashboard (`internal/dashboard/`) has a **codegen + asset build step** that the rest of the project doesn't. The generated `*_templ.go` and the compiled `assets/css/output.css` are **committed** so CI / goreleaser / `go build` need no Node or templ toolchain — but if you edit any `.templ` or add Tailwind classes you MUST regenerate and re-commit:
+
+```
+task dashboard          # templ generate + tailwindcss --minify (run after editing .templ)
+task dashboard:watch    # live-rebuild during development
+```
+
+Gotchas:
+- **Datastar v1 attribute syntax.** Event handlers use a colon: `data-on:click`, `data-on:submit`. Run-once-on-load is `data-init` (NOT `data-on-load`). Polling is `data-on-interval.5s` (hyphenated plugin name, `.Ns` duration — NOT `__duration`). Signals via `data-signals` / `data-bind`; keep signal names **all-lowercase** to dodge the `data-signals-*` attribute-lowercasing vs `data-bind` camelCase round-trip trap.
+- **Adding a templui component:** `templui add <name>` (config in `.templui.json` points at `internal/dashboard/...`). The CLI also drops the component's JS into `assets/js/` — load it from `views/layout.templ` with `@<comp>.Script()`. The vendored `utils/templui.go` was trimmed to drop the upstream `templui/components` import (we serve JS ourselves); don't re-add `SetupScriptRoutes`.
+- **Lint exclusions.** `internal/dashboard/components` and `internal/dashboard/utils` are vendored generated code and are excluded in `.golangci.yml`. Your own dashboard `.go` files are NOT excluded — keep them gofmt/modernize-clean.
+- **Never import the SDK from `internal/dashboard`** — same cgo-isolation rule as `api`. Go through `core.Service`.
 
 ## Tests
 

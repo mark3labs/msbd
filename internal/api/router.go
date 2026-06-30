@@ -13,6 +13,7 @@ import (
 	"github.com/charmbracelet/log"
 
 	"github.com/mark3labs/msbd/internal/core"
+	"github.com/mark3labs/msbd/internal/dashboard"
 )
 
 // Server holds dependencies for the HTTP handlers.
@@ -21,10 +22,17 @@ type Server struct {
 	apiKey  string
 	ready   func() error // readiness probe (FFI loaded + /dev/kvm openable)
 	openapi []byte       // raw openapi.yaml served at /openapi.yaml + /docs
+	dash    *dashboard.Handler
 }
 
 func NewServer(svc *core.Service, apiKey string, ready func() error) *Server {
 	return &Server{svc: svc, apiKey: apiKey, ready: ready}
+}
+
+// SetDashboard mounts the optional web dashboard under /dashboard.
+func (s *Server) SetDashboard(d *dashboard.Handler) *Server {
+	s.dash = d
+	return s
 }
 
 // Handler builds the routed http.Handler with middleware applied.
@@ -54,6 +62,11 @@ func (s *Server) Handler() http.Handler {
 	if len(s.openapi) > 0 {
 		mux.HandleFunc("GET /docs", s.handleDocs)
 		mux.HandleFunc("GET /openapi.yaml", s.handleOpenAPI)
+	}
+
+	// Web dashboard (optional; gated by its own Basic auth).
+	if s.dash != nil {
+		s.dash.Mount(mux)
 	}
 
 	// Lifecycle.

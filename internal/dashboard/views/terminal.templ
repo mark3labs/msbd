@@ -1,0 +1,141 @@
+package views
+
+// TerminalPage is a standalone xterm.js terminal that bridges to the msbd
+// WebSocket terminal endpoint. wsBase is the absolute ws(s):// URL for the
+// sandbox terminal WITHOUT query params; key is the optional API bearer token
+// (forwarded as ?key= since browsers can't set WS headers).
+templ TerminalPage(id, wsBase, key string) {
+	<!DOCTYPE html>
+	<html lang="en" class="dark">
+		<head>
+			<meta charset="UTF-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+			<title>{ id } — terminal</title>
+			<link rel="stylesheet" href="/dashboard/assets/vendor/xterm.css"/>
+			<script src="/dashboard/assets/vendor/xterm.js"></script>
+			<script src="/dashboard/assets/vendor/addon-fit.js"></script>
+			<style>
+				html,
+				body {
+					margin: 0;
+					height: 100%;
+					background: #000;
+				}
+				#term {
+					position: fixed;
+					inset: 0;
+					padding: 6px;
+					box-sizing: border-box;
+				}
+				#status {
+					position: fixed;
+					top: 6px;
+					right: 10px;
+					font: 12px monospace;
+					color: #888;
+					z-index: 10;
+				}
+			</style>
+		</head>
+		<body>
+			<div id="status">connecting…</div>
+			<div id="term" data-id={ id } data-ws={ wsBase } data-key={ key }></div>
+			<script>
+				(function () {
+					const el = document.getElementById("term");
+					const status = document.getElementById("status");
+					const term = new Terminal({
+						cursorBlink: true,
+						fontFamily: "monospace",
+						fontSize: 13,
+						theme: { background: "#000000" },
+					});
+					const fit = new FitAddon.FitAddon();
+					term.loadAddon(fit);
+					term.open(el);
+					fit.fit();
+
+					function wsURL() {
+						const base = el.dataset.ws;
+						const key = el.dataset.key;
+						const u = new URL(base);
+						u.searchParams.set("rows", String(term.rows));
+						u.searchParams.set("cols", String(term.cols));
+						if (key) u.searchParams.set("key", key);
+						return u.toString();
+					}
+
+					// Where to send the tab once the session ends (shell exit /
+					// disconnect). Only fires after a connection actually opened,
+					// so an initial failure (404 / auth) stays on-page instead of
+					// bouncing away.
+					const REDIRECT_TO = "/dashboard";
+					let opened = false;
+					let redirecting = false;
+					function goHome() {
+						if (redirecting) return;
+						redirecting = true;
+						setTimeout(() => {
+							window.location.href = REDIRECT_TO;
+						}, 600);
+					}
+
+					let ws;
+					function connect() {
+						ws = new WebSocket(wsURL());
+						ws.binaryType = "arraybuffer";
+						ws.onopen = () => {
+							opened = true;
+							status.textContent = "connected";
+							sendResize();
+						};
+						ws.onmessage = (ev) => {
+							if (typeof ev.data === "string") {
+								try {
+									const msg = JSON.parse(ev.data);
+									if (msg.type === "exit") {
+										status.textContent = "exited (" + msg.exit_code + ")";
+									}
+								} catch (e) {}
+								return;
+							}
+							term.write(new Uint8Array(ev.data));
+						};
+						ws.onclose = () => {
+							status.textContent = "disconnected";
+							if (opened) goHome();
+						};
+						ws.onerror = () => {
+							status.textContent = "error";
+						};
+					}
+
+					function sendResize() {
+						if (ws && ws.readyState === WebSocket.OPEN) {
+							ws.send(
+								JSON.stringify({
+									type: "resize",
+									rows: term.rows,
+									cols: term.cols,
+								}),
+							);
+						}
+					}
+
+					term.onData((d) => {
+						if (ws && ws.readyState === WebSocket.OPEN) {
+							ws.send(new TextEncoder().encode(d));
+						}
+					});
+
+					window.addEventListener("resize", () => {
+						fit.fit();
+						sendResize();
+					});
+					connect();
+					term.focus();
+				})();
+			</script>
+		</body>
+	</html>
+}

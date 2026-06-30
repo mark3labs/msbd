@@ -1,0 +1,96 @@
+package views
+
+import (
+	"github.com/mark3labs/msbd/internal/dashboard/components/button"
+	"github.com/mark3labs/msbd/internal/dashboard/components/card"
+	"github.com/mark3labs/msbd/internal/dashboard/components/icon"
+	"github.com/mark3labs/msbd/internal/dashboard/components/table"
+)
+
+// ImagesPage is the Images section.
+templ ImagesPage(rows []ImageRow) {
+	@PageHeader("Images") {
+		@button.Button(button.Props{
+			Variant:    button.VariantOutline,
+			Size:       button.SizeSm,
+			Attributes: templ.Attributes{"data-on:click": "@get('/dashboard/api/images')"},
+		}) {
+			@icon.RefreshCw(icon.Props{Class: "size-4"})
+			Refresh
+		}
+		@button.Button(button.Props{
+			Variant:    button.VariantSecondary,
+			Size:       button.SizeSm,
+			Attributes: templ.Attributes{"data-on:click": "confirm('Prune unused images?') && @post('/dashboard/api/images/prune')"},
+		}) {
+			@icon.Trash(icon.Props{Class: "size-4"})
+			Prune
+		}
+	}
+	@card.Card() {
+		@table.Table() {
+			@table.Header() {
+				@table.Row() {
+					@table.Head() {
+						Reference
+					}
+					@table.Head() {
+						Arch
+					}
+					@table.Head() {
+						OS
+					}
+					@table.Head() {
+						Layers
+					}
+					@table.Head() {
+						Size
+					}
+					@table.Head(table.HeadProps{Class: "text-right"}) {
+						Actions
+					}
+				}
+			}
+			@table.Body() {
+				if len(rows) == 0 {
+					@table.Row() {
+						@table.Cell(table.CellProps{Class: "text-muted-foreground", Attributes: templ.Attributes{"colspan": "6"}}) {
+							No cached images.
+						}
+					}
+				}
+				for _, im := range rows {
+					@table.Row() {
+						@table.Cell(table.CellProps{Class: "font-mono text-xs"}) {
+							{ im.Reference }
+						}
+						@table.Cell(table.CellProps{Class: "text-xs"}) {
+							{ im.Architecture }
+						}
+						@table.Cell(table.CellProps{Class: "text-xs"}) {
+							{ im.OS }
+						}
+						@table.Cell(table.CellProps{Class: "text-xs"}) {
+							{ itoa(int(im.Layers)) }
+						}
+						@table.Cell(table.CellProps{Class: "text-xs"}) {
+							{ im.Size }
+						}
+						@table.Cell(table.CellProps{Class: "text-right"}) {
+							@button.Button(button.Props{
+								Variant: button.VariantGhost,
+								Size:    button.SizeIcon,
+								Class:   "size-8 text-destructive",
+								Attributes: templ.Attributes{
+									"data-on:click": "confirm('Remove image " + im.Reference + "?') && @delete('/dashboard/api/images?ref=" + im.Reference + "')",
+								},
+							}) {
+								@icon.Trash2(icon.Props{Class: "size-4"})
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+}

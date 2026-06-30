@@ -1,0 +1,138 @@
+package views
+
+import (
+	"github.com/mark3labs/msbd/internal/dashboard/components/button"
+	"github.com/mark3labs/msbd/internal/dashboard/components/dialog"
+	"github.com/mark3labs/msbd/internal/dashboard/components/icon"
+	"github.com/mark3labs/msbd/internal/dashboard/components/input"
+	"github.com/mark3labs/msbd/internal/dashboard/components/label"
+	"github.com/mark3labs/msbd/internal/dashboard/components/selectbox"
+	"github.com/mark3labs/msbd/internal/dashboard/components/toast"
+)
+
+// Meta carries shell-level info shown in the header.
+type Meta struct {
+	Version        string
+	DefaultImage   string
+	RuntimeVersion string
+	SDKVersion     string
+}
+
+// Layout is the full HTML document: it loads the compiled CSS, the vendored
+// Datastar runtime and the templui component scripts, then renders the app
+// shell (sidebar + content region). The content region boots itself by fetching
+// the sandboxes view on load.
+templ Layout(m Meta) {
+	<!DOCTYPE html>
+	<html lang="en" class="dark">
+		<head>
+			<meta charset="UTF-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+			<title>msbd dashboard</title>
+			<link rel="stylesheet" href="/dashboard/assets/css/output.css"/>
+			<script type="module" src="/dashboard/assets/vendor/datastar.js"></script>
+			<script src="/dashboard/assets/js/metric-chart.js"></script>
+			@dialog.Script()
+			@input.Script()
+			@label.Script()
+			@selectbox.Script()
+			@toast.Script()
+		</head>
+		<body class="bg-background text-foreground antialiased">
+			<div class="flex h-screen w-full overflow-hidden">
+				@sidebar(m)
+				<main class="flex-1 overflow-y-auto">
+					<div
+						id="content"
+						class="p-6"
+						data-init="@get('/dashboard/api/sandboxes')"
+					>
+						@LoadingPanel()
+					</div>
+				</main>
+			</div>
+			@Toaster()
+			@CreateSandboxDialog(m.DefaultImage)
+			@CreateVolumeDialog()
+			@CreateSnapshotDialog()
+		</body>
+	</html>
+}
+
+// sidebar is the persistent left navigation. Each item swaps the #content
+// region by fetching a section fragment over SSE.
+templ sidebar(m Meta) {
+	<aside class="flex w-60 shrink-0 flex-col border-r bg-sidebar text-sidebar-foreground">
+		<div class="flex items-center gap-2 px-4 h-14 border-b">
+			@icon.Box(icon.Props{Class: "size-5"})
+			<span class="font-semibold">msbd</span>
+			<span class="ml-auto text-xs text-muted-foreground">{ m.Version }</span>
+		</div>
+		<nav class="flex flex-col gap-1 p-2">
+			@navItem("/dashboard/api/sandboxes", "server", "Sandboxes")
+			@navItem("/dashboard/api/volumes", "hard-drive", "Volumes")
+			@navItem("/dashboard/api/images", "layers", "Images")
+			@navItem("/dashboard/api/snapshots", "camera", "Snapshots")
+		</nav>
+		<div class="mt-auto p-3 text-xs text-muted-foreground space-y-1 border-t">
+			<div class="truncate">runtime: { m.RuntimeVersion }</div>
+			<div class="truncate">sdk: { m.SDKVersion }</div>
+			<a
+				href="/docs"
+				target="_blank"
+				class="inline-flex items-center gap-1 hover:text-foreground"
+			>
+				@icon.FileText(icon.Props{Class: "size-3.5"})
+				API docs
+			</a>
+		</div>
+	</aside>
+}
+
+templ navItem(url, ico, lbl string) {
+	@button.Button(button.Props{
+		Variant:    button.VariantGhost,
+		Class:      "w-full justify-start gap-2",
+		Attributes: templ.Attributes{"data-on:click": "@get('" + url + "')"},
+	}) {
+		@icon.Icon(ico)()
+		{ lbl }
+	}
+}
+
+// LoadingPanel is a neutral placeholder shown while a section loads.
+templ LoadingPanel() {
+	<div class="flex items-center gap-2 text-muted-foreground text-sm">
+		@icon.LoaderCircle(icon.Props{Class: "size-4 animate-spin"})
+		Loading…
+	</div>
+}
+
+// PageHeader renders a section title row with an optional action slot.
+templ PageHeader(title string) {
+	<div class="flex items-center justify-between mb-4">
+		<h1 class="text-2xl font-semibold tracking-tight">{ title }</h1>
+		<div class="flex items-center gap-2">
+			{ children... }
+		</div>
+	</div>
+}
+
+// Toaster is the live region transient toasts are appended into.
+templ Toaster() {
+	<div id="toaster"></div>
+}
+
+// Notify renders a single toast. Handlers append it to #toaster over SSE; the
+// templui toast script auto-shows it via its MutationObserver.
+templ Notify(variant toast.Variant, title, desc string) {
+	@toast.Toast(toast.Props{
+		Variant:     variant,
+		Title:       title,
+		Description: desc,
+		Position:    toast.PositionBottomRight,
+		Duration:    4000,
+		Dismissible: true,
+		Icon:        true,
+	})
+}

@@ -1,0 +1,89 @@
+package views
+
+import (
+	"github.com/mark3labs/msbd/internal/dashboard/components/button"
+	"github.com/mark3labs/msbd/internal/dashboard/components/card"
+	"github.com/mark3labs/msbd/internal/dashboard/components/icon"
+	"github.com/mark3labs/msbd/internal/dashboard/components/table"
+)
+
+// SnapshotsPage is the Snapshots section.
+templ SnapshotsPage(rows []SnapshotRow) {
+	@PageHeader("Snapshots") {
+		@button.Button(button.Props{
+			Variant:    button.VariantOutline,
+			Size:       button.SizeSm,
+			Attributes: templ.Attributes{"data-on:click": "@get('/dashboard/api/snapshots')"},
+		}) {
+			@icon.RefreshCw(icon.Props{Class: "size-4"})
+			Refresh
+		}
+		@dialogOpenButton("create-snapshot", "New snapshot")
+	}
+	@card.Card() {
+		@table.Table() {
+			@table.Header() {
+				@table.Row() {
+					@table.Head() {
+						Name
+					}
+					@table.Head() {
+						Digest
+					}
+					@table.Head() {
+						Image
+					}
+					@table.Head() {
+						Format
+					}
+					@table.Head() {
+						Size
+					}
+					@table.Head(table.HeadProps{Class: "text-right"}) {
+						Actions
+					}
+				}
+			}
+			@table.Body() {
+				if len(rows) == 0 {
+					@table.Row() {
+						@table.Cell(table.CellProps{Class: "text-muted-foreground", Attributes: templ.Attributes{"colspan": "6"}}) {
+							No snapshots.
+						}
+					}
+				}
+				for _, s := range rows {
+					@table.Row() {
+						@table.Cell(table.CellProps{Class: "font-medium"}) {
+							{ s.Name }
+						}
+						@table.Cell(table.CellProps{Class: "font-mono text-xs"}) {
+							{ ShortDigest(s.Digest) }
+						}
+						@table.Cell(table.CellProps{Class: "font-mono text-xs"}) {
+							{ s.ImageRef }
+						}
+						@table.Cell(table.CellProps{Class: "text-xs"}) {
+							{ s.Format }
+						}
+						@table.Cell(table.CellProps{Class: "text-xs"}) {
+							{ s.Size }
+						}
+						@table.Cell(table.CellProps{Class: "text-right"}) {
+							@button.Button(button.Props{
+								Variant: button.VariantGhost,
+								Size:    button.SizeIcon,
+								Class:   "size-8 text-destructive",
+								Attributes: templ.Attributes{
+									"data-on:click": "confirm('Delete snapshot?') && @delete('/dashboard/api/snapshots/" + s.Digest + "')",
+								},
+							}) {
+								@icon.Trash2(icon.Props{Class: "size-4"})
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+}

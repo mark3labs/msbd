@@ -1,0 +1,189 @@
+package views
+
+import (
+	"github.com/mark3labs/msbd/internal/dashboard/components/button"
+	"github.com/mark3labs/msbd/internal/dashboard/components/dialog"
+	"github.com/mark3labs/msbd/internal/dashboard/components/icon"
+	"github.com/mark3labs/msbd/internal/dashboard/components/input"
+	"github.com/mark3labs/msbd/internal/dashboard/components/label"
+	"github.com/mark3labs/msbd/internal/dashboard/components/textarea"
+)
+
+// dialogOpenButton renders a templui dialog trigger styled as a primary button.
+templ dialogOpenButton(forID, lbl string) {
+	@dialog.Trigger(dialog.TriggerProps{For: forID}) {
+		@button.Button(button.Props{Size: button.SizeSm}) {
+			@icon.Plus(icon.Props{Class: "size-4"})
+			{ lbl }
+		}
+	}
+}
+
+// field wraps a labelled form control.
+templ field(forID, lbl string) {
+	<div class="grid gap-1.5">
+		@label.Label(label.Props{For: forID}) {
+			{ lbl }
+		}
+		{ children... }
+	</div>
+}
+
+templ selectField(forID, lbl, bind string, opts []string) {
+	<div class="grid gap-1.5">
+		@label.Label(label.Props{For: forID}) {
+			{ lbl }
+		}
+		<select
+			id={ forID }
+			data-bind={ bind }
+			class="flex h-9 w-full rounded-md border bg-background px-3 py-1 text-sm shadow-xs focus-visible:ring-2 focus-visible:ring-ring outline-none"
+		>
+			for _, o := range opts {
+				<option value={ o }>{ optionLabel(o) }</option>
+			}
+		</select>
+	</div>
+}
+
+func optionLabel(o string) string {
+	if o == "" {
+		return "(default)"
+	}
+	return o
+}
+
+// CreateSandboxDialog is the new-sandbox modal. Form fields bind to Datastar
+// signals; submit POSTs them to the dashboard API.
+templ CreateSandboxDialog(defaultImage string) {
+	@dialog.Dialog(dialog.Props{ID: "create-sandbox"}) {
+		@dialog.Content(dialog.ContentProps{Class: "sm:max-w-lg"}) {
+			<div
+				data-signals={ "{sbximage:'" + defaultImage + "', sbxcpu:1, sbxmemory:512, sbxdisk:0, sbxworkdir:'', sbxnetwork:'', sbxenv:''}" }
+			>
+				@dialog.Header() {
+					@dialog.Title() {
+						New sandbox
+					}
+					@dialog.Description() {
+						Boot a new microVM from an OCI image.
+					}
+				}
+				<form
+					class="grid gap-4 py-4"
+					data-on:submit="@post('/dashboard/api/sandboxes')"
+				>
+					@field("sbximage", "Image") {
+						@input.Input(input.Props{ID: "sbximage", Placeholder: "microsandbox/python", Attributes: templ.Attributes{"data-bind": "sbximage"}})
+					}
+					<div class="grid grid-cols-3 gap-3">
+						@field("sbxcpu", "vCPU") {
+							@input.Input(input.Props{ID: "sbxcpu", Type: input.TypeNumber, Attributes: templ.Attributes{"data-bind": "sbxcpu", "step": "0.5", "min": "0"}})
+						}
+						@field("sbxmemory", "Memory (MB)") {
+							@input.Input(input.Props{ID: "sbxmemory", Type: input.TypeNumber, Attributes: templ.Attributes{"data-bind": "sbxmemory", "min": "0"}})
+						}
+						@field("sbxdisk", "Disk (GB)") {
+							@input.Input(input.Props{ID: "sbxdisk", Type: input.TypeNumber, Attributes: templ.Attributes{"data-bind": "sbxdisk", "min": "0"}})
+						}
+					</div>
+					@field("sbxworkdir", "Workdir (optional)") {
+						@input.Input(input.Props{ID: "sbxworkdir", Placeholder: "/workspace", Attributes: templ.Attributes{"data-bind": "sbxworkdir"}})
+					}
+					@selectField("sbxnetwork", "Network policy", "sbxnetwork", []string{"", "none", "public-only", "allow-all", "non-local"})
+					@field("sbxenv", "Env (KEY=VALUE per line)") {
+						@textarea.Textarea(textarea.Props{ID: "sbxenv", Rows: 3, Placeholder: "FOO=bar", Attributes: templ.Attributes{"data-bind": "sbxenv"}})
+					}
+				</form>
+				@dialog.Footer() {
+					@dialog.Close() {
+						@button.Button(button.Props{Variant: button.VariantOutline}) {
+							Cancel
+						}
+					}
+					@button.Button(button.Props{Attributes: templ.Attributes{"data-on:click": "@post('/dashboard/api/sandboxes')"}}) {
+						Create
+					}
+				}
+			</div>
+		}
+	}
+}
+
+// CreateVolumeDialog is the new-volume modal.
+templ CreateVolumeDialog() {
+	@dialog.Dialog(dialog.Props{ID: "create-volume"}) {
+		@dialog.Content() {
+			<div data-signals="{volname:'', volkind:'overlay', volsize:0, volquota:0}">
+				@dialog.Header() {
+					@dialog.Title() {
+						New volume
+					}
+					@dialog.Description() {
+						Create a named persistent volume.
+					}
+				}
+				<form class="grid gap-4 py-4" data-on:submit="@post('/dashboard/api/volumes')">
+					@field("volname", "Name") {
+						@input.Input(input.Props{ID: "volname", Placeholder: "my-data", Attributes: templ.Attributes{"data-bind": "volname"}})
+					}
+					@selectField("volkind", "Kind", "volkind", []string{"overlay", "disk"})
+					<div class="grid grid-cols-2 gap-3">
+						@field("volsize", "Size (MB)") {
+							@input.Input(input.Props{ID: "volsize", Type: input.TypeNumber, Attributes: templ.Attributes{"data-bind": "volsize", "min": "0"}})
+						}
+						@field("volquota", "Quota (MB)") {
+							@input.Input(input.Props{ID: "volquota", Type: input.TypeNumber, Attributes: templ.Attributes{"data-bind": "volquota", "min": "0"}})
+						}
+					</div>
+				</form>
+				@dialog.Footer() {
+					@dialog.Close() {
+						@button.Button(button.Props{Variant: button.VariantOutline}) {
+							Cancel
+						}
+					}
+					@button.Button(button.Props{Attributes: templ.Attributes{"data-on:click": "@post('/dashboard/api/volumes')"}}) {
+						Create
+					}
+				}
+			</div>
+		}
+	}
+}
+
+// CreateSnapshotDialog is the new-snapshot modal.
+templ CreateSnapshotDialog() {
+	@dialog.Dialog(dialog.Props{ID: "create-snapshot"}) {
+		@dialog.Content() {
+			<div data-signals="{snapsource:'', snapname:''}">
+				@dialog.Header() {
+					@dialog.Title() {
+						New snapshot
+					}
+					@dialog.Description() {
+						Snapshot a stopped sandbox's rootfs.
+					}
+				}
+				<form class="grid gap-4 py-4" data-on:submit="@post('/dashboard/api/snapshots')">
+					@field("snapsource", "Source sandbox") {
+						@input.Input(input.Props{ID: "snapsource", Placeholder: "sbx_…", Attributes: templ.Attributes{"data-bind": "snapsource"}})
+					}
+					@field("snapname", "Name (optional)") {
+						@input.Input(input.Props{ID: "snapname", Placeholder: "my-snapshot", Attributes: templ.Attributes{"data-bind": "snapname"}})
+					}
+				</form>
+				@dialog.Footer() {
+					@dialog.Close() {
+						@button.Button(button.Props{Variant: button.VariantOutline}) {
+							Cancel
+						}
+					}
+					@button.Button(button.Props{Attributes: templ.Attributes{"data-on:click": "@post('/dashboard/api/snapshots')"}}) {
+						Create
+					}
+				}
+			</div>
+		}
+	}
+}

@@ -23,6 +23,71 @@ tasks:
     cmds:
       - go build -ldflags "-X main.version={{.VERSION}}" -o ./bin/msbd ./cmd/msbd
 
+  dashboard:
+    desc: Regenerate the dashboard (templ code + Tailwind CSS). Run after editing internal/dashboard/**/*.templ.
+    cmds:
+      - templ generate
+      - tailwindcss -i internal/dashboard/assets/css/input.css -o internal/dashboard/assets/css/output.css --minify
+
+  # ---------------------------------------------------------------------------
+  # Dev loop: templ hot-reload proxy + air binary rebuild + Tailwind watch,
+  # all in parallel via `task dev`.
+  #
+  #   • Browser:      http://localhost:7332   (templ proxy, auto-reloads)
+  #   • msbd app:     http://localhost:8099    (proxied; terminal WS lives here)
+  #   • API key:      devkey                   (dashboard terminal uses ?key=)
+  #
+  # Requires `air` and `templ` on PATH and a host with /dev/kvm (CGO build).
+  # ---------------------------------------------------------------------------
+  dev:
+    desc: 'Start the dev server (templ hot-reload on :7332, air rebuild, Tailwind watch)'
+    deps: [dev:templ, dev:tailwind, dev:server]
+
+  dev:templ:
+    desc: templ generate --watch with a live-reload proxy on :7332 (browser-facing)
+    cmds:
+      - templ generate --watch --proxy="http://localhost:8099" --proxyport=7332 --open-browser=false
+
+  dev:tailwind:
+    desc: Watch the dashboard Tailwind CSS (rebuilds output.css on .templ changes)
+    cmds:
+      - tailwindcss -i internal/dashboard/assets/css/input.css -o internal/dashboard/assets/css/output.css --watch
+
+  dev:server:
+    desc: air hot-reload of the msbd binary (CGO; rebuilds + restarts on .go changes)
+    env:
+      CGO_ENABLED: "1"
+      MSBD_API_KEY: devkey
+    cmds:
+      - >
+        air
+        --build.pre_cmd "rm -f tmp/bin/msbd"
+        --build.cmd "go build -o tmp/bin/msbd ./cmd/msbd"
+        --build.entrypoint "./tmp/bin/msbd"
+        --build.args_bin "serve"
+        --build.delay "500"
+        --build.exclude_dir "node_modules,bin,dist,tmp,.git,.direnv"
+        --build.include_ext "go"
+        --build.stop_on_error "false"
+        --build.send_interrupt true
+        --build.kill_delay "1s"
+        --misc.clean_on_exit true
+
+  dev:kill:
+    desc: Kill stray dev processes (templ proxy, air, tailwind, msbd) and free ports 7332/8099
+    ignore_error: true
+    cmds:
+      - pkill -f "templ generate --watch" || true
+      - pkill -f "air --build.cmd" || true
+      - pkill -f "tailwindcss -i internal/dashboard/assets/css/input.css" || true
+      - pkill -f "tmp/bin/msbd serve" || true
+      - |
+        for port in 7332 8099; do
+          pids=$(lsof -ti tcp:$port 2>/dev/null || true)
+          [ -n "$pids" ] && kill $pids 2>/dev/null || true
+        done
+      - echo "Dev server stopped."
+
   run:
     desc: Build and run msbd (set MSBD_API_KEY in your env first)
     deps: [build]

@@ -26,6 +26,7 @@ import (
 
 	"github.com/mark3labs/msbd/internal/api"
 	"github.com/mark3labs/msbd/internal/core"
+	"github.com/mark3labs/msbd/internal/dashboard"
 
 	rootmsbd "github.com/mark3labs/msbd"
 
@@ -96,6 +97,9 @@ type serveOptions struct {
 	maxSandboxes  int
 	createTimeout time.Duration
 	logLevel      string
+	dashboard     bool
+	dashboardUser string
+	dashboardPass string
 }
 
 func newServeCmd() *cobra.Command {
@@ -131,6 +135,12 @@ interrupted (Ctrl-C / SIGTERM trigger a graceful drain).`,
 		"Sandbox boot deadline, covers cold OCI pulls ($MSBD_CREATE_TIMEOUT_SECS)")
 	f.StringVar(&o.logLevel, "log-level", envOr("MSBD_LOG_LEVEL", "info"),
 		"Log verbosity: debug, info, warn, error ($MSBD_LOG_LEVEL)")
+	f.BoolVar(&o.dashboard, "dashboard", envBool("MSBD_DASHBOARD", true),
+		"Serve the web dashboard at /dashboard ($MSBD_DASHBOARD)")
+	f.StringVar(&o.dashboardUser, "dashboard-user", os.Getenv("MSBD_DASHBOARD_USER"),
+		"Dashboard HTTP Basic auth username; with --dashboard-pass enables auth ($MSBD_DASHBOARD_USER)")
+	f.StringVar(&o.dashboardPass, "dashboard-pass", os.Getenv("MSBD_DASHBOARD_PASS"),
+		"Dashboard HTTP Basic auth password; with --dashboard-user enables auth ($MSBD_DASHBOARD_PASS)")
 
 	return cmd
 }
@@ -184,6 +194,21 @@ func runServe(ctx context.Context, o *serveOptions) error {
 	// 3) Serve.
 	srv := api.NewServer(svc, o.apiKey, readinessProbe).
 		SetOpenAPI(rootmsbd.OpenAPISpec)
+	if o.dashboard {
+		dcfg := dashboard.Config{
+			Enabled: true,
+			User:    o.dashboardUser,
+			Pass:    o.dashboardPass,
+			APIKey:  o.apiKey,
+			Version: version,
+		}
+		srv.SetDashboard(dashboard.New(svc, dcfg))
+		if dcfg.AuthEnabled() {
+			log.Info("dashboard enabled", "path", "/dashboard", "auth", "basic")
+		} else {
+			log.Warn("dashboard enabled WITHOUT auth (set --dashboard-user/--dashboard-pass)", "path", "/dashboard")
+		}
+	}
 	httpSrv := &http.Server{
 		Addr:              o.listen,
 		Handler:           srv.Handler(),
@@ -248,6 +273,15 @@ func envInt(k string, def int) int {
 	if v := strings.TrimSpace(os.Getenv(k)); v != "" {
 		if n, err := strconv.Atoi(v); err == nil {
 			return n
+		}
+	}
+	return def
+}
+
+func envBool(k string, def bool) bool {
+	if v := strings.TrimSpace(os.Getenv(k)); v != "" {
+		if b, err := strconv.ParseBool(v); err == nil {
+			return b
 		}
 	}
 	return def

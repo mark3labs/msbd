@@ -12,7 +12,17 @@ linters:
     - modernize
     - staticcheck
     - unused
+  exclusions:
+    paths:
+      # Vendored, generated templui components + utils (copied in by the
+      # templui CLI; not formatted/linted to our standards and re-fetchable).
+      - internal/dashboard/components
+      - internal/dashboard/utils
 
 formatters:
   enable:
     - gofmt
+  exclusions:
+    paths:
+      - internal/dashboard/components
+      - internal/dashboard/utils

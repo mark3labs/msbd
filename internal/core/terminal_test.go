@@ -2,6 +2,7 @@ package core
 
 import (
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/fxamacker/cbor/v2"
@@ -9,8 +10,16 @@ import (
 
 func TestPTYCmdDefault(t *testing.T) {
 	cmd, args := ptyCmd(TerminalParams{})
-	if cmd != "/bin/sh" || !slices.Equal(args, []string{"-i"}) {
-		t.Fatalf("default = %q %v, want /bin/sh [-i]", cmd, args)
+	if cmd != "/bin/sh" || !slices.Equal(args, []string{"-c", defaultShellScript}) {
+		t.Fatalf("default = %q %v, want /bin/sh [-c <defaultShellScript>]", cmd, args)
+	}
+	// The bootstrap must prefer the image's default shell but still guarantee
+	// a /bin/sh fallback as the final exec.
+	if !strings.Contains(defaultShellScript, `"$SHELL"`) {
+		t.Errorf("defaultShellScript should consult $SHELL: %q", defaultShellScript)
+	}
+	if !strings.HasSuffix(defaultShellScript, "exec /bin/sh -i") {
+		t.Errorf("defaultShellScript must end with the /bin/sh fallback: %q", defaultShellScript)
 	}
 }
 

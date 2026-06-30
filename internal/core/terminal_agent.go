@@ -187,13 +187,32 @@ func openAgentSession(ctx context.Context, name string, p TerminalParams) (Sessi
 	return se, nil
 }
 
+// defaultShellScript bootstraps the image's own default shell, falling back to
+// /bin/sh. It is run by `/bin/sh -c` (present in virtually every image, so it's
+// a reliable launcher) and `exec`s into the best available shell so the chosen
+// shell — not sh — becomes the PTY foreground process. Preference order:
+//
+//  1. $SHELL                                     (explicit user/image setting)
+//  2. the current user's login shell from passwd (the image's real default)
+//  3. bash, if on PATH                            (common interactive upgrade)
+//  4. /bin/sh                                     (guaranteed fallback)
+//
+// Each candidate is required to be executable before we exec it, so a stale
+// $SHELL or passwd entry pointing at a missing binary is skipped, not fatal.
+const defaultShellScript = `try() { [ -n "$1" ] && [ -x "$1" ] && exec "$1" -i; }; ` +
+	`try "$SHELL"; ` +
+	`try "$(getent passwd "$(id -u)" 2>/dev/null | cut -d: -f7)"; ` +
+	`try "$(command -v bash)"; ` +
+	`exec /bin/sh -i`
+
 // ptyCmd returns the program + args for the PTY's foreground process. An empty
-// Cmd launches an interactive login shell; a non-empty Cmd runs via sh -c.
+// Cmd launches the image's default interactive shell (see defaultShellScript),
+// falling back to /bin/sh; a non-empty Cmd runs via sh -c.
 func ptyCmd(p TerminalParams) (string, []string) {
 	if cmd := strings.TrimSpace(p.Cmd); cmd != "" {
 		return "/bin/sh", []string{"-c", cmd}
 	}
-	return "/bin/sh", []string{"-i"}
+	return "/bin/sh", []string{"-c", defaultShellScript}
 }
 
 // ptyEnv builds the env var list (KEY=VALUE) for the session. With a real PTY,

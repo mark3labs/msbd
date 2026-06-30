@@ -167,6 +167,24 @@ All via environment variables.
 | `MSBD_MAX_SANDBOXES` | `0` (unlimited) | Hard cap on concurrent sandboxes; rejects new creates above this with 507. |
 | `MSBD_CREATE_TIMEOUT_SECS` | `300` | Boot deadline (covers cold OCI pulls). |
 | `MSBD_LOG_LEVEL` | `info` | Log verbosity: `debug`, `info`, `warn`, `error`. Output is colorized on a TTY, plain otherwise. |
+| `MSBD_DASHBOARD` | `true` | Serve the web dashboard at `/dashboard`. Set `false` to disable. |
+| `MSBD_DASHBOARD_USER` | *(empty)* | Dashboard HTTP Basic auth username. Setting user **or** pass turns auth on. |
+| `MSBD_DASHBOARD_PASS` | *(empty)* | Dashboard HTTP Basic auth password. **Both empty = dashboard is unauthenticated (dev only).** |
+
+Flags mirror every var (`--dashboard`, `--dashboard-user`, `--dashboard-pass`, …); flag › env › default.
+
+## Web dashboard
+
+A self-contained web UI lives at **`/dashboard`** that manages everything the REST API does — sandboxes (create, start/stop/delete, inspect, run commands, live logs & metrics, a file browser, and a real **kernel-PTY terminal**), volumes, images and snapshots.
+
+```bash
+# Behind HTTP Basic auth:
+MSBD_DASHBOARD_USER=admin MSBD_DASHBOARD_PASS=s3cret msbd serve
+# → open http://localhost:8099/dashboard
+```
+
+It is server-rendered with [templ](https://templ.guide) + [templui](https://templui.io) components, styled with Tailwind, and made reactive with [Datastar](https://data-star.dev) (SSE-driven DOM patching). Everything — the compiled CSS, the Datastar runtime, xterm.js and the component JavaScript — is **embedded in the binary** (`//go:embed`); there are no external assets to deploy. Auth is independent of `MSBD_API_KEY`: the API stays bearer-gated while the dashboard gets its own optional Basic auth.
+
 
 ## REST API
 
@@ -174,6 +192,7 @@ All via environment variables.
 |---|---|
 | `GET /healthz` · `GET /readyz` | Liveness · readiness (runtime loaded + `/dev/kvm` accessible). |
 | `GET /docs` · `GET /openapi.yaml` | Swagger UI · raw OpenAPI spec (unauthenticated). |
+| `GET /dashboard` | Web management UI (optional Basic auth — see [Web dashboard](#web-dashboard)). |
 | `GET /v1/version` | Default image + runtime/SDK versions (diagnostics). |
 | `POST /v1/sandboxes` · `GET /v1/sandboxes` · `GET/DELETE /v1/sandboxes/{id}` | Lifecycle. Create accepts `user`, `hostname`, `network_policy`, `ports`, `secrets`, `mounts`. |
 | `GET /v1/sandboxes/{id}/inspect` | Sandbox metadata + raw SDK config blob. |
@@ -261,6 +280,11 @@ internal/core/snapshot.go     # sandbox rootfs snapshots
 internal/core/registry.go     # live handle cache + workdir cache + reconcile
 internal/core/jobs.go         # async job registry (+ stdin/signal)
 internal/core/version.go      # SDK / runtime version helpers
+internal/dashboard/dashboard.go    # web UI: routes + optional Basic auth (Mount on the api mux)
+internal/dashboard/handlers_*.go   # Datastar SSE handlers (sandboxes, volumes, images, snapshots)
+internal/dashboard/views/*.templ   # templ pages/fragments (templui components + Datastar attrs)
+internal/dashboard/components/      # vendored templui components (via `templui add`)
+internal/dashboard/assets/          # input.css + committed output.css, datastar/xterm, component JS (embedded)
 openapi.yaml                  # the contract
 VERSION                       # release version (single source of truth)
 Taskfile.yml                  # dev + release tasks (go-task)

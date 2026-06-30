@@ -1,0 +1,89 @@
+package views
+
+import (
+	"github.com/mark3labs/msbd/internal/dashboard/components/button"
+	"github.com/mark3labs/msbd/internal/dashboard/components/card"
+	"github.com/mark3labs/msbd/internal/dashboard/components/icon"
+	"github.com/mark3labs/msbd/internal/dashboard/components/table"
+)
+
+// VolumesPage is the Volumes section.
+templ VolumesPage(rows []VolumeRow) {
+	@PageHeader("Volumes") {
+		@button.Button(button.Props{
+			Variant:    button.VariantOutline,
+			Size:       button.SizeSm,
+			Attributes: templ.Attributes{"data-on:click": "@get('/dashboard/api/volumes')"},
+		}) {
+			@icon.RefreshCw(icon.Props{Class: "size-4"})
+			Refresh
+		}
+		@dialogOpenButton("create-volume", "New volume")
+	}
+	@card.Card() {
+		@table.Table() {
+			@table.Header() {
+				@table.Row() {
+					@table.Head() {
+						Name
+					}
+					@table.Head() {
+						Kind
+					}
+					@table.Head() {
+						Path
+					}
+					@table.Head() {
+						Used
+					}
+					@table.Head() {
+						Capacity
+					}
+					@table.Head(table.HeadProps{Class: "text-right"}) {
+						Actions
+					}
+				}
+			}
+			@table.Body() {
+				if len(rows) == 0 {
+					@table.Row() {
+						@table.Cell(table.CellProps{Class: "text-muted-foreground", Attributes: templ.Attributes{"colspan": "6"}}) {
+							No volumes.
+						}
+					}
+				}
+				for _, v := range rows {
+					@table.Row() {
+						@table.Cell(table.CellProps{Class: "font-medium"}) {
+							{ v.Name }
+						}
+						@table.Cell(table.CellProps{Class: "text-xs"}) {
+							{ v.Kind }
+						}
+						@table.Cell(table.CellProps{Class: "font-mono text-xs"}) {
+							{ v.Path }
+						}
+						@table.Cell(table.CellProps{Class: "text-xs"}) {
+							{ v.Used }
+						}
+						@table.Cell(table.CellProps{Class: "text-xs"}) {
+							{ v.Capacity }
+						}
+						@table.Cell(table.CellProps{Class: "text-right"}) {
+							@button.Button(button.Props{
+								Variant: button.VariantGhost,
+								Size:    button.SizeIcon,
+								Class:   "size-8 text-destructive",
+								Attributes: templ.Attributes{
+									"data-on:click": "confirm('Delete volume " + v.Name + "?') && @delete('/dashboard/api/volumes/" + v.Name + "')",
+								},
+							}) {
+								@icon.Trash2(icon.Props{Class: "size-4"})
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+}

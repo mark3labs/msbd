@@ -1,0 +1,7 @@
+{
+  "componentsDir": "internal/dashboard/components",
+  "utilsDir": "internal/dashboard/utils",
+  "moduleName": "github.com/mark3labs/msbd",
+  "jsDir": "internal/dashboard/assets/js",
+  "jsPublicPath": "/dashboard/assets/js"
+}
