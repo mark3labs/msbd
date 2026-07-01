@@ -152,6 +152,44 @@ templ CreateVolumeDialog() {
 	}
 }
 
+// PullImageDialog is the pull-image modal. The pull is long-running (it boots a
+// throwaway microVM); the handler toasts progress over the open SSE stream.
+templ PullImageDialog() {
+	@dialog.Dialog(dialog.Props{ID: "pull-image"}) {
+		@dialog.Content() {
+			<div data-signals="{imgref:'', imgforce:false}">
+				@dialog.Header() {
+					@dialog.Title() {
+						Pull image
+					}
+					@dialog.Description() {
+						Fetch an OCI image into the local cache. This can take a while.
+					}
+				}
+				<form class="grid gap-4 py-4" data-on:submit="@post('/dashboard/api/images/pull')">
+					@field("imgref", "Reference") {
+						@input.Input(input.Props{ID: "imgref", Placeholder: "microsandbox/python", Attributes: templ.Attributes{"data-bind": "imgref"}})
+					}
+					<label class="flex items-center gap-2 text-sm" for="imgforce">
+						<input id="imgforce" type="checkbox" data-bind="imgforce" class="size-4 rounded border"/>
+						Force re-pull even if cached
+					</label>
+				</form>
+				@dialog.Footer() {
+					@dialog.Close() {
+						@button.Button(button.Props{Variant: button.VariantOutline}) {
+							Cancel
+						}
+					}
+					@button.Button(button.Props{Attributes: templ.Attributes{"data-on:click": "@post('/dashboard/api/images/pull')"}}) {
+						Pull
+					}
+				}
+			</div>
+		}
+	}
+}
+
 // CreateSnapshotDialog is the new-snapshot modal.
 templ CreateSnapshotDialog() {
 	@dialog.Dialog(dialog.Props{ID: "create-snapshot"}) {

@@ -744,6 +744,29 @@ paths:
         "204": { description: Removed }
         "401": { $ref: "#/components/responses/Unauthorized" }
 
+  /v1/images/pull:
+    post:
+      tags: [images]
+      summary: Pull an OCI image into the local cache
+      description: >
+        Fetches an image into the daemon's image cache. There is no standalone
+        pull in the runtime, so the daemon boots a short-lived microVM to trigger
+        the pull and tears it down again. This is a long-running, blocking call
+        (a cold pull can take minutes) — do not front it with a low-timeout proxy.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ImagePullRequest" }
+      responses:
+        "200":
+          description: Image is cached
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Image" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
   /v1/images/inspect:
     get:
       tags: [images]
@@ -938,6 +961,11 @@ components:
           schema: { $ref: "#/components/schemas/ErrorBody" }
     NotFound:
       description: Sandbox not found
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorBody" }
+    BadRequest:
+      description: Malformed or missing request parameters
       content:
         application/json:
           schema: { $ref: "#/components/schemas/ErrorBody" }
@@ -1258,6 +1286,17 @@ components:
         path: { type: string, description: Path relative to the volume root. }
         content_b64: { type: string, description: Base64 bytes (write only). }
         recursive: { type: boolean, description: Remove a directory recursively. }
+
+    ImagePullRequest:
+      type: object
+      required: [reference]
+      properties:
+        reference:
+          type: string
+          description: OCI image reference to pull, e.g. "microsandbox/python".
+        force:
+          type: boolean
+          description: Re-pull even when the image is already cached (pull-always).
 
     Image:
       type: object

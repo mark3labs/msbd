@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/mark3labs/msbd/internal/core"
 )
@@ -512,6 +513,27 @@ func (s *Server) handleImageRemove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleImagePull fetches an OCI image into the local cache. It boots a
+// throwaway microVM to trigger the pull (the SDK has no standalone pull), so it
+// is a long-running, blocking call — do not front it with a low-timeout proxy.
+func (s *Server) handleImagePull(w http.ResponseWriter, r *http.Request) {
+	var req ImagePullRequest
+	if err := decode(r, &req); err != nil {
+		writeErr(w, http.StatusBadRequest, "bad_request", err.Error())
+		return
+	}
+	if strings.TrimSpace(req.Reference) == "" {
+		writeErr(w, http.StatusBadRequest, "bad_request", "reference is required")
+		return
+	}
+	img, err := s.svc.PullImage(r.Context(), req.Reference, req.Force)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "pull_failed", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, toImageDTO(img))
 }
 
 func (s *Server) handleImagePrune(w http.ResponseWriter, r *http.Request) {

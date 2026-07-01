@@ -85,6 +85,7 @@ func (h *Handler) Mount(mux *http.ServeMux) {
 
 	// Images.
 	mux.HandleFunc("GET /dashboard/api/images", h.basic(h.imageList))
+	mux.HandleFunc("POST /dashboard/api/images/pull", h.basic(h.imagePull))
 	mux.HandleFunc("DELETE /dashboard/api/images", h.basic(h.imageRemove))
 	mux.HandleFunc("POST /dashboard/api/images/prune", h.basic(h.imagePrune))
 

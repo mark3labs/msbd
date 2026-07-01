@@ -274,6 +274,13 @@ type VolumeFileRequest struct {
 // Images
 // ---------------------------------------------------------------------------
 
+// ImagePullRequest asks the daemon to fetch an OCI image into the local cache.
+// force=true re-pulls even when the image is already cached.
+type ImagePullRequest struct {
+	Reference string `json:"reference"`
+	Force     bool   `json:"force"`
+}
+
 // ImageDTO is a cached-image summary.
 type ImageDTO struct {
 	Reference      string `json:"reference"`

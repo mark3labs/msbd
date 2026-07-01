@@ -26,6 +26,7 @@ templ ImagesPage(rows []ImageRow) {
 			@icon.Trash(icon.Props{Class: "size-4"})
 			Prune
 		}
+		@dialogOpenButton("pull-image", "Pull image")
 	}
 	@card.Card() {
 		@table.Table() {

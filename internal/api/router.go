@@ -125,6 +125,7 @@ func (s *Server) Handler() http.Handler {
 
 	// Images.
 	mux.HandleFunc("GET /v1/images", s.auth(s.handleImageList))
+	mux.HandleFunc("POST /v1/images/pull", s.auth(s.handleImagePull))
 	mux.HandleFunc("GET /v1/images/inspect", s.auth(s.handleImageInspect))
 	mux.HandleFunc("DELETE /v1/images", s.auth(s.handleImageRemove))
 	mux.HandleFunc("POST /v1/images/prune", s.auth(s.handleImagePrune))

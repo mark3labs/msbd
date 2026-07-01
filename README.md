@@ -208,7 +208,7 @@ It is server-rendered with [templ](https://templ.guide) + [templui](https://temp
 | `GET /v1/sandboxes/{id}/logs` | Read persisted stdout/stderr/system logs (`?tail=`, `?sources=`). |
 | `POST/GET /v1/volumes` · `GET/DELETE /v1/volumes/{name}` | Named persistent volumes. |
 | `POST /v1/volumes/{name}/files/{read,write,mkdir,remove,exists}` | Volume file IO. |
-| `GET /v1/images` · `GET /v1/images/inspect` · `DELETE /v1/images` · `POST /v1/images/prune` | Cached OCI image inventory. |
+| `GET /v1/images` · `GET /v1/images/inspect` · `POST /v1/images/pull` · `DELETE /v1/images` · `POST /v1/images/prune` | Cached OCI image inventory. `pull` fetches an image into the cache (long-running; boots a throwaway microVM). |
 | `POST/GET /v1/snapshots` · `GET/DELETE /v1/snapshots/{name}` · `.../verify` | Sandbox rootfs snapshots. |
 | `POST /v1/snapshots/{export,import,reindex}` | Export/import snapshot archives · rebuild the index. |
 

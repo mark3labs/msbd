@@ -20,6 +20,7 @@ type Service struct {
 	defaultImage string
 	maxSandboxes int
 	createTO     time.Duration
+	pullTO       time.Duration
 	jobs         *JobRegistry
 }
 
@@ -28,6 +29,10 @@ type Opts struct {
 	DefaultImage  string
 	MaxSandboxes  int
 	CreateTimeout time.Duration
+	// PullTimeout bounds a standalone image pull (POST /v1/images/pull). Pulls
+	// boot a throwaway microVM and a cold fetch of a large image can outlast the
+	// create timeout, so it gets its own, larger budget.
+	PullTimeout time.Duration
 }
 
 func NewService(o Opts) *Service {
@@ -37,11 +42,15 @@ func NewService(o Opts) *Service {
 	if o.CreateTimeout <= 0 {
 		o.CreateTimeout = 5 * time.Minute // cold image pull headroom
 	}
+	if o.PullTimeout <= 0 {
+		o.PullTimeout = 15 * time.Minute // standalone pulls can be large/cold
+	}
 	return &Service{
 		reg:          NewRegistry(o.DefaultImage),
 		defaultImage: o.DefaultImage,
 		maxSandboxes: o.MaxSandboxes,
 		createTO:     o.CreateTimeout,
+		pullTO:       o.PullTimeout,
 		jobs:         NewJobRegistry(),
 	}
 }

@@ -3,6 +3,7 @@ package dashboard
 import (
 	"context"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/starfederation/datastar-go/datastar"
@@ -44,6 +45,36 @@ func (h *Handler) imageRows(ctx context.Context) ([]views.ImageRow, error) {
 		})
 	}
 	return rows, nil
+}
+
+type pullImageSignals struct {
+	Reference string `json:"imgref"`
+	Force     bool   `json:"imgforce"`
+}
+
+// imagePull fetches an image into the cache. The pull boots a throwaway microVM
+// and can take minutes, so we toast "pulling…" up front, run the (blocking) pull
+// on the open SSE connection, then toast the result and re-render the list.
+// Datastar keeps the SSE stream open for the duration, so the UI stays live.
+func (h *Handler) imagePull(w http.ResponseWriter, r *http.Request) {
+	sig := &pullImageSignals{}
+	_ = datastar.ReadSignals(r, sig)
+	sse := datastar.NewSSE(w, r)
+
+	ref := strings.TrimSpace(sig.Reference)
+	if ref == "" {
+		notify(sse, toast.VariantWarning, "Pull image", "reference is required")
+		return
+	}
+	closeDialog(sse, "pull-image")
+	notify(sse, toast.VariantInfo, "Pulling", ref+" — this can take a while")
+
+	img, err := h.svc.PullImage(r.Context(), ref, sig.Force)
+	if notifyErr(sse, "Pull image", err) {
+		return
+	}
+	notify(sse, toast.VariantSuccess, "Pulled", img.Reference)
+	h.reRenderImages(r.Context(), sse)
 }
 
 func (h *Handler) imageRemove(w http.ResponseWriter, r *http.Request) {

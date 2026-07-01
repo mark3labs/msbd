@@ -5,6 +5,7 @@ package core
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	msb "github.com/superradcompany/microsandbox/sdk/go"
@@ -113,6 +114,56 @@ func (s *Service) InspectImage(ctx context.Context, ref string) (*ImageDetail, e
 		})
 	}
 	return detail, nil
+}
+
+// PullImage ensures an OCI image is present in the local cache and returns the
+// cached summary. force=true re-fetches even when the image is already cached
+// (PullPolicyAlways); force=false fetches only when missing (PullPolicyIfMissing).
+//
+// The microsandbox SDK exposes NO standalone pull operation — the only way to
+// fetch an image is to boot a sandbox with a pull policy. So PullImage creates
+// a throwaway detached sandbox with WithImage(ref)+WithPullPolicy, tears it
+// down, then reads the now-cached image back via msb.Image.Get. This boots a
+// real microVM and a cold pull can take minutes: keep it off any low-timeout
+// path, exactly like Run.
+func (s *Service) PullImage(ctx context.Context, ref string, force bool) (*Image, error) {
+	ref = strings.TrimSpace(ref)
+	if ref == "" {
+		return nil, fmt.Errorf("image reference is required")
+	}
+	policy := msb.PullPolicyIfMissing
+	if force {
+		policy = msb.PullPolicyAlways
+	}
+	name := newName()
+	opts := []msb.SandboxOption{
+		msb.WithImage(ref),
+		msb.WithDetached(),
+		msb.WithPullPolicy(policy),
+	}
+
+	pctx, cancel := context.WithTimeout(ctx, s.pullTO)
+	defer cancel()
+
+	sb, err := msb.CreateSandbox(pctx, name, opts...)
+	if err != nil {
+		return nil, fmt.Errorf("pull %s: %w", ref, err)
+	}
+	// Tear the throwaway box down on a fresh context so cleanup still runs even
+	// if the caller's ctx was cancelled mid-pull. Best-effort.
+	defer func() {
+		cctx, ccancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer ccancel()
+		_ = sb.Stop(cctx)
+		_ = msb.RemoveSandbox(cctx, name)
+	}()
+
+	h, err := msb.Image.Get(ctx, ref)
+	if err != nil {
+		return nil, fmt.Errorf("pull %s: image not cached after pull: %w", ref, err)
+	}
+	img := imageFromHandle(h)
+	return &img, nil
 }
 
 func (s *Service) RemoveImage(ctx context.Context, ref string, force bool) error {
