@@ -325,8 +325,10 @@ func (s *Service) Stop(ctx context.Context, id string) error {
 	return nil
 }
 
-// Start is an idempotent ensure-running: resolve() boots a stopped box and
-// caches a live handle.
+// Start is an idempotent ensure-running: resolve() boots a stopped box, verifies
+// its guest agent actually came up, and caches a live handle. It returns an
+// error (rather than a false-positive success) if the box reports a start but
+// the guest never boots — e.g. a halted guest with stale runtime state.
 func (s *Service) Start(ctx context.Context, id string) error {
 	_, err := s.reg.resolve(ctx, id)
 	return err

@@ -163,11 +163,24 @@ paths:
     post:
       tags: [lifecycle]
       summary: Start (ensure running) a sandbox
-      description: Idempotent ensure-running; boots a stopped box and waits until ready.
+      description: >
+        Idempotent ensure-running; boots a stopped box and waits until its guest
+        agent is actually reachable before returning. If the runtime reports a
+        start but the guest never comes up (e.g. a halted guest that left stale
+        runtime state), msbd force-kills and retries once, then fails with 500
+        rather than reporting a false-positive 204 — such a sandbox is
+        unresumable and must be recreated.
       responses:
-        "204": { description: Running }
+        "204": { description: Running (guest agent verified reachable) }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "500":
+          description: >
+            The sandbox reported a start but its guest agent never came up; it is
+            unresumable and must be deleted and recreated.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorBody" }
 
   /v1/sandboxes/{id}/exec:
     parameters:
