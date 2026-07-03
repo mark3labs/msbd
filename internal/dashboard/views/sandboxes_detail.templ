@@ -12,7 +12,7 @@ import (
 // SandboxDetailPage is the single-sandbox view: metadata, a command runner,
 // live logs, live metrics and a file browser.
 templ SandboxDetailPage(d SandboxDetail) {
-	<div data-signals={ "{runcmd:'', filepath:'" + d.Workdir + "'}" }>
+	<div data-signals={ "{runcmd:'', filepath:" + jsExpr(d.Workdir) + "}" }>
 		@PageHeader(d.ID) {
 			@button.Button(button.Props{
 				Variant:    button.VariantOutline,

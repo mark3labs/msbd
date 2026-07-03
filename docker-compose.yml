@@ -19,10 +19,23 @@ services:
       MSBD_LISTEN: ":8099"
       MSBD_DEFAULT_IMAGE: "microsandbox/python"
       MSBD_MAX_SANDBOXES: "0"      # 0 = unlimited; set a host-safe ceiling
+      MSBD_SHUTDOWN_TIMEOUT_SECS: "60"
+      # Dashboard is refused when an API key is set but no dashboard auth is
+      # configured (it would bypass the API token). Set BOTH to enable it:
+      # MSBD_DASHBOARD_USER: admin
+      # MSBD_DASHBOARD_PASS: ${MSBD_DASHBOARD_PASS}
+      # Host-path transfers are DENIED unless you allowlist prefixes here:
+      # MSBD_HOST_PATHS: "/srv/msbd-transfer"
     ports:
-      - "8099:8099"
+      # Bind to localhost by default — front with a TLS-terminating reverse
+      # proxy for remote access. Change to "8099:8099" to expose on all
+      # interfaces (only behind a trusted network / proxy).
+      - "127.0.0.1:8099:8099"
     volumes:
       - msbd-data:/root/.microsandbox   # persist runtime + image cache
+    # Give msbd time to drain long /run calls + live terminals on stop
+    # (keep >= MSBD_SHUTDOWN_TIMEOUT_SECS).
+    stop_grace_period: 70s
     restart: unless-stopped
 
 volumes:

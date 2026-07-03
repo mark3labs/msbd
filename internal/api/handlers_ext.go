@@ -129,8 +129,7 @@ func splitCSV(s string) []string {
 
 func (s *Server) handleFileList(w http.ResponseWriter, r *http.Request) {
 	var req FilePathRequest
-	if err := decode(r, &req); err != nil {
-		writeErr(w, http.StatusBadRequest, "bad_request", err.Error())
+	if !s.decodeBody(w, r, &req, s.maxBody) {
 		return
 	}
 	entries, err := s.svc.ListDir(r.Context(), r.PathValue("id"), req.Path, req.Cwd)
@@ -147,8 +146,7 @@ func (s *Server) handleFileList(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleFileStat(w http.ResponseWriter, r *http.Request) {
 	var req FilePathRequest
-	if err := decode(r, &req); err != nil {
-		writeErr(w, http.StatusBadRequest, "bad_request", err.Error())
+	if !s.decodeBody(w, r, &req, s.maxBody) {
 		return
 	}
 	st, err := s.svc.Stat(r.Context(), r.PathValue("id"), req.Path, req.Cwd)
@@ -167,8 +165,7 @@ func (s *Server) handleFileStat(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleFileExists(w http.ResponseWriter, r *http.Request) {
 	var req FilePathRequest
-	if err := decode(r, &req); err != nil {
-		writeErr(w, http.StatusBadRequest, "bad_request", err.Error())
+	if !s.decodeBody(w, r, &req, s.maxBody) {
 		return
 	}
 	ok, err := s.svc.Exists(r.Context(), r.PathValue("id"), req.Path, req.Cwd)
@@ -181,8 +178,7 @@ func (s *Server) handleFileExists(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleFileMkdir(w http.ResponseWriter, r *http.Request) {
 	var req FilePathRequest
-	if err := decode(r, &req); err != nil {
-		writeErr(w, http.StatusBadRequest, "bad_request", err.Error())
+	if !s.decodeBody(w, r, &req, s.maxBody) {
 		return
 	}
 	if err := s.svc.Mkdir(r.Context(), r.PathValue("id"), req.Path, req.Cwd); err != nil {
@@ -194,8 +190,7 @@ func (s *Server) handleFileMkdir(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleFileRemove(w http.ResponseWriter, r *http.Request) {
 	var req FileRemoveRequest
-	if err := decode(r, &req); err != nil {
-		writeErr(w, http.StatusBadRequest, "bad_request", err.Error())
+	if !s.decodeBody(w, r, &req, s.maxBody) {
 		return
 	}
 	if err := s.svc.Remove(r.Context(), r.PathValue("id"), req.Path, req.Cwd, req.Recursive); err != nil {
@@ -207,8 +202,7 @@ func (s *Server) handleFileRemove(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleFileCopy(w http.ResponseWriter, r *http.Request) {
 	var req FileCopyRequest
-	if err := decode(r, &req); err != nil {
-		writeErr(w, http.StatusBadRequest, "bad_request", err.Error())
+	if !s.decodeBody(w, r, &req, s.maxBody) {
 		return
 	}
 	if err := s.svc.Copy(r.Context(), r.PathValue("id"), req.Src, req.Dst, req.Cwd); err != nil {
@@ -220,8 +214,7 @@ func (s *Server) handleFileCopy(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleFileRename(w http.ResponseWriter, r *http.Request) {
 	var req FileCopyRequest
-	if err := decode(r, &req); err != nil {
-		writeErr(w, http.StatusBadRequest, "bad_request", err.Error())
+	if !s.decodeBody(w, r, &req, s.maxBody) {
 		return
 	}
 	if err := s.svc.Rename(r.Context(), r.PathValue("id"), req.Src, req.Dst, req.Cwd); err != nil {
@@ -233,8 +226,7 @@ func (s *Server) handleFileRename(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleFileCopyFromHost(w http.ResponseWriter, r *http.Request) {
 	var req HostCopyRequest
-	if err := decode(r, &req); err != nil {
-		writeErr(w, http.StatusBadRequest, "bad_request", err.Error())
+	if !s.decodeBody(w, r, &req, s.maxBody) {
 		return
 	}
 	if err := s.svc.CopyFromHost(r.Context(), r.PathValue("id"), req.HostPath, req.GuestPath, req.Cwd); err != nil {
@@ -246,8 +238,7 @@ func (s *Server) handleFileCopyFromHost(w http.ResponseWriter, r *http.Request) 
 
 func (s *Server) handleFileCopyToHost(w http.ResponseWriter, r *http.Request) {
 	var req HostCopyRequest
-	if err := decode(r, &req); err != nil {
-		writeErr(w, http.StatusBadRequest, "bad_request", err.Error())
+	if !s.decodeBody(w, r, &req, s.maxBody) {
 		return
 	}
 	if err := s.svc.CopyToHost(r.Context(), r.PathValue("id"), req.GuestPath, req.HostPath, req.Cwd); err != nil {
@@ -263,8 +254,7 @@ func (s *Server) handleFileCopyToHost(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleJobStdin(w http.ResponseWriter, r *http.Request) {
 	var req JobStdinRequest
-	if err := decode(r, &req); err != nil {
-		writeErr(w, http.StatusBadRequest, "bad_request", err.Error())
+	if !s.decodeBody(w, r, &req, s.maxBody) {
 		return
 	}
 	var data []byte
@@ -296,8 +286,7 @@ func (s *Server) handleJobStdin(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleJobSignal(w http.ResponseWriter, r *http.Request) {
 	var req JobSignalRequest
-	if err := decode(r, &req); err != nil {
-		writeErr(w, http.StatusBadRequest, "bad_request", err.Error())
+	if !s.decodeBody(w, r, &req, s.maxBody) {
 		return
 	}
 	if err := s.svc.SignalJob(r.Context(), r.PathValue("id"), r.PathValue("job"), req.Signal); err != nil {
@@ -328,8 +317,7 @@ func toVolumeDTO(v *core.Volume) VolumeDTO {
 
 func (s *Server) handleVolumeCreate(w http.ResponseWriter, r *http.Request) {
 	var req VolumeCreateRequest
-	if err := decode(r, &req); err != nil {
-		writeErr(w, http.StatusBadRequest, "bad_request", err.Error())
+	if !s.decodeBody(w, r, &req, s.maxBody) {
 		return
 	}
 	v, err := s.svc.CreateVolume(r.Context(), core.VolumeParams{
@@ -340,7 +328,7 @@ func (s *Server) handleVolumeCreate(w http.ResponseWriter, r *http.Request) {
 		Labels:   req.Labels,
 	})
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "create_failed", err.Error())
+		notFoundOr(w, err)
 		return
 	}
 	writeJSON(w, http.StatusCreated, toVolumeDTO(v))
@@ -378,8 +366,7 @@ func (s *Server) handleVolumeDelete(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleVolumeReadFile(w http.ResponseWriter, r *http.Request) {
 	var req VolumeFileRequest
-	if err := decode(r, &req); err != nil {
-		writeErr(w, http.StatusBadRequest, "bad_request", err.Error())
+	if !s.decodeBody(w, r, &req, s.maxBody) {
 		return
 	}
 	b, err := s.svc.VolumeReadFile(r.Context(), r.PathValue("name"), req.Path)
@@ -392,8 +379,7 @@ func (s *Server) handleVolumeReadFile(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleVolumeWriteFile(w http.ResponseWriter, r *http.Request) {
 	var req VolumeFileRequest
-	if err := decode(r, &req); err != nil {
-		writeErr(w, http.StatusBadRequest, "bad_request", err.Error())
+	if !s.decodeBody(w, r, &req, s.maxFile) {
 		return
 	}
 	content, err := base64.StdEncoding.DecodeString(req.ContentB64)
@@ -410,8 +396,7 @@ func (s *Server) handleVolumeWriteFile(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleVolumeMkdir(w http.ResponseWriter, r *http.Request) {
 	var req VolumeFileRequest
-	if err := decode(r, &req); err != nil {
-		writeErr(w, http.StatusBadRequest, "bad_request", err.Error())
+	if !s.decodeBody(w, r, &req, s.maxBody) {
 		return
 	}
 	if err := s.svc.VolumeMkdir(r.Context(), r.PathValue("name"), req.Path); err != nil {
@@ -423,8 +408,7 @@ func (s *Server) handleVolumeMkdir(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleVolumeRemoveFile(w http.ResponseWriter, r *http.Request) {
 	var req VolumeFileRequest
-	if err := decode(r, &req); err != nil {
-		writeErr(w, http.StatusBadRequest, "bad_request", err.Error())
+	if !s.decodeBody(w, r, &req, s.maxBody) {
 		return
 	}
 	if err := s.svc.VolumeRemove(r.Context(), r.PathValue("name"), req.Path, req.Recursive); err != nil {
@@ -436,8 +420,7 @@ func (s *Server) handleVolumeRemoveFile(w http.ResponseWriter, r *http.Request) 
 
 func (s *Server) handleVolumeExists(w http.ResponseWriter, r *http.Request) {
 	var req VolumeFileRequest
-	if err := decode(r, &req); err != nil {
-		writeErr(w, http.StatusBadRequest, "bad_request", err.Error())
+	if !s.decodeBody(w, r, &req, s.maxBody) {
 		return
 	}
 	ok, err := s.svc.VolumeExists(r.Context(), r.PathValue("name"), req.Path)
@@ -509,7 +492,7 @@ func (s *Server) handleImageRemove(w http.ResponseWriter, r *http.Request) {
 	}
 	force := r.URL.Query().Get("force") == "true"
 	if err := s.svc.RemoveImage(r.Context(), ref, force); err != nil {
-		writeErr(w, http.StatusInternalServerError, "remove_failed", err.Error())
+		notFoundOr(w, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -520,8 +503,7 @@ func (s *Server) handleImageRemove(w http.ResponseWriter, r *http.Request) {
 // is a long-running, blocking call — do not front it with a low-timeout proxy.
 func (s *Server) handleImagePull(w http.ResponseWriter, r *http.Request) {
 	var req ImagePullRequest
-	if err := decode(r, &req); err != nil {
-		writeErr(w, http.StatusBadRequest, "bad_request", err.Error())
+	if !s.decodeBody(w, r, &req, s.maxBody) {
 		return
 	}
 	if strings.TrimSpace(req.Reference) == "" {
@@ -571,8 +553,7 @@ func toSnapshotDTO(s *core.Snapshot) SnapshotDTO {
 
 func (s *Server) handleSnapshotCreate(w http.ResponseWriter, r *http.Request) {
 	var req SnapshotCreateRequest
-	if err := decode(r, &req); err != nil {
-		writeErr(w, http.StatusBadRequest, "bad_request", err.Error())
+	if !s.decodeBody(w, r, &req, s.maxBody) {
 		return
 	}
 	snap, err := s.svc.CreateSnapshot(r.Context(), core.SnapshotCreateParams{
@@ -615,7 +596,7 @@ func (s *Server) handleSnapshotGet(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleSnapshotDelete(w http.ResponseWriter, r *http.Request) {
 	force := r.URL.Query().Get("force") == "true"
 	if err := s.svc.RemoveSnapshot(r.Context(), r.PathValue("name"), force); err != nil {
-		writeErr(w, http.StatusInternalServerError, "remove_failed", err.Error())
+		notFoundOr(w, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -638,12 +619,11 @@ func (s *Server) handleSnapshotVerify(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleSnapshotExport(w http.ResponseWriter, r *http.Request) {
 	var req SnapshotExportRequest
-	if err := decode(r, &req); err != nil {
-		writeErr(w, http.StatusBadRequest, "bad_request", err.Error())
+	if !s.decodeBody(w, r, &req, s.maxBody) {
 		return
 	}
 	if err := s.svc.ExportSnapshot(r.Context(), req.NameOrPath, req.OutPath, req.WithParents, req.WithImage, req.PlainTar); err != nil {
-		writeErr(w, http.StatusInternalServerError, "export_failed", err.Error())
+		notFoundOr(w, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -651,13 +631,12 @@ func (s *Server) handleSnapshotExport(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleSnapshotImport(w http.ResponseWriter, r *http.Request) {
 	var req SnapshotImportRequest
-	if err := decode(r, &req); err != nil {
-		writeErr(w, http.StatusBadRequest, "bad_request", err.Error())
+	if !s.decodeBody(w, r, &req, s.maxBody) {
 		return
 	}
 	snap, err := s.svc.ImportSnapshot(r.Context(), req.Archive, req.Dest)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "import_failed", err.Error())
+		notFoundOr(w, err)
 		return
 	}
 	writeJSON(w, http.StatusCreated, toSnapshotDTO(snap))
@@ -665,8 +644,7 @@ func (s *Server) handleSnapshotImport(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleSnapshotReindex(w http.ResponseWriter, r *http.Request) {
 	var req SnapshotReindexRequest
-	if err := decode(r, &req); err != nil {
-		writeErr(w, http.StatusBadRequest, "bad_request", err.Error())
+	if !s.decodeBody(w, r, &req, s.maxBody) {
 		return
 	}
 	n, err := s.svc.ReindexSnapshots(r.Context(), req.Dir)

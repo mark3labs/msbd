@@ -117,7 +117,7 @@ templ rowActions(r SandboxRow) {
 			Size:    button.SizeIcon,
 			Class:   "size-8 text-destructive",
 			Attributes: templ.Attributes{
-				"data-on:click": "confirm('Delete sandbox " + r.ID + "?') && @delete('/dashboard/api/sandboxes/" + r.ID + "')",
+				"data-on:click": "confirm('Delete this sandbox?') && @delete(" + jsExpr("/dashboard/api/sandboxes/"+pathSeg(r.ID)) + ")",
 			},
 		}) {
 			@icon.Trash2(icon.Props{Class: "size-4"})

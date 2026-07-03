@@ -162,16 +162,22 @@ All via environment variables.
 | Var | Default | Description |
 |---|---|---|
 | `MSBD_LISTEN` | `:8099` | HTTP listen address. |
-| `MSBD_API_KEY` | *(empty)* | Bearer token required on every request. **Empty = unauthenticated (dev only).** |
+| `MSBD_API_KEY` | *(empty)* | Bearer token(s) required on every request; comma-separated to accept several (zero-downtime rotation). **Empty = unauthenticated (dev only).** |
+| `MSBD_API_KEY_FILE` | *(empty)* | Read the bearer token from a file instead of the env (Docker/K8s secrets). Takes precedence over `MSBD_API_KEY`. |
 | `MSBD_DEFAULT_IMAGE` | `microsandbox/python` | OCI image used when create omits `image`. |
-| `MSBD_MAX_SANDBOXES` | `0` (unlimited) | Hard cap on concurrent sandboxes; rejects new creates above this with 507. |
+| `MSBD_MAX_SANDBOXES` | `0` (unlimited) | Hard cap on concurrent sandboxes; rejects new creates above this with 507 `capacity`. Admission is serialized (no overshoot). |
 | `MSBD_CREATE_TIMEOUT_SECS` | `300` | Boot deadline (covers cold OCI pulls). |
-| `MSBD_LOG_LEVEL` | `info` | Log verbosity: `debug`, `info`, `warn`, `error`. Output is colorized on a TTY, plain otherwise. |
+| `MSBD_SHUTDOWN_TIMEOUT_SECS` | `60` | Graceful-drain deadline on SIGTERM/Ctrl-C. A drain overrun warns and exits 0 (no spurious restart failure). |
+| `MSBD_HOST_PATHS` | *(empty)* | Comma-separated allowlist of host path prefixes the host-transfer endpoints (`copy-from-host`, `copy-to-host`, snapshot `export`/`import`) may touch. **Empty = all host transfers denied (403).** Symlinks are resolved to block escapes. |
+| `MSBD_LOG_LEVEL` | `info` | Log verbosity: `debug`, `info`, `warn`, `error`. Invalid values fail fast. Output is colorized on a TTY, plain otherwise. |
 | `MSBD_DASHBOARD` | `true` | Serve the web dashboard at `/dashboard`. Set `false` to disable. |
 | `MSBD_DASHBOARD_USER` | *(empty)* | Dashboard HTTP Basic auth username. Setting user **or** pass turns auth on. |
-| `MSBD_DASHBOARD_PASS` | *(empty)* | Dashboard HTTP Basic auth password. **Both empty = dashboard is unauthenticated (dev only).** |
+| `MSBD_DASHBOARD_PASS` | *(empty)* | Dashboard HTTP Basic auth password. **Both empty = dashboard is unauthenticated.** When an API key IS set but dashboard auth is not, the dashboard is **refused** (it would bypass the API token) unless `MSBD_DASHBOARD_ALLOW_INSECURE=true`. |
+| `MSBD_DASHBOARD_ALLOW_INSECURE` | `false` | Override the safety refusal above and serve the dashboard without auth even when an API key is set (unsafe). |
 
-Flags mirror every var (`--dashboard`, `--dashboard-user`, `--dashboard-pass`, …); flag › env › default.
+Request bodies are size-capped (1 MiB control-plane, 64 MiB file writes) and reject unknown JSON fields (a typo'd field is a 400, not a silent no-op). The server sets `IdleTimeout` and echoes an `X-Request-Id` on every response.
+
+Flags mirror every var (`--dashboard`, `--host-paths`, `--shutdown-timeout`, `--api-key-file`, …); flag › env › default.
 
 ## Web dashboard
 
@@ -183,7 +189,7 @@ MSBD_DASHBOARD_USER=admin MSBD_DASHBOARD_PASS=s3cret msbd serve
 # → open http://localhost:8099/dashboard
 ```
 
-It is server-rendered with [templ](https://templ.guide) + [templui](https://templui.io) components, styled with Tailwind, and made reactive with [Datastar](https://data-star.dev) (SSE-driven DOM patching). Everything — the compiled CSS, the Datastar runtime, xterm.js and the component JavaScript — is **embedded in the binary** (`//go:embed`); there are no external assets to deploy. Auth is independent of `MSBD_API_KEY`: the API stays bearer-gated while the dashboard gets its own optional Basic auth.
+It is server-rendered with [templ](https://templ.guide) + [templui](https://templui.io) components, styled with Tailwind, and made reactive with [Datastar](https://data-star.dev) (SSE-driven DOM patching). Everything — the compiled CSS, the Datastar runtime, xterm.js and the component JavaScript — is **embedded in the binary** (`//go:embed`); there are no external assets to deploy. Auth is independent of `MSBD_API_KEY`: the API stays bearer-gated while the dashboard gets its own optional Basic auth. The terminal page never embeds the API key — it uses a short-lived, single-use ticket — and if you set an API key but no dashboard auth, msbd **refuses to mount the dashboard** (override with `MSBD_DASHBOARD_ALLOW_INSECURE=true`).
 
 
 ## REST API
@@ -194,17 +200,19 @@ It is server-rendered with [templ](https://templ.guide) + [templui](https://temp
 | `GET /docs` · `GET /openapi.yaml` | Swagger UI · raw OpenAPI spec (unauthenticated). |
 | `GET /dashboard` | Web management UI (optional Basic auth — see [Web dashboard](#web-dashboard)). |
 | `GET /v1/version` | Default image + runtime/SDK versions (diagnostics). |
+| `GET /metrics` | Prometheus text-exposition operational metrics (sandbox counts, jobs, terminals, request classes). |
+| `POST /v1/terminal-tickets` | Mint a short-lived single-use terminal ticket (browser WS auth without exposing the API key). |
 | `POST /v1/sandboxes` · `GET /v1/sandboxes` · `GET/DELETE /v1/sandboxes/{id}` | Lifecycle. Create accepts `user`, `hostname`, `network_policy`, `ports`, `secrets`, `mounts`. |
 | `GET /v1/sandboxes/{id}/inspect` | Sandbox metadata + raw SDK config blob. |
 | `POST /v1/sandboxes/{id}/stop` · `.../start` | Pause / ensure-running. |
 | `POST /v1/sandboxes/{id}/exec` · `.../run` | Synchronous exec — `exec` is short, `run` is long-safe and ensures-running. |
-| `GET /v1/sandboxes/{id}/terminal` | Interactive **kernel-PTY** terminal over **WebSocket** (binary stdin/stdout; text control frames for resize/signal). Colors, line editing, resize, vim/top all work. Auth via header or `?key=`. |
-| `POST /v1/sandboxes/{id}/jobs` · `GET /v1/sandboxes/{id}/jobs/{job}` | Async (background) jobs with streaming output buffers. |
+| `GET /v1/sandboxes/{id}/terminal` | Interactive **kernel-PTY** terminal over **WebSocket** (binary stdin/stdout; text control frames for resize/signal). Colors, line editing, resize, vim/top all work. Auth via header, `?key=`, or a single-use `?ticket=` (see `POST /v1/terminal-tickets`). |
+| `POST /v1/sandboxes/{id}/jobs` · `GET /v1/sandboxes/{id}/jobs/{job}` | Async (background) jobs. Output is a **bounded ring buffer** (1 MiB/stream); poll reports `truncated` + `stdout_bytes`/`stderr_bytes`, and finished jobs are evicted after a TTL. |
 | `POST /v1/sandboxes/{id}/jobs/{job}/stdin` · `.../signal` | Write to a job's stdin (launch with `stdin:true`) · send a signal (≤0 = kill). |
 | `POST /v1/sandboxes/{id}/files/read` · `.../files/write` | Native file IO, base64-encoded. |
 | `POST /v1/sandboxes/{id}/files/{list,stat,exists,mkdir,remove,copy,rename}` | Extended filesystem operations. |
-| `POST /v1/sandboxes/{id}/files/{copy-from-host,copy-to-host}` | Copy between an allowlisted host path and the sandbox. |
-| `GET /v1/metrics` · `GET /v1/sandboxes/{id}/metrics` | Point-in-time resource metrics (all / one sandbox). |
+| `POST /v1/sandboxes/{id}/files/{copy-from-host,copy-to-host}` | Copy between an **allowlisted** host path (`MSBD_HOST_PATHS`) and the sandbox. Denied (403) when the allowlist is empty or the path escapes it. |
+| `GET /v1/metrics` · `GET /v1/sandboxes/{id}/metrics` | Point-in-time per-sandbox resource metrics (all / one). For scrapeable ops telemetry use `GET /metrics`. |
 | `GET /v1/sandboxes/{id}/logs` | Read persisted stdout/stderr/system logs (`?tail=`, `?sources=`). |
 | `POST/GET /v1/volumes` · `GET/DELETE /v1/volumes/{name}` | Named persistent volumes. |
 | `POST /v1/volumes/{name}/files/{read,write,mkdir,remove,exists}` | Volume file IO. |

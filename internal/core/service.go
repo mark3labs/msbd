@@ -8,7 +8,9 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	msb "github.com/superradcompany/microsandbox/sdk/go"
@@ -22,6 +24,13 @@ type Service struct {
 	createTO     time.Duration
 	pullTO       time.Duration
 	jobs         *JobRegistry
+	tickets      *ticketRegistry
+	hostPaths    []string // allowlisted host path prefixes (empty = deny all)
+
+	// admit serializes create admission (the capacity check + reservation) so
+	// N concurrent creates can't all read n<max and overshoot MaxSandboxes.
+	admit    sync.Mutex
+	inflight int // creates that passed admission but haven't finished
 }
 
 // Opts configures the Service. Zero values fall back to sane defaults.
@@ -33,6 +42,16 @@ type Opts struct {
 	// boot a throwaway microVM and a cold fetch of a large image can outlast the
 	// create timeout, so it gets its own, larger budget.
 	PullTimeout time.Duration
+	// JobMaxBytes caps each async job's stdout/stderr ring buffer. 0 uses a
+	// built-in default. Older output is dropped once the cap is hit.
+	JobMaxBytes int
+	// JobTTL is how long a finished job's output is retained before eviction.
+	// 0 uses a built-in default.
+	JobTTL time.Duration
+	// HostPaths is the allowlist of host path prefixes that the host-transfer
+	// endpoints (files/copy-from-host, files/copy-to-host, snapshot
+	// export/import) may touch. Empty means those endpoints are DENIED.
+	HostPaths []string
 }
 
 func NewService(o Opts) *Service {
@@ -51,11 +70,16 @@ func NewService(o Opts) *Service {
 		maxSandboxes: o.MaxSandboxes,
 		createTO:     o.CreateTimeout,
 		pullTO:       o.PullTimeout,
-		jobs:         NewJobRegistry(),
+		jobs:         NewJobRegistry(o.JobMaxBytes, o.JobTTL),
+		tickets:      newTicketRegistry(),
+		hostPaths:    normalizeHostPaths(o.HostPaths),
 	}
 }
 
 func (s *Service) DefaultImage() string { return s.defaultImage }
+
+// MaxSandboxes returns the configured concurrent-sandbox cap (0 = unlimited).
+func (s *Service) MaxSandboxes() int { return s.maxSandboxes }
 
 // Reconcile re-attaches to pre-existing VMs at boot.
 func (s *Service) Reconcile(ctx context.Context) (int, error) { return s.reg.Reconcile(ctx) }
@@ -125,11 +149,79 @@ type InspectResult struct {
 	ConfigJSON string
 }
 
-func (s *Service) Create(ctx context.Context, p CreateParams) (*Instance, error) {
-	if s.maxSandboxes > 0 {
-		if n, err := s.count(ctx); err == nil && n >= s.maxSandboxes {
-			return nil, fmt.Errorf("host at capacity: %d/%d sandboxes", n, s.maxSandboxes)
+// validateCreate rejects out-of-range numeric inputs before they are silently
+// truncated by the uint conversions in buildCreateOptions (e.g. cpu:300 -> 44
+// as a uint8, host_port:-1 -> 65535 as a uint16). Returns ErrInvalidParams.
+func validateCreate(p CreateParams) error {
+	if p.CPU < 0 || p.CPU > 255 {
+		return fmt.Errorf("%w: cpu %g out of range (0-255)", ErrInvalidParams, p.CPU)
+	}
+	if p.MemoryMB < 0 {
+		return fmt.Errorf("%w: memory_mb %d must be non-negative", ErrInvalidParams, p.MemoryMB)
+	}
+	if p.AutoStopSecs < 0 {
+		return fmt.Errorf("%w: auto_stop_secs %d must be non-negative", ErrInvalidParams, p.AutoStopSecs)
+	}
+	for _, pm := range p.Ports {
+		if pm.HostPort < 0 || pm.HostPort > 65535 {
+			return fmt.Errorf("%w: host_port %d out of range (1-65535)", ErrInvalidParams, pm.HostPort)
 		}
+		if pm.GuestPort < 0 || pm.GuestPort > 65535 {
+			return fmt.Errorf("%w: guest_port %d out of range (1-65535)", ErrInvalidParams, pm.GuestPort)
+		}
+	}
+	for _, se := range p.Secrets {
+		if strings.TrimSpace(se.EnvVar) == "" {
+			return fmt.Errorf("%w: secret env_var must not be empty", ErrInvalidParams)
+		}
+	}
+	for _, m := range p.Mounts {
+		if strings.TrimSpace(m.GuestPath) == "" {
+			return fmt.Errorf("%w: mount guest_path must not be empty", ErrInvalidParams)
+		}
+		if strings.TrimSpace(m.Volume) == "" {
+			return fmt.Errorf("%w: mount volume must not be empty", ErrInvalidParams)
+		}
+	}
+	return nil
+}
+
+// cleanupSandbox best-effort removes a possibly-partially-created VM on a fresh,
+// short-lived context so a failed/aborted Create doesn't orphan a detached box.
+func cleanupSandbox(name string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	if h, err := msb.GetSandbox(ctx, name); err == nil {
+		_ = h.Stop(ctx)
+	}
+	_ = msb.RemoveSandbox(ctx, name)
+}
+
+func (s *Service) Create(ctx context.Context, p CreateParams) (*Instance, error) {
+	if err := validateCreate(p); err != nil {
+		return nil, err
+	}
+	// Admission control: serialize the capacity check + slot reservation so
+	// concurrent creates can't all observe n<max and overshoot. A count()
+	// error is treated as "deny" rather than silently skipping the cap.
+	if s.maxSandboxes > 0 {
+		s.admit.Lock()
+		n, cerr := s.count(ctx)
+		if cerr != nil {
+			s.admit.Unlock()
+			return nil, fmt.Errorf("%w: cannot verify capacity: %v", ErrCapacity, cerr)
+		}
+		if n+s.inflight >= s.maxSandboxes {
+			s.admit.Unlock()
+			return nil, fmt.Errorf("%w: %d/%d sandboxes", ErrCapacity, n+s.inflight, s.maxSandboxes)
+		}
+		s.inflight++
+		s.admit.Unlock()
+		defer func() {
+			s.admit.Lock()
+			s.inflight--
+			s.admit.Unlock()
+		}()
 	}
 	image := strings.TrimSpace(p.Image)
 	if image == "" {
@@ -148,6 +240,10 @@ func (s *Service) Create(ctx context.Context, p CreateParams) (*Instance, error)
 
 	sb, err := msb.CreateSandbox(cctx, name, opts...)
 	if err != nil {
+		// The runtime may have partially materialized the VM before failing.
+		// Best-effort cleanup on a fresh context so we don't orphan a detached
+		// box that still counts against capacity.
+		cleanupSandbox(name)
 		return nil, fmt.Errorf("create sandbox: %w", err)
 	}
 	s.reg.cache(name, sb)
@@ -383,11 +479,9 @@ func (s *Service) Exec(ctx context.Context, id string, p ExecParams) (*ExecResul
 
 // Run is long-safe and ensures the box is running first (transparent resume).
 func (s *Service) Run(ctx context.Context, id string, p ExecParams) (*ExecResult, error) {
-	sb, err := s.reg.resolve(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-	return runShell(ctx, sb, p)
+	return withSandbox(ctx, s, id, func(sb *msb.Sandbox) (*ExecResult, error) {
+		return runShell(ctx, sb, p)
+	})
 }
 
 func runShell(ctx context.Context, sb *msb.Sandbox, p ExecParams) (*ExecResult, error) {
@@ -413,30 +507,59 @@ func runShell(ctx context.Context, sb *msb.Sandbox, p ExecParams) (*ExecResult, 
 // ---------------------------------------------------------------------------
 
 func (s *Service) ReadFile(ctx context.Context, id, path, cwd string) ([]byte, error) {
-	sb, err := s.reg.resolve(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-	b, err := sb.FS().Read(ctx, resolvePath(path, cwd))
-	if err != nil {
-		return nil, fmt.Errorf("read %s: %w", path, err)
-	}
-	return b, nil
+	return withSandbox(ctx, s, id, func(sb *msb.Sandbox) ([]byte, error) {
+		b, err := sb.FS().Read(ctx, resolvePath(path, cwd))
+		if err != nil {
+			return nil, fmt.Errorf("read %s: %w", path, err)
+		}
+		return b, nil
+	})
 }
 
 func (s *Service) WriteFile(ctx context.Context, id, path, cwd string, content []byte) error {
+	_, err := withSandbox(ctx, s, id, func(sb *msb.Sandbox) (struct{}, error) {
+		dest := resolvePath(path, cwd)
+		if dir := parentDir(dest); dir != "" {
+			_ = sb.FS().Mkdir(ctx, dir) // best-effort; Write reports the real error
+		}
+		if err := sb.FS().Write(ctx, dest, content); err != nil {
+			return struct{}{}, fmt.Errorf("write %s: %w", path, err)
+		}
+		return struct{}{}, nil
+	})
+	return err
+}
+
+// withSandbox resolves the sandbox, runs fn, and — if fn fails AND the VM is
+// found to be down afterward (idle auto-stop, external stop, or crash after the
+// handle was cached) — invalidates the stale cached handle and retries once
+// against a freshly resolved (re-booted) handle. The liveness re-check keeps a
+// genuine in-guest failure from being masked or the command double-run.
+func withSandbox[T any](ctx context.Context, s *Service, id string, fn func(*msb.Sandbox) (T, error)) (T, error) {
+	var zero T
 	sb, err := s.reg.resolve(ctx, id)
 	if err != nil {
-		return err
+		return zero, err
 	}
-	dest := resolvePath(path, cwd)
-	if dir := parentDir(dest); dir != "" {
-		_ = sb.FS().Mkdir(ctx, dir) // best-effort; Write reports the real error
+	out, err := fn(sb)
+	if err == nil {
+		return out, nil
 	}
-	if err := sb.FS().Write(ctx, dest, content); err != nil {
-		return fmt.Errorf("write %s: %w", path, err)
+	// Only retry if the box is actually down now — otherwise the error is real.
+	h, gerr := msb.GetSandbox(ctx, id)
+	if gerr != nil {
+		return zero, err
 	}
-	return nil
+	switch h.Status() {
+	case msb.SandboxStatusRunning, msb.SandboxStatusDraining:
+		return zero, err
+	}
+	s.reg.forget(id)
+	sb2, rerr := s.reg.resolve(ctx, id)
+	if rerr != nil {
+		return zero, err
+	}
+	return fn(sb2)
 }
 
 // ---------------------------------------------------------------------------
@@ -469,6 +592,13 @@ func (s *Service) CloseJobStdin(id, job string) error {
 func (s *Service) SignalJob(ctx context.Context, id, job string, sig int) error {
 	return s.jobs.signal(ctx, id, job, sig)
 }
+
+// ActiveJobs reports the number of tracked async jobs (for diagnostics/metrics).
+func (s *Service) ActiveJobs() int { return s.jobs.ActiveJobs() }
+
+// Close releases background resources (the job janitor). Safe to call once at
+// shutdown; in-flight jobs and terminals are in-memory and simply end.
+func (s *Service) Close() { s.jobs.Close() }
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -553,4 +683,51 @@ func parentDir(p string) string {
 // line. Embedded single quotes are escaped via the standard `'\”` dance.
 func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'"
+}
+
+// normalizeHostPaths cleans + absolutizes the configured host-path allowlist.
+func normalizeHostPaths(in []string) []string {
+	out := make([]string, 0, len(in))
+	for _, p := range in {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+		if abs, err := filepath.Abs(p); err == nil {
+			out = append(out, filepath.Clean(abs))
+		}
+	}
+	return out
+}
+
+// checkHostPath verifies that a host path targeted by a copy/export/import
+// endpoint is within one of the configured allowlist prefixes. An empty
+// allowlist DENIES every host path (secure default). Symlinks in the existing
+// portion are resolved to block escapes. Returns the cleaned absolute path on
+// success, or ErrForbidden.
+func (s *Service) checkHostPath(p string) (string, error) {
+	p = strings.TrimSpace(p)
+	if p == "" {
+		return "", fmt.Errorf("%w: empty host path", ErrForbidden)
+	}
+	if len(s.hostPaths) == 0 {
+		return "", fmt.Errorf("%w: host-path transfers are disabled (set --host-paths / MSBD_HOST_PATHS)", ErrForbidden)
+	}
+	abs, err := filepath.Abs(p)
+	if err != nil {
+		return "", fmt.Errorf("%w: %v", ErrForbidden, err)
+	}
+	abs = filepath.Clean(abs)
+	// Resolve symlinks on the existing portion to prevent a symlinked path from
+	// escaping the allowlist; fall back to the lexical path for not-yet-existing
+	// write destinations.
+	if resolved, rerr := filepath.EvalSymlinks(abs); rerr == nil {
+		abs = resolved
+	}
+	for _, root := range s.hostPaths {
+		if abs == root || strings.HasPrefix(abs, root+string(filepath.Separator)) {
+			return abs, nil
+		}
+	}
+	return "", fmt.Errorf("%w: host path %q is not within the allowlist", ErrForbidden, p)
 }

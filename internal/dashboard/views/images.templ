@@ -83,7 +83,7 @@ templ ImagesPage(rows []ImageRow) {
 								Size:    button.SizeIcon,
 								Class:   "size-8 text-destructive",
 								Attributes: templ.Attributes{
-									"data-on:click": "confirm('Remove image " + im.Reference + "?') && @delete('/dashboard/api/images?ref=" + im.Reference + "')",
+									"data-on:click": "confirm('Remove this image?') && @delete(" + jsExpr("/dashboard/api/images?ref="+queryVal(im.Reference)) + ")",
 								},
 							}) {
 								@icon.Trash2(icon.Props{Class: "size-4"})

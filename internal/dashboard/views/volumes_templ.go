@@ -566,7 +566,7 @@ func VolumesPage(rows []VolumeRow) templ.Component {
 									Size:    button.SizeIcon,
 									Class:   "size-8 text-destructive",
 									Attributes: templ.Attributes{
-										"data-on:click": "confirm('Delete volume " + v.Name + "?') && @delete('/dashboard/api/volumes/" + v.Name + "')",
+										"data-on:click": "confirm('Delete this volume?') && @delete(" + jsExpr("/dashboard/api/volumes/"+pathSeg(v.Name)) + ")",
 									},
 								}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var29), templ_7745c5c3_Buffer)
 								if templ_7745c5c3_Err != nil {

@@ -15,6 +15,8 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/sync/singleflight"
+
 	msb "github.com/superradcompany/microsandbox/sdk/go"
 )
 
@@ -28,6 +30,20 @@ const (
 
 // ErrNotFound is returned when a sandbox name has no backing VM.
 var ErrNotFound = fmt.Errorf("sandbox not found")
+
+// ErrCapacity is returned by Create when the host is already running the
+// configured maximum number of sandboxes (MaxSandboxes). It maps to HTTP 507.
+var ErrCapacity = fmt.Errorf("host at sandbox capacity")
+
+// ErrInvalidParams is returned for a syntactically valid request whose values
+// are out of range or otherwise unusable (e.g. a negative CPU count). It maps
+// to HTTP 400. Wrap it with fmt.Errorf("%w: detail", ErrInvalidParams) to add
+// a field-specific message while keeping the sentinel matchable.
+var ErrInvalidParams = fmt.Errorf("invalid parameters")
+
+// ErrForbidden is returned when a request targets a resource outside the
+// configured policy (e.g. a host path not on the allowlist). It maps to 403.
+var ErrForbidden = fmt.Errorf("forbidden")
 
 // agentVerifyTimeout bounds the guest-agent readiness probe performed after
 // booting a previously-stopped sandbox. A healthy boot brings the agent up well
@@ -43,6 +59,11 @@ type Registry struct {
 	created  map[string]time.Time    // name → first-seen (for uptime)
 	workdirs map[string]string       // name → resolved native working dir
 	defImage string
+
+	// group serializes resolve()/create admission per sandbox name so a
+	// thundering herd against one paused box can't double-boot it, leak
+	// overwritten *Sandbox handles, or kill a VM another request just booted.
+	group singleflight.Group
 }
 
 func NewRegistry(defaultImage string) *Registry {
@@ -115,6 +136,24 @@ func (r *Registry) resolve(ctx context.Context, name string) (*msb.Sandbox, erro
 	if sb := r.cached(name); sb != nil {
 		return sb, nil
 	}
+	// Serialize the slow path per name: concurrent misses for the same box
+	// share one boot/connect instead of racing (which leaked handles and could
+	// kill a just-booted VM). singleflight collapses the duplicates; the winner
+	// caches the handle so followers see the cache hit above on the next call
+	// and the shared result here.
+	v, err, _ := r.group.Do(name, func() (any, error) {
+		if sb := r.cached(name); sb != nil { // re-check under the flight
+			return sb, nil
+		}
+		return r.resolveSlow(ctx, name)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return v.(*msb.Sandbox), nil
+}
+
+func (r *Registry) resolveSlow(ctx context.Context, name string) (*msb.Sandbox, error) {
 	h, err := msb.GetSandbox(ctx, name)
 	if err != nil {
 		return nil, ErrNotFound

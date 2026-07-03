@@ -1,7 +1,9 @@
 package dashboard
 
 import (
+	"encoding/json"
 	"net/http"
+	"time"
 
 	"github.com/starfederation/datastar-go/datastar"
 
@@ -23,21 +25,50 @@ func (h *Handler) handleIndex(w http.ResponseWriter, r *http.Request) {
 	_ = views.Layout(m).Render(r.Context(), w)
 }
 
-// handleTerminalPage serves the standalone xterm.js terminal for a sandbox.
+// handleTerminalPage serves the standalone xterm.js terminal for a sandbox. It
+// mints a short-lived, single-use terminal ticket (bound to this sandbox) and
+// hands THAT to the page instead of the long-lived REST bearer token — so the
+// API key never lands in page source, the WS URL, or proxy access logs. The
+// sandbox is verified to exist first so a bogus id renders a clean 404 rather
+// than a page whose socket immediately fails.
 func (h *Handler) handleTerminalPage(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
+	if _, err := h.svc.Get(r.Context(), id); err != nil {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(http.StatusNotFound)
+		_ = views.TerminalNotFound(id).Render(r.Context(), w)
+		return
+	}
 	scheme := "ws"
 	if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
 		scheme = "wss"
 	}
 	wsBase := scheme + "://" + r.Host + "/v1/sandboxes/" + id + "/terminal"
+	ticket, _ := h.svc.MintTerminalTicket(id)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_ = views.TerminalPage(id, wsBase, h.cfg.APIKey).Render(r.Context(), w)
+	_ = views.TerminalPage(id, wsBase, ticket).Render(r.Context(), w)
 }
 
 // ---------------------------------------------------------------------------
 // Datastar helpers
 // ---------------------------------------------------------------------------
+
+// terminalTicket mints a fresh short-lived, single-use terminal ticket for the
+// reconnect flow (the initial page ticket is single-use). Requires the same
+// dashboard Basic auth as every other route.
+func (h *Handler) terminalTicket(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if _, err := h.svc.Get(r.Context(), id); err != nil {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	tok, exp := h.svc.MintTerminalTicket(id)
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]string{
+		"ticket":     tok,
+		"expires_at": exp.Format(time.RFC3339),
+	})
+}
 
 // notify appends a transient toast to the live region.
 func notify(sse *datastar.ServerSentEventGenerator, v toast.Variant, title, desc string) {

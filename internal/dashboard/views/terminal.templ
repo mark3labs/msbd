@@ -2,9 +2,9 @@ package views
 
 // TerminalPage is a standalone xterm.js terminal that bridges to the msbd
 // WebSocket terminal endpoint. wsBase is the absolute ws(s):// URL for the
-// sandbox terminal WITHOUT query params; key is the optional API bearer token
-// (forwarded as ?key= since browsers can't set WS headers).
-templ TerminalPage(id, wsBase, key string) {
+// sandbox terminal WITHOUT query params; ticket is a short-lived, single-use
+// terminal ticket (NOT the long-lived API key) forwarded as ?ticket=.
+templ TerminalPage(id, wsBase, ticket string) {
 	<!DOCTYPE html>
 	<html lang="en" class="dark">
 		<head>
@@ -35,15 +35,55 @@ templ TerminalPage(id, wsBase, key string) {
 					color: #888;
 					z-index: 10;
 				}
+				#overlay {
+					position: fixed;
+					inset: 0;
+					display: none;
+					align-items: center;
+					justify-content: center;
+					background: rgba(0, 0, 0, 0.72);
+					z-index: 20;
+				}
+				#overlay .box {
+					font-family: monospace;
+					color: #ddd;
+					text-align: center;
+					padding: 24px 28px;
+					border: 1px solid #333;
+					border-radius: 8px;
+					background: #0a0a0a;
+				}
+				#overlay button {
+					font: 13px monospace;
+					margin: 12px 6px 0;
+					padding: 6px 14px;
+					color: #eee;
+					background: #1a1a1a;
+					border: 1px solid #444;
+					border-radius: 6px;
+					cursor: pointer;
+				}
+				#overlay button:hover {
+					background: #262626;
+				}
 			</style>
 		</head>
 		<body>
 			<div id="status">connecting…</div>
-			<div id="term" data-id={ id } data-ws={ wsBase } data-key={ key }></div>
+			<div id="term" data-id={ id } data-ws={ wsBase } data-ticket={ ticket }></div>
+			<div id="overlay">
+				<div class="box">
+					<div id="overlay-msg">Session ended.</div>
+					<button id="btn-reconnect" type="button">Reconnect</button>
+					<button id="btn-back" type="button">Back to dashboard</button>
+				</div>
+			</div>
 			<script>
 				(function () {
 					const el = document.getElementById("term");
 					const status = document.getElementById("status");
+					const overlay = document.getElementById("overlay");
+					const overlayMsg = document.getElementById("overlay-msg");
 					const term = new Terminal({
 						cursorBlink: true,
 						fontFamily: "monospace",
@@ -55,33 +95,49 @@ templ TerminalPage(id, wsBase, key string) {
 					term.open(el);
 					fit.fit();
 
+					// A ticket is single-use, so once consumed we must fetch a
+					// fresh one to reconnect. Seeded with the server-minted ticket.
+					let ticket = el.dataset.ticket;
+					const BACK_TO = "/dashboard";
+
 					function wsURL() {
-						const base = el.dataset.ws;
-						const key = el.dataset.key;
-						const u = new URL(base);
+						const u = new URL(el.dataset.ws);
 						u.searchParams.set("rows", String(term.rows));
 						u.searchParams.set("cols", String(term.cols));
-						if (key) u.searchParams.set("key", key);
+						if (ticket) u.searchParams.set("ticket", ticket);
 						return u.toString();
 					}
 
-					// Where to send the tab once the session ends (shell exit /
-					// disconnect). Only fires after a connection actually opened,
-					// so an initial failure (404 / auth) stays on-page instead of
-					// bouncing away.
-					const REDIRECT_TO = "/dashboard";
-					let opened = false;
-					let redirecting = false;
-					function goHome() {
-						if (redirecting) return;
-						redirecting = true;
-						setTimeout(() => {
-							window.location.href = REDIRECT_TO;
-						}, 600);
+					async function freshTicket() {
+						try {
+							const res = await fetch(
+								"/dashboard/api/sandboxes/" +
+									encodeURIComponent(el.dataset.id) +
+									"/terminal-ticket",
+								{ method: "POST" },
+							);
+							if (!res.ok) return false;
+							const body = await res.json();
+							ticket = body.ticket;
+							return !!ticket;
+						} catch (e) {
+							return false;
+						}
 					}
 
 					let ws;
+					let cleanExit = false;
+					let opened = false;
+
+					function showOverlay(msg) {
+						overlayMsg.textContent = msg;
+						overlay.style.display = "flex";
+					}
+
 					function connect() {
+						overlay.style.display = "none";
+						cleanExit = false;
+						status.textContent = "connecting…";
 						ws = new WebSocket(wsURL());
 						ws.binaryType = "arraybuffer";
 						ws.onopen = () => {
@@ -94,7 +150,9 @@ templ TerminalPage(id, wsBase, key string) {
 								try {
 									const msg = JSON.parse(ev.data);
 									if (msg.type === "exit") {
+										cleanExit = true;
 										status.textContent = "exited (" + msg.exit_code + ")";
+										showOverlay("Process exited (code " + msg.exit_code + ").");
 									}
 								} catch (e) {}
 								return;
@@ -103,12 +161,39 @@ templ TerminalPage(id, wsBase, key string) {
 						};
 						ws.onclose = () => {
 							status.textContent = "disconnected";
-							if (opened) goHome();
+							// Scrollback + status are preserved; the user decides
+							// whether to reconnect (a fresh ticket is minted on click).
+							if (!cleanExit) {
+								showOverlay(
+									opened
+										? "Disconnected. The connection dropped."
+										: "Could not connect to this terminal.",
+								);
+							}
 						};
 						ws.onerror = () => {
 							status.textContent = "error";
 						};
 					}
+
+					async function reconnect() {
+						overlay.style.display = "none";
+						if (!(await freshTicket())) {
+							showOverlay("Could not obtain a new terminal ticket.");
+							return;
+						}
+						connect();
+						term.focus();
+					}
+
+					document
+						.getElementById("btn-reconnect")
+						.addEventListener("click", reconnect);
+					document
+						.getElementById("btn-back")
+						.addEventListener("click", () => {
+							window.location.href = BACK_TO;
+						});
 
 					function sendResize() {
 						if (ws && ws.readyState === WebSocket.OPEN) {
@@ -128,14 +213,53 @@ templ TerminalPage(id, wsBase, key string) {
 						}
 					});
 
-					window.addEventListener("resize", () => {
+					function refit() {
 						fit.fit();
 						sendResize();
-					});
+					}
+					window.addEventListener("resize", refit);
+					// Mobile: react to the on-screen keyboard resizing the viewport.
+					if (window.visualViewport) {
+						window.visualViewport.addEventListener("resize", refit);
+					}
 					connect();
 					term.focus();
 				})();
 			</script>
+		</body>
+	</html>
+}
+
+// TerminalNotFound is a friendly 404 page for an unknown sandbox id.
+templ TerminalNotFound(id string) {
+	<!DOCTYPE html>
+	<html lang="en" class="dark">
+		<head>
+			<meta charset="UTF-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+			<title>terminal — not found</title>
+			<style>
+				html,
+				body {
+					margin: 0;
+					height: 100%;
+					background: #000;
+					color: #ddd;
+					font-family: monospace;
+					display: flex;
+					align-items: center;
+					justify-content: center;
+				}
+				a {
+					color: #6ab0ff;
+				}
+			</style>
+		</head>
+		<body>
+			<div style="text-align:center">
+				<p>Sandbox <b>{ id }</b> was not found.</p>
+				<p><a href="/dashboard">← Back to dashboard</a></p>
+			</div>
 		</body>
 	</html>
 }

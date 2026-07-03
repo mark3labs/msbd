@@ -91,15 +91,19 @@ sandbox backend with no cgo on their side.
 // seeded from MSBD_* env vars, so an explicit flag overrides the env, which
 // overrides the built-in default.
 type serveOptions struct {
-	listen        string
-	apiKey        string
-	defaultImage  string
-	maxSandboxes  int
-	createTimeout time.Duration
-	logLevel      string
-	dashboard     bool
-	dashboardUser string
-	dashboardPass string
+	listen            string
+	apiKey            string
+	apiKeyFile        string
+	defaultImage      string
+	maxSandboxes      int
+	createTimeout     time.Duration
+	shutdownTimeout   time.Duration
+	hostPaths         []string
+	logLevel          string
+	dashboard         bool
+	dashboardUser     string
+	dashboardPass     string
+	dashboardInsecure bool
 }
 
 func newServeCmd() *cobra.Command {
@@ -125,7 +129,9 @@ interrupted (Ctrl-C / SIGTERM trigger a graceful drain).`,
 	f.StringVar(&o.listen, "listen", envOr("MSBD_LISTEN", ":8099"),
 		"HTTP listen address ($MSBD_LISTEN)")
 	f.StringVar(&o.apiKey, "api-key", os.Getenv("MSBD_API_KEY"),
-		"Bearer token required on every request; empty = unauthenticated ($MSBD_API_KEY)")
+		"Bearer token(s), comma-separated for rotation; empty = unauthenticated ($MSBD_API_KEY)")
+	f.StringVar(&o.apiKeyFile, "api-key-file", os.Getenv("MSBD_API_KEY_FILE"),
+		"Read the bearer token from this file instead of --api-key ($MSBD_API_KEY_FILE)")
 	f.StringVar(&o.defaultImage, "default-image", envOr("MSBD_DEFAULT_IMAGE", "microsandbox/python"),
 		"OCI image used when create omits image ($MSBD_DEFAULT_IMAGE)")
 	f.IntVar(&o.maxSandboxes, "max-sandboxes", envInt("MSBD_MAX_SANDBOXES", 0),
@@ -133,6 +139,11 @@ interrupted (Ctrl-C / SIGTERM trigger a graceful drain).`,
 	f.DurationVar(&o.createTimeout, "create-timeout",
 		time.Duration(envInt("MSBD_CREATE_TIMEOUT_SECS", 300))*time.Second,
 		"Sandbox boot deadline, covers cold OCI pulls ($MSBD_CREATE_TIMEOUT_SECS)")
+	f.DurationVar(&o.shutdownTimeout, "shutdown-timeout",
+		time.Duration(envInt("MSBD_SHUTDOWN_TIMEOUT_SECS", 60))*time.Second,
+		"Graceful-drain deadline on SIGTERM/Ctrl-C ($MSBD_SHUTDOWN_TIMEOUT_SECS)")
+	f.StringSliceVar(&o.hostPaths, "host-paths", envList("MSBD_HOST_PATHS"),
+		"Allowlisted host path prefixes for copy/export/import; empty = host transfers DENIED ($MSBD_HOST_PATHS, comma-separated)")
 	f.StringVar(&o.logLevel, "log-level", envOr("MSBD_LOG_LEVEL", "info"),
 		"Log verbosity: debug, info, warn, error ($MSBD_LOG_LEVEL)")
 	f.BoolVar(&o.dashboard, "dashboard", envBool("MSBD_DASHBOARD", true),
@@ -141,6 +152,8 @@ interrupted (Ctrl-C / SIGTERM trigger a graceful drain).`,
 		"Dashboard HTTP Basic auth username; with --dashboard-pass enables auth ($MSBD_DASHBOARD_USER)")
 	f.StringVar(&o.dashboardPass, "dashboard-pass", os.Getenv("MSBD_DASHBOARD_PASS"),
 		"Dashboard HTTP Basic auth password; with --dashboard-user enables auth ($MSBD_DASHBOARD_PASS)")
+	f.BoolVar(&o.dashboardInsecure, "dashboard-allow-insecure", envBool("MSBD_DASHBOARD_ALLOW_INSECURE", false),
+		"Allow the dashboard to run WITHOUT auth even when an API key is set (unsafe) ($MSBD_DASHBOARD_ALLOW_INSECURE)")
 
 	return cmd
 }
@@ -155,10 +168,38 @@ func runServe(ctx context.Context, o *serveOptions) error {
 	log.SetTimeFormat("2006/01/02 15:04:05")
 	if lvl, err := log.ParseLevel(o.logLevel); err == nil {
 		log.SetLevel(lvl)
+	} else {
+		return fmt.Errorf("invalid --log-level %q (want debug|info|warn|error)", o.logLevel)
+	}
+
+	// Config validation: fail fast rather than silently running mis-configured.
+	if o.maxSandboxes < 0 {
+		return fmt.Errorf("invalid --max-sandboxes %d (must be >= 0)", o.maxSandboxes)
+	}
+	if o.createTimeout <= 0 {
+		return fmt.Errorf("invalid --create-timeout %s (must be > 0)", o.createTimeout)
+	}
+	if o.shutdownTimeout <= 0 {
+		return fmt.Errorf("invalid --shutdown-timeout %s (must be > 0)", o.shutdownTimeout)
+	}
+
+	// --api-key-file wins over --api-key so secrets can live in a file (Docker/
+	// K8s secrets) instead of the process environment.
+	if strings.TrimSpace(o.apiKeyFile) != "" {
+		b, err := os.ReadFile(o.apiKeyFile)
+		if err != nil {
+			return fmt.Errorf("read --api-key-file: %w", err)
+		}
+		o.apiKey = strings.TrimSpace(string(b))
 	}
 
 	if o.apiKey == "" {
 		log.Warn("api key is empty — server is UNAUTHENTICATED (dev only)")
+	}
+	if len(o.hostPaths) == 0 {
+		log.Info("host-path transfers disabled (no --host-paths / MSBD_HOST_PATHS)")
+	} else {
+		log.Info("host-path transfers allowlisted", "prefixes", o.hostPaths)
 	}
 
 	log.Info("starting msbd",
@@ -180,7 +221,9 @@ func runServe(ctx context.Context, o *serveOptions) error {
 		DefaultImage:  o.defaultImage,
 		MaxSandboxes:  o.maxSandboxes,
 		CreateTimeout: o.createTimeout,
+		HostPaths:     o.hostPaths,
 	})
+	defer svc.Close()
 
 	// 2) Re-attach to any sandboxes that outlived a previous msbd process.
 	rctx, rcancel := context.WithTimeout(ctx, 30*time.Second)
@@ -199,22 +242,33 @@ func runServe(ctx context.Context, o *serveOptions) error {
 			Enabled: true,
 			User:    o.dashboardUser,
 			Pass:    o.dashboardPass,
-			APIKey:  o.apiKey,
 			Version: version,
 		}
-		srv.SetDashboard(dashboard.New(svc, dcfg))
-		if dcfg.AuthEnabled() {
+		switch {
+		case dcfg.AuthEnabled():
+			srv.SetDashboard(dashboard.New(svc, dcfg))
 			log.Info("dashboard enabled", "path", "/dashboard", "auth", "basic")
-		} else {
-			log.Warn("dashboard enabled WITHOUT auth (set --dashboard-user/--dashboard-pass)", "path", "/dashboard")
+		case o.apiKey == "":
+			// Fully open deployment (no API key either) — dev mode.
+			srv.SetDashboard(dashboard.New(svc, dcfg))
+			log.Warn("dashboard enabled WITHOUT auth (no API key set — dev only)", "path", "/dashboard")
+		case o.dashboardInsecure:
+			srv.SetDashboard(dashboard.New(svc, dcfg))
+			log.Warn("dashboard enabled WITHOUT auth while an API key IS set — --dashboard-allow-insecure overrides the safety refusal", "path", "/dashboard")
+		default:
+			// API key set but dashboard has no auth: refuse, since the dashboard
+			// grants full sandbox control and would bypass the API bearer token.
+			log.Error("dashboard NOT mounted: an API key is set but no dashboard auth is configured — set --dashboard-user/--dashboard-pass, or --dashboard-allow-insecure to override")
 		}
 	}
 	httpSrv := &http.Server{
 		Addr:              o.listen,
 		Handler:           srv.Handler(),
 		ReadHeaderTimeout: 10 * time.Second,
-		// No write/read timeout: Run can block on long builds. Front with a
-		// proxy that has a high read timeout, or none.
+		// IdleTimeout only applies BETWEEN requests, so it's safe alongside long
+		// /run and the WebSocket terminal. No Read/Write timeout: Run can block on
+		// long builds — body-size limits (MaxBytesReader) guard against slowloris.
+		IdleTimeout: 120 * time.Second,
 	}
 
 	// Serve in the background so we can wait on either a listener error or a
@@ -236,11 +290,14 @@ func runServe(ctx context.Context, o *serveOptions) error {
 		}
 		return nil
 	case <-ctx.Done():
-		log.Info("shutting down — draining in-flight requests")
-		sctx, scancel := context.WithTimeout(context.Background(), 10*time.Second)
+		log.Info("shutting down — draining in-flight requests", "timeout", o.shutdownTimeout)
+		sctx, scancel := context.WithTimeout(context.Background(), o.shutdownTimeout)
 		defer scancel()
 		if serr := httpSrv.Shutdown(sctx); serr != nil {
-			return fmt.Errorf("graceful shutdown: %w", serr)
+			// A drain-deadline overrun (e.g. a long /run or a live terminal still
+			// open) is expected operationally — warn and exit 0 so `systemctl
+			// restart` / `docker stop` don't report a spurious failure.
+			log.Warn("graceful shutdown deadline exceeded; forcing exit", "err", serr)
 		}
 		log.Info("stopped")
 		return nil
@@ -285,4 +342,19 @@ func envBool(k string, def bool) bool {
 		}
 	}
 	return def
+}
+
+// envList parses a comma-separated env var into a trimmed, non-empty slice.
+func envList(k string) []string {
+	v := strings.TrimSpace(os.Getenv(k))
+	if v == "" {
+		return nil
+	}
+	out := make([]string, 0)
+	for p := range strings.SplitSeq(v, ",") {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
 }

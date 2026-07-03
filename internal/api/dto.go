@@ -93,11 +93,27 @@ type LaunchResponse struct {
 }
 
 // JobStatusDTO is the poll result for an async job. State ∈ running|done|dead|gone.
+// Stdout/Stderr are the tail of a bounded ring buffer; Truncated reports whether
+// earlier output was dropped, and the *_bytes fields give the true total.
 type JobStatusDTO struct {
-	State    string `json:"state"`
-	ExitCode int    `json:"exit_code"`
-	Stdout   string `json:"stdout"`
-	Stderr   string `json:"stderr"`
+	State       string `json:"state"`
+	ExitCode    int    `json:"exit_code"`
+	Stdout      string `json:"stdout"`
+	Stderr      string `json:"stderr"`
+	Truncated   bool   `json:"truncated"`
+	StdoutBytes int64  `json:"stdout_bytes"`
+	StderrBytes int64  `json:"stderr_bytes"`
+}
+
+// TerminalTicketRequest asks for a short-lived single-use terminal ticket.
+type TerminalTicketRequest struct {
+	Sandbox string `json:"sandbox"`
+}
+
+// TerminalTicketResponse carries a short-lived single-use WS terminal ticket.
+type TerminalTicketResponse struct {
+	Ticket    string `json:"ticket"`
+	ExpiresAt string `json:"expires_at"`
 }
 
 // FileReadRequest / FileReadResponse — base64 keeps the body binary-safe.

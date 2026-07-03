@@ -117,25 +117,36 @@ func (s *Service) Rename(ctx context.Context, id, src, dst, cwd string) error {
 	return nil
 }
 
-// CopyFromHost copies an allowlisted host path into the sandbox.
+// CopyFromHost copies an allowlisted host path into the sandbox. The host path
+// must be within the configured allowlist (--host-paths / MSBD_HOST_PATHS);
+// otherwise ErrForbidden is returned before any FS access.
 func (s *Service) CopyFromHost(ctx context.Context, id, hostPath, guestPath, cwd string) error {
+	safe, err := s.checkHostPath(hostPath)
+	if err != nil {
+		return err
+	}
 	sb, err := s.reg.resolve(ctx, id)
 	if err != nil {
 		return err
 	}
-	if err := sb.FS().CopyFromHost(ctx, hostPath, resolvePath(guestPath, cwd)); err != nil {
+	if err := sb.FS().CopyFromHost(ctx, safe, resolvePath(guestPath, cwd)); err != nil {
 		return fmt.Errorf("copy from host %s -> %s: %w", hostPath, guestPath, err)
 	}
 	return nil
 }
 
-// CopyToHost copies a sandbox path to an allowlisted host destination.
+// CopyToHost copies a sandbox path to an allowlisted host destination. The host
+// path must be within the configured allowlist; otherwise ErrForbidden.
 func (s *Service) CopyToHost(ctx context.Context, id, guestPath, hostPath, cwd string) error {
+	safe, err := s.checkHostPath(hostPath)
+	if err != nil {
+		return err
+	}
 	sb, err := s.reg.resolve(ctx, id)
 	if err != nil {
 		return err
 	}
-	if err := sb.FS().CopyToHost(ctx, resolvePath(guestPath, cwd), hostPath); err != nil {
+	if err := sb.FS().CopyToHost(ctx, resolvePath(guestPath, cwd), safe); err != nil {
 		return fmt.Errorf("copy to host %s -> %s: %w", guestPath, hostPath, err)
 	}
 	return nil

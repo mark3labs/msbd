@@ -4,7 +4,13 @@ package api
 // patterns), no external router. Middleware: panic recovery, bearer auth.
 
 import (
+	"bufio"
+	"crypto/rand"
+	"crypto/subtle"
+	"encoding/hex"
 	"encoding/json"
+	"errors"
+	"net"
 	"net/http"
 	"runtime/debug"
 	"strings"
@@ -16,18 +22,50 @@ import (
 	"github.com/mark3labs/msbd/internal/dashboard"
 )
 
+// Body size limits. control-plane JSON is small; file-write endpoints carry
+// base64 payloads and get a larger, configurable ceiling.
+const (
+	defaultMaxBodyBytes int64 = 1 << 20  // 1 MiB for control-plane requests
+	defaultMaxFileBytes int64 = 64 << 20 // 64 MiB for file/volume writes
+)
+
 // Server holds dependencies for the HTTP handlers.
 type Server struct {
-	svc     *core.Service
-	apiKey  string
-	ready   func() error // readiness probe (FFI loaded + /dev/kvm openable)
-	openapi []byte       // raw openapi.yaml served at /openapi.yaml + /docs
-	dash    *dashboard.Handler
+	svc      *core.Service
+	apiKeys  []string     // accepted bearer tokens (comma-separated in config)
+	ready    func() error // readiness probe (FFI loaded + /dev/kvm openable)
+	openapi  []byte       // raw openapi.yaml served at /openapi.yaml + /docs
+	dash     *dashboard.Handler
+	maxBody  int64
+	maxFile  int64
+	startedT time.Time
 }
 
 func NewServer(svc *core.Service, apiKey string, ready func() error) *Server {
-	return &Server{svc: svc, apiKey: apiKey, ready: ready}
+	return &Server{
+		svc:      svc,
+		apiKeys:  splitKeys(apiKey),
+		ready:    ready,
+		maxBody:  defaultMaxBodyBytes,
+		maxFile:  defaultMaxFileBytes,
+		startedT: time.Now(),
+	}
 }
+
+// splitKeys parses a comma-separated bearer-token list (enables zero-downtime
+// rotation: run with the old + new key, migrate clients, then drop the old).
+func splitKeys(s string) []string {
+	out := make([]string, 0, 1)
+	for k := range strings.SplitSeq(s, ",") {
+		if k = strings.TrimSpace(k); k != "" {
+			out = append(out, k)
+		}
+	}
+	return out
+}
+
+// authRequired reports whether any bearer token is configured.
+func (s *Server) authRequired() bool { return len(s.apiKeys) > 0 }
 
 // SetDashboard mounts the optional web dashboard under /dashboard.
 func (s *Server) SetDashboard(d *dashboard.Handler) *Server {
@@ -57,6 +95,12 @@ func (s *Server) Handler() http.Handler {
 
 	// Meta.
 	mux.HandleFunc("GET /v1/version", s.auth(s.handleVersion))
+
+	// Prometheus-style operational metrics (auth-gated like everything else).
+	mux.HandleFunc("GET /metrics", s.auth(s.handleProm))
+
+	// Short-lived single-use terminal tickets (for browser WS clients).
+	mux.HandleFunc("POST /v1/terminal-tickets", s.auth(s.handleTerminalTicket))
 
 	// API docs (unauthenticated; the spec is not a secret).
 	if len(s.openapi) > 0 {
@@ -143,59 +187,175 @@ func (s *Server) Handler() http.Handler {
 	return recoverMW(logMW(mux))
 }
 
-// auth wraps a handler with constant-ish bearer-token checking.
+// auth wraps a handler with constant-time bearer-token checking.
 func (s *Server) auth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if s.apiKey == "" { // no key configured → open (dev only)
+		if !s.authRequired() { // no key configured → open (dev only)
 			next(w, r)
 			return
 		}
-		tok := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
-		if subtleEqual(tok, s.apiKey) {
+		if s.tokenOK(bearerToken(r)) {
 			next(w, r)
 			return
 		}
-		writeErr(w, http.StatusUnauthorized, "unauthorized", "invalid or missing bearer token")
+		s.unauthorized(w)
 	}
 }
 
 // authWS is auth for WebSocket upgrade endpoints: it accepts the bearer token
-// from the Authorization header OR a ?key= query parameter, since browsers
-// cannot set request headers on a WebSocket handshake.
+// from the Authorization header, a ?key= query param (browsers can't set
+// headers on a WS handshake), OR a short-lived single-use ?ticket= bound to the
+// sandbox {id} in the path — the preferred path for browsers, so the long-lived
+// key never enters the URL / proxy logs / page source.
 func (s *Server) authWS(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if s.apiKey == "" { // no key configured → open (dev only)
+		if !s.authRequired() { // no key configured → open (dev only)
 			next(w, r)
 			return
 		}
-		tok := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+		if tkt := r.URL.Query().Get("ticket"); tkt != "" {
+			if s.svc.RedeemTerminalTicket(tkt, r.PathValue("id")) {
+				next(w, r)
+				return
+			}
+		}
+		tok := bearerToken(r)
 		if tok == "" {
 			tok = r.URL.Query().Get("key")
 		}
-		if subtleEqual(tok, s.apiKey) {
+		if s.tokenOK(tok) {
 			next(w, r)
 			return
 		}
-		writeErr(w, http.StatusUnauthorized, "unauthorized", "invalid or missing bearer token")
+		s.unauthorized(w)
+	}
+}
+
+// bearerToken extracts the token from an "Authorization: Bearer <token>" header.
+// The scheme match is case-insensitive per RFC 9110; a header without the
+// Bearer scheme yields "" (we do NOT accept a bare token as the scheme laxness
+// masks client bugs).
+func bearerToken(r *http.Request) string {
+	h := r.Header.Get("Authorization")
+	if len(h) < 7 || !strings.EqualFold(h[:7], "Bearer ") {
+		return ""
+	}
+	return strings.TrimSpace(h[7:])
+}
+
+// tokenOK reports whether tok matches any configured key (constant time).
+func (s *Server) tokenOK(tok string) bool {
+	if tok == "" {
+		return false
+	}
+	ok := false
+	for _, k := range s.apiKeys {
+		if subtle.ConstantTimeCompare([]byte(tok), []byte(k)) == 1 {
+			ok = true
+		}
+	}
+	return ok
+}
+
+func (s *Server) unauthorized(w http.ResponseWriter) {
+	w.Header().Set("WWW-Authenticate", `Bearer realm="msbd"`)
+	writeErr(w, http.StatusUnauthorized, "unauthorized", "invalid or missing bearer token")
+}
+
+// statusRecorder captures the response status for structured logging while
+// preserving http.Hijacker (required by the WebSocket upgrade) and http.Flusher
+// (required by SSE endpoints).
+type statusRecorder struct {
+	http.ResponseWriter
+	status int
+	wrote  bool
+}
+
+func (sr *statusRecorder) WriteHeader(code int) {
+	if !sr.wrote {
+		sr.status = code
+		sr.wrote = true
+	}
+	sr.ResponseWriter.WriteHeader(code)
+}
+
+func (sr *statusRecorder) Write(b []byte) (int, error) {
+	if !sr.wrote {
+		sr.status = http.StatusOK
+		sr.wrote = true
+	}
+	return sr.ResponseWriter.Write(b)
+}
+
+// Unwrap exposes the underlying ResponseWriter so http.ResponseController and
+// the gorilla WebSocket Hijack()/Flush() reach the real connection.
+func (sr *statusRecorder) Unwrap() http.ResponseWriter { return sr.ResponseWriter }
+
+// Hijack delegates to the underlying connection so the WebSocket terminal
+// upgrade (gorilla type-asserts http.Hijacker directly) keeps working through
+// the logging middleware.
+func (sr *statusRecorder) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	if hj, ok := sr.ResponseWriter.(http.Hijacker); ok {
+		return hj.Hijack()
+	}
+	return nil, nil, http.ErrNotSupported
+}
+
+// Flush delegates to the underlying writer so SSE (dashboard Datastar) streams
+// keep flushing through the middleware.
+func (sr *statusRecorder) Flush() {
+	if fl, ok := sr.ResponseWriter.(http.Flusher); ok {
+		fl.Flush()
 	}
 }
 
 func logMW(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Health probes are high-frequency and low-value: don't spam Info.
+		if r.URL.Path == "/healthz" || r.URL.Path == "/readyz" {
+			next.ServeHTTP(w, r)
+			return
+		}
+		rid := r.Header.Get("X-Request-Id")
+		if rid == "" {
+			rid = newRequestID()
+		}
+		w.Header().Set("X-Request-Id", rid)
+		sr := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
 		start := time.Now()
-		next.ServeHTTP(w, r)
+		next.ServeHTTP(sr, r)
+		globalReqStats.observe(sr.status)
 		log.Info("request",
+			"id", rid,
 			"method", r.Method,
 			"path", r.URL.Path,
+			"status", sr.status,
+			"remote", clientIP(r),
 			"dur", time.Since(start).Round(time.Millisecond))
 	})
+}
+
+func clientIP(r *http.Request) string {
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		if i := strings.IndexByte(xff, ','); i > 0 {
+			return strings.TrimSpace(xff[:i])
+		}
+		return strings.TrimSpace(xff)
+	}
+	if i := strings.LastIndexByte(r.RemoteAddr, ':'); i > 0 {
+		return r.RemoteAddr[:i]
+	}
+	return r.RemoteAddr
 }
 
 func recoverMW(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			if rec := recover(); rec != nil {
-				log.Error("panic recovered", "err", rec, "stack", string(debug.Stack()))
+				log.Error("panic recovered",
+					"id", w.Header().Get("X-Request-Id"),
+					"path", r.URL.Path,
+					"err", rec, "stack", string(debug.Stack()))
 				writeErr(w, http.StatusInternalServerError, "panic", "internal error")
 			}
 		}()
@@ -217,19 +377,46 @@ func writeErr(w http.ResponseWriter, status int, code, msg string) {
 	writeJSON(w, status, ErrorBody{Error: ErrorDetail{Code: code, Message: msg}})
 }
 
+// decode reads a JSON body with a size cap and rejects unknown fields so a
+// typo'd field (e.g. "timeout_seconds" for "timeout_secs") surfaces as a 400
+// instead of a silent no-op. It does NOT have access to the ResponseWriter, so
+// the size cap is enforced by decodeLimited via http.MaxBytesReader upstream.
 func decode(r *http.Request, v any) error {
 	defer func() { _ = r.Body.Close() }()
-	return json.NewDecoder(r.Body).Decode(v)
+	dec := json.NewDecoder(r.Body)
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(v); err != nil {
+		return err
+	}
+	// Reject trailing garbage after the first JSON value.
+	if dec.More() {
+		return errors.New("unexpected trailing data after JSON body")
+	}
+	return nil
 }
 
-// subtleEqual is a length-checked constant-time-ish compare.
-func subtleEqual(a, b string) bool {
-	if len(a) != len(b) {
+// decodeBody caps the request body at limit bytes (413 on overflow), then
+// decodes JSON with unknown-field rejection. Returns false and writes the error
+// response when decoding fails, so handlers can `if !decodeBody(...) { return }`.
+func (s *Server) decodeBody(w http.ResponseWriter, r *http.Request, v any, limit int64) bool {
+	r.Body = http.MaxBytesReader(w, r.Body, limit)
+	if err := decode(r, v); err != nil {
+		var mbe *http.MaxBytesError
+		if errors.As(err, &mbe) {
+			writeErr(w, http.StatusRequestEntityTooLarge, "payload_too_large",
+				"request body exceeds limit")
+			return false
+		}
+		writeErr(w, http.StatusBadRequest, "bad_request", err.Error())
 		return false
 	}
-	var diff byte
-	for i := 0; i < len(a); i++ {
-		diff |= a[i] ^ b[i]
+	return true
+}
+
+func newRequestID() string {
+	var b [8]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return "req"
 	}
-	return diff == 0
+	return "req_" + hex.EncodeToString(b[:])
 }

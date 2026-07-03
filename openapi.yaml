@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: msbd — Microsandbox REST host
-  version: 0.1.0
+  version: 0.6.0
   description: >
     A standalone, self-hostable HTTP server that wraps the microsandbox Go SDK
     (cgo + libkrun) and exposes a small REST API for managing fast, local
@@ -83,6 +83,52 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Version" }
 
+  /metrics:
+    get:
+      tags: [meta]
+      summary: Prometheus text-exposition operational metrics
+      description: >
+        Prometheus 0.0.4 text exposition of operational signals: sandbox counts
+        by state, the configured cap, active async jobs, live terminals, HTTP
+        request totals by status class, and Go runtime basics. Auth-gated like
+        every other endpoint.
+      responses:
+        "200":
+          description: Prometheus metrics
+          content:
+            text/plain: {}
+
+  /v1/terminal-tickets:
+    post:
+      tags: [meta]
+      summary: Mint a short-lived single-use terminal ticket
+      description: >
+        Returns an opaque, ~60s, single-use ticket bound to one sandbox that the
+        terminal WebSocket accepts as `?ticket=` instead of the long-lived
+        bearer key — so browser clients never place the API key in a URL, page
+        source, or proxy log. Minting requires normal bearer auth.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [sandbox]
+              properties:
+                sandbox: { type: string, description: Sandbox id the ticket is valid for. }
+      responses:
+        "201":
+          description: Ticket minted
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ticket, expires_at]
+                properties:
+                  ticket: { type: string }
+                  expires_at: { type: string, format: date-time }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
   /v1/sandboxes:
     post:
       tags: [lifecycle]
@@ -102,8 +148,14 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Instance" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "400":
+          description: Invalid parameters (out-of-range cpu/memory/ports, bad body)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorBody" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
         "507":
-          description: Host at capacity (MSBD_MAX_SANDBOXES reached) or boot failed
+          description: Host at capacity (MSBD_MAX_SANDBOXES reached). Boot/validation failures are 400/500, not 507.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorBody" }
@@ -982,6 +1034,16 @@ components:
       content:
         application/json:
           schema: { $ref: "#/components/schemas/ErrorBody" }
+    PayloadTooLarge:
+      description: Request body exceeds the configured size limit
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorBody" }
+    Forbidden:
+      description: Host path outside the configured allowlist (MSBD_HOST_PATHS)
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorBody" }
 
   schemas:
     Resources:
@@ -1118,8 +1180,13 @@ components:
             running (partial output) · done (exit_code valid) · dead (killed,
             no exit code) · gone (unknown job, e.g. after msbd restart).
         exit_code: { type: integer, description: Valid only when state=done. }
-        stdout: { type: string }
-        stderr: { type: string }
+        stdout: { type: string, description: Tail of a bounded ring buffer (see truncated). }
+        stderr: { type: string, description: Tail of a bounded ring buffer (see truncated). }
+        truncated:
+          type: boolean
+          description: True when earlier output was dropped because a stream exceeded its ring-buffer cap.
+        stdout_bytes: { type: integer, description: Total bytes ever produced on stdout (pre-truncation). }
+        stderr_bytes: { type: integer, description: Total bytes ever produced on stderr (pre-truncation). }
 
     FileReadRequest:
       type: object
@@ -1182,7 +1249,7 @@ components:
       type: object
       required: [host_path, guest_path]
       properties:
-        host_path: { type: string, description: Allowlisted host path. }
+        host_path: { type: string, description: "Host path; MUST be within the configured allowlist (MSBD_HOST_PATHS) or the request is rejected with 403. Empty allowlist denies all host transfers." }
         guest_path: { type: string }
         cwd: { type: string }
 
@@ -1376,7 +1443,7 @@ components:
       required: [name_or_path, out_path]
       properties:
         name_or_path: { type: string }
-        out_path: { type: string, description: Allowlisted host archive path. }
+        out_path: { type: string, description: "Host archive path; MUST be within the MSBD_HOST_PATHS allowlist (403 otherwise)." }
         with_parents: { type: boolean }
         with_image: { type: boolean }
         plain_tar: { type: boolean }
@@ -1385,7 +1452,7 @@ components:
       type: object
       required: [archive, dest]
       properties:
-        archive: { type: string, description: Allowlisted host archive path. }
+        archive: { type: string, description: "Host archive path; MUST be within the MSBD_HOST_PATHS allowlist (403 otherwise)." }
         dest: { type: string }
 
     SnapshotReindexRequest:
@@ -1416,5 +1483,31 @@ components:
           type: object
           required: [code, message]
           properties:
-            code: { type: string, example: not_found }
+            code:
+              type: string
+              description: >
+                Machine-readable, cause-oriented error code. Common values:
+                bad_request, invalid_params, payload_too_large, unauthorized,
+                not_found, forbidden, capacity, create_failed, poll_failed,
+                pull_failed, panic, error.
+              enum:
+                - bad_request
+                - invalid_params
+                - payload_too_large
+                - unauthorized
+                - not_found
+                - forbidden
+                - capacity
+                - create_failed
+                - list_failed
+                - poll_failed
+                - metrics_failed
+                - remove_failed
+                - pull_failed
+                - prune_failed
+                - reindex_failed
+                - not_ready
+                - panic
+                - error
+              example: not_found
             message: { type: string }

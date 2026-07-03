@@ -138,7 +138,11 @@ func (s *Service) ReindexSnapshots(ctx context.Context, dir string) (uint32, err
 }
 
 func (s *Service) ExportSnapshot(ctx context.Context, nameOrPath, outPath string, withParents, withImage, plainTar bool) error {
-	if err := msb.Snapshot.Export(ctx, nameOrPath, outPath, msb.SnapshotExportOptions{
+	safe, err := s.checkHostPath(outPath)
+	if err != nil {
+		return err
+	}
+	if err := msb.Snapshot.Export(ctx, nameOrPath, safe, msb.SnapshotExportOptions{
 		WithParents: withParents,
 		WithImage:   withImage,
 		PlainTar:    plainTar,
@@ -149,7 +153,15 @@ func (s *Service) ExportSnapshot(ctx context.Context, nameOrPath, outPath string
 }
 
 func (s *Service) ImportSnapshot(ctx context.Context, archive, dest string) (*Snapshot, error) {
-	h, err := msb.Snapshot.Import(ctx, archive, dest)
+	safeArchive, err := s.checkHostPath(archive)
+	if err != nil {
+		return nil, err
+	}
+	safeDest, err := s.checkHostPath(dest)
+	if err != nil {
+		return nil, err
+	}
+	h, err := msb.Snapshot.Import(ctx, safeArchive, safeDest)
 	if err != nil {
 		return nil, fmt.Errorf("import snapshot: %w", err)
 	}

@@ -75,7 +75,7 @@ templ VolumesPage(rows []VolumeRow) {
 								Size:    button.SizeIcon,
 								Class:   "size-8 text-destructive",
 								Attributes: templ.Attributes{
-									"data-on:click": "confirm('Delete volume " + v.Name + "?') && @delete('/dashboard/api/volumes/" + v.Name + "')",
+									"data-on:click": "confirm('Delete this volume?') && @delete(" + jsExpr("/dashboard/api/volumes/"+pathSeg(v.Name)) + ")",
 								},
 							}) {
 								@icon.Trash2(icon.Props{Class: "size-4"})

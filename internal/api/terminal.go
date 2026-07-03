@@ -96,7 +96,9 @@ func (s *Server) handleTerminal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	log.Info("terminal opened", "sandbox", id)
+	activeTerminals.Add(1)
 	defer func() {
+		activeTerminals.Add(-1)
 		_ = sess.Close()
 		_ = conn.Close()
 		log.Info("terminal closed", "sandbox", id)

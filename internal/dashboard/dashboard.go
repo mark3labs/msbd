@@ -26,10 +26,6 @@ type Config struct {
 	// turns auth on; an empty counterpart then never matches.
 	User string
 	Pass string
-	// APIKey is the msbd REST bearer token. The terminal page needs it to open
-	// the WebSocket terminal (browsers can't set headers on a WS handshake, so
-	// it's forwarded as ?key=). Empty when the API is unauthenticated.
-	APIKey string
 	// Version is the msbd build version, shown in the shell header.
 	Version string
 }
@@ -63,6 +59,7 @@ func (h *Handler) Mount(mux *http.ServeMux) {
 
 	// Terminal (full page; connects to the existing WS terminal endpoint).
 	mux.HandleFunc("GET /dashboard/terminal/{id}", h.basic(h.handleTerminalPage))
+	mux.HandleFunc("POST /dashboard/api/sandboxes/{id}/terminal-ticket", h.basic(h.terminalTicket))
 
 	// ---- Datastar API (SSE fragments) ----
 	// Sandboxes.

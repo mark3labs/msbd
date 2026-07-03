@@ -75,7 +75,7 @@ templ SnapshotsPage(rows []SnapshotRow) {
 								Size:    button.SizeIcon,
 								Class:   "size-8 text-destructive",
 								Attributes: templ.Attributes{
-									"data-on:click": "confirm('Delete snapshot?') && @delete('/dashboard/api/snapshots/" + s.Digest + "')",
+									"data-on:click": "confirm('Delete this snapshot?') && @delete(" + jsExpr("/dashboard/api/snapshots/"+pathSeg(s.Digest)) + ")",
 								},
 							}) {
 								@icon.Trash2(icon.Props{Class: "size-4"})

@@ -33,6 +33,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/fxamacker/cbor/v2"
 	msb "github.com/superradcompany/microsandbox/sdk/go"
@@ -136,6 +137,8 @@ type agentSession struct {
 	exitCode int
 	done     chan struct{}
 	quit     chan struct{}
+	pumpCtx  context.Context
+	cancel   context.CancelFunc
 }
 
 // openAgentSession opens a real PTY in sandbox name. The sandbox must already
@@ -183,6 +186,7 @@ func openAgentSession(ctx context.Context, name string, p TerminalParams) (Sessi
 		done:     make(chan struct{}),
 		quit:     make(chan struct{}),
 	}
+	se.pumpCtx, se.cancel = context.WithCancel(context.Background())
 	go se.pump()
 	return se, nil
 }
@@ -231,7 +235,9 @@ func ptyEnv(p TerminalParams) []string {
 }
 
 // pump reads PTY output frames and merges stdout/stderr into the output
-// channel, recording the exit code. Detached context: outlives the HTTP request.
+// channel, recording the exit code. Its context (pumpCtx) is cancelled by
+// Close(), so a Next() blocked on a wedged/HUP-ignoring guest is unblocked
+// instead of leaking the goroutine + AgentClient connection forever.
 func (se *agentSession) pump() {
 	defer close(se.out)
 	defer close(se.done)
@@ -240,10 +246,10 @@ func (se *agentSession) pump() {
 		_ = se.client.Close()
 	}()
 
-	ctx := context.Background()
+	ctx := se.pumpCtx
 	for {
 		frame, err := se.stream.Next(ctx)
-		if err != nil || frame == nil { // err or EOF
+		if err != nil || frame == nil { // err, ctx cancelled, or EOF
 			return
 		}
 		t, payload, derr := decodeFrame(frame.Body)
@@ -336,11 +342,20 @@ func (se *agentSession) Close() error {
 	se.mu.Unlock()
 
 	close(se.quit)
-	// Best-effort SIGHUP so the guest shell tears down; pump() then observes
-	// the stream end and releases the client/stream handles.
+	// Best-effort SIGHUP so a well-behaved guest shell tears down cleanly and
+	// delivers its exit code; then, after a short grace window, cancel pumpCtx
+	// to force-unblock Next() for guests that trap/ignore HUP (nohup, daemons,
+	// wedged agents) so the goroutine + client/stream handles are released.
 	if body, err := encodeFrame(mtExecSignal, wireExecSignal{Signal: 1}); err == nil {
 		_ = se.client.Send(context.Background(), se.id, 0, body)
 	}
+	go func() {
+		select {
+		case <-se.done: // pump exited on its own (clean shell teardown)
+		case <-time.After(3 * time.Second):
+			se.cancel() // force the leak-proof teardown
+		}
+	}()
 	return nil
 }
 

@@ -752,7 +752,7 @@ func rowActions(r SandboxRow) templ.Component {
 			Size:    button.SizeIcon,
 			Class:   "size-8 text-destructive",
 			Attributes: templ.Attributes{
-				"data-on:click": "confirm('Delete sandbox " + r.ID + "?') && @delete('/dashboard/api/sandboxes/" + r.ID + "')",
+				"data-on:click": "confirm('Delete this sandbox?') && @delete(" + jsExpr("/dashboard/api/sandboxes/"+pathSeg(r.ID)) + ")",
 			},
 		}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var34), templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {

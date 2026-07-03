@@ -26,8 +26,7 @@ func (s *Server) handleVersion(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 	var req CreateRequest
-	if err := decode(r, &req); err != nil {
-		writeErr(w, http.StatusBadRequest, "bad_request", err.Error())
+	if !s.decodeBody(w, r, &req, s.maxBody) {
 		return
 	}
 	ports := make([]core.PortMapping, 0, len(req.Ports))
@@ -59,10 +58,25 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 		Mounts:        mounts,
 	})
 	if err != nil {
-		writeErr(w, http.StatusInsufficientStorage, "create_failed", err.Error())
+		writeCreateErr(w, err)
 		return
 	}
 	writeJSON(w, http.StatusCreated, toInstanceDTO(inst))
+}
+
+// writeCreateErr maps a Create failure to the right status: capacity -> 507,
+// invalid params -> 400, unknown image/not-found -> 404, else 500.
+func writeCreateErr(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, core.ErrCapacity):
+		writeErr(w, http.StatusInsufficientStorage, "capacity", err.Error())
+	case errors.Is(err, core.ErrInvalidParams):
+		writeErr(w, http.StatusBadRequest, "invalid_params", err.Error())
+	case errors.Is(err, core.ErrNotFound):
+		writeErr(w, http.StatusNotFound, "not_found", err.Error())
+	default:
+		writeErr(w, http.StatusInternalServerError, "create_failed", err.Error())
+	}
 }
 
 func (s *Server) handleGet(w http.ResponseWriter, r *http.Request) {
@@ -116,8 +130,7 @@ func (s *Server) handleRun(w http.ResponseWriter, r *http.Request)  { s.execOrRu
 
 func (s *Server) execOrRun(w http.ResponseWriter, r *http.Request, long bool) {
 	var req ExecRequestDTO
-	if err := decode(r, &req); err != nil {
-		writeErr(w, http.StatusBadRequest, "bad_request", err.Error())
+	if !s.decodeBody(w, r, &req, s.maxBody) {
 		return
 	}
 	p := core.ExecParams{
@@ -145,8 +158,7 @@ func (s *Server) execOrRun(w http.ResponseWriter, r *http.Request, long bool) {
 
 func (s *Server) handleLaunch(w http.ResponseWriter, r *http.Request) {
 	var req ExecRequestDTO
-	if err := decode(r, &req); err != nil {
-		writeErr(w, http.StatusBadRequest, "bad_request", err.Error())
+	if !s.decodeBody(w, r, &req, s.maxBody) {
 		return
 	}
 	jobID, err := s.svc.Launch(r.Context(), r.PathValue("id"), core.ExecParams{
@@ -170,17 +182,35 @@ func (s *Server) handlePoll(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, JobStatusDTO{
-		State:    st.State,
-		ExitCode: st.ExitCode,
-		Stdout:   st.Stdout,
-		Stderr:   st.Stderr,
+		State:       st.State,
+		ExitCode:    st.ExitCode,
+		Stdout:      st.Stdout,
+		Stderr:      st.Stderr,
+		Truncated:   st.Truncated,
+		StdoutBytes: st.StdoutBytes,
+		StderrBytes: st.StderrBytes,
 	})
+}
+
+// handleTerminalTicket mints a short-lived, single-use ticket bound to a
+// sandbox that authWS accepts on the terminal WebSocket — so browser clients
+// never put the long-lived bearer token in the URL / page source / proxy logs.
+func (s *Server) handleTerminalTicket(w http.ResponseWriter, r *http.Request) {
+	var req TerminalTicketRequest
+	if !s.decodeBody(w, r, &req, s.maxBody) {
+		return
+	}
+	if req.Sandbox == "" {
+		writeErr(w, http.StatusBadRequest, "invalid_params", "sandbox is required")
+		return
+	}
+	tok, exp := s.svc.MintTerminalTicket(req.Sandbox)
+	writeJSON(w, http.StatusCreated, TerminalTicketResponse{Ticket: tok, ExpiresAt: exp.Format(time.RFC3339)})
 }
 
 func (s *Server) handleReadFile(w http.ResponseWriter, r *http.Request) {
 	var req FileReadRequest
-	if err := decode(r, &req); err != nil {
-		writeErr(w, http.StatusBadRequest, "bad_request", err.Error())
+	if !s.decodeBody(w, r, &req, s.maxBody) {
 		return
 	}
 	b, err := s.svc.ReadFile(r.Context(), r.PathValue("id"), req.Path, req.Cwd)
@@ -193,8 +223,7 @@ func (s *Server) handleReadFile(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleWriteFile(w http.ResponseWriter, r *http.Request) {
 	var req FileWriteRequest
-	if err := decode(r, &req); err != nil {
-		writeErr(w, http.StatusBadRequest, "bad_request", err.Error())
+	if !s.decodeBody(w, r, &req, s.maxFile) {
 		return
 	}
 	content, err := base64.StdEncoding.DecodeString(req.ContentB64)
@@ -235,9 +264,16 @@ func rfc3339(t time.Time) string {
 }
 
 func notFoundOr(w http.ResponseWriter, err error) {
-	if errors.Is(err, core.ErrNotFound) {
+	switch {
+	case errors.Is(err, core.ErrNotFound):
 		writeErr(w, http.StatusNotFound, "not_found", err.Error())
-		return
+	case errors.Is(err, core.ErrInvalidParams):
+		writeErr(w, http.StatusBadRequest, "invalid_params", err.Error())
+	case errors.Is(err, core.ErrForbidden):
+		writeErr(w, http.StatusForbidden, "forbidden", err.Error())
+	case errors.Is(err, core.ErrCapacity):
+		writeErr(w, http.StatusInsufficientStorage, "capacity", err.Error())
+	default:
+		writeErr(w, http.StatusInternalServerError, "error", err.Error())
 	}
-	writeErr(w, http.StatusInternalServerError, "error", err.Error())
 }

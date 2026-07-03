@@ -600,7 +600,7 @@ func ImagesPage(rows []ImageRow) templ.Component {
 									Size:    button.SizeIcon,
 									Class:   "size-8 text-destructive",
 									Attributes: templ.Attributes{
-										"data-on:click": "confirm('Remove image " + im.Reference + "?') && @delete('/dashboard/api/images?ref=" + im.Reference + "')",
+										"data-on:click": "confirm('Remove this image?') && @delete(" + jsExpr("/dashboard/api/images?ref="+queryVal(im.Reference)) + ")",
 									},
 								}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var30), templ_7745c5c3_Buffer)
 								if templ_7745c5c3_Err != nil {

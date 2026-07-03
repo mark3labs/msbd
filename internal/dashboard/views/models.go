@@ -1,6 +1,10 @@
 package views
 
-import "fmt"
+import (
+	"encoding/json"
+	"fmt"
+	"net/url"
+)
 
 // View models. Handlers map core.* types into these so the templ views stay
 // free of any business/SDK types and can carry pre-formatted, display-ready
@@ -83,6 +87,22 @@ func ShortDigest(d string) string {
 }
 
 func itoa(n int) string { return fmt.Sprintf("%d", n) }
+
+// jsExpr returns s as a JSON string literal safe to embed INSIDE a Datastar /
+// JavaScript expression attribute. templ HTML-escapes attribute values, but the
+// browser decodes entities before Datastar evaluates the attribute as JS, so a
+// raw ' or } in user/guest-controlled data would otherwise break out and
+// execute. JSON escaping is also valid JS-string escaping, closing that hole.
+func jsExpr(s string) string {
+	b, _ := json.Marshal(s)
+	return string(b)
+}
+
+// pathSeg escapes a value for safe use as a URL path segment.
+func pathSeg(s string) string { return url.PathEscape(s) }
+
+// queryVal escapes a value for safe use as a URL query value.
+func queryVal(s string) string { return url.QueryEscape(s) }
 
 // stateBadge maps a sandbox state to a templui badge variant string.
 func stateBadge(state string) string {

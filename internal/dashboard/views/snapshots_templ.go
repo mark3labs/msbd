@@ -566,7 +566,7 @@ func SnapshotsPage(rows []SnapshotRow) templ.Component {
 									Size:    button.SizeIcon,
 									Class:   "size-8 text-destructive",
 									Attributes: templ.Attributes{
-										"data-on:click": "confirm('Delete snapshot?') && @delete('/dashboard/api/snapshots/" + s.Digest + "')",
+										"data-on:click": "confirm('Delete this snapshot?') && @delete(" + jsExpr("/dashboard/api/snapshots/"+pathSeg(s.Digest)) + ")",
 									},
 								}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var29), templ_7745c5c3_Buffer)
 								if templ_7745c5c3_Err != nil {
