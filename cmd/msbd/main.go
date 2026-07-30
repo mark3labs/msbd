@@ -97,6 +97,9 @@ type serveOptions struct {
 	defaultImage      string
 	maxSandboxes      int
 	createTimeout     time.Duration
+	pullTimeout       time.Duration
+	jobMaxBytes       int
+	jobTTL            time.Duration
 	shutdownTimeout   time.Duration
 	hostPaths         []string
 	logLevel          string
@@ -139,6 +142,14 @@ interrupted (Ctrl-C / SIGTERM trigger a graceful drain).`,
 	f.DurationVar(&o.createTimeout, "create-timeout",
 		time.Duration(envInt("MSBD_CREATE_TIMEOUT_SECS", 300))*time.Second,
 		"Sandbox boot deadline, covers cold OCI pulls ($MSBD_CREATE_TIMEOUT_SECS)")
+	f.DurationVar(&o.pullTimeout, "pull-timeout",
+		time.Duration(envInt("MSBD_PULL_TIMEOUT_SECS", 900))*time.Second,
+		"Standalone image-pull deadline (POST /v1/images/pull); larger than create ($MSBD_PULL_TIMEOUT_SECS)")
+	f.IntVar(&o.jobMaxBytes, "job-max-bytes", envInt("MSBD_JOB_MAX_BYTES", 0),
+		"Per-stream cap on async job stdout/stderr ring buffers; 0 = built-in default (1 MiB) ($MSBD_JOB_MAX_BYTES)")
+	f.DurationVar(&o.jobTTL, "job-ttl",
+		time.Duration(envInt("MSBD_JOB_TTL_SECS", 0))*time.Second,
+		"Retention for a finished job's output before eviction; 0 = built-in default (15m) ($MSBD_JOB_TTL_SECS)")
 	f.DurationVar(&o.shutdownTimeout, "shutdown-timeout",
 		time.Duration(envInt("MSBD_SHUTDOWN_TIMEOUT_SECS", 60))*time.Second,
 		"Graceful-drain deadline on SIGTERM/Ctrl-C ($MSBD_SHUTDOWN_TIMEOUT_SECS)")
@@ -178,6 +189,15 @@ func runServe(ctx context.Context, o *serveOptions) error {
 	}
 	if o.createTimeout <= 0 {
 		return fmt.Errorf("invalid --create-timeout %s (must be > 0)", o.createTimeout)
+	}
+	if o.pullTimeout <= 0 {
+		return fmt.Errorf("invalid --pull-timeout %s (must be > 0)", o.pullTimeout)
+	}
+	if o.jobMaxBytes < 0 {
+		return fmt.Errorf("invalid --job-max-bytes %d (must be >= 0)", o.jobMaxBytes)
+	}
+	if o.jobTTL < 0 {
+		return fmt.Errorf("invalid --job-ttl %s (must be >= 0)", o.jobTTL)
 	}
 	if o.shutdownTimeout <= 0 {
 		return fmt.Errorf("invalid --shutdown-timeout %s (must be > 0)", o.shutdownTimeout)
@@ -221,6 +241,9 @@ func runServe(ctx context.Context, o *serveOptions) error {
 		DefaultImage:  o.defaultImage,
 		MaxSandboxes:  o.maxSandboxes,
 		CreateTimeout: o.createTimeout,
+		PullTimeout:   o.pullTimeout,
+		JobMaxBytes:   o.jobMaxBytes,
+		JobTTL:        o.jobTTL,
 		HostPaths:     o.hostPaths,
 	})
 	defer svc.Close()

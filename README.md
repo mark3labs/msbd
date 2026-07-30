@@ -167,6 +167,9 @@ All via environment variables.
 | `MSBD_DEFAULT_IMAGE` | `microsandbox/python` | OCI image used when create omits `image`. |
 | `MSBD_MAX_SANDBOXES` | `0` (unlimited) | Hard cap on concurrent sandboxes; rejects new creates above this with 507 `capacity`. Admission is serialized (no overshoot). |
 | `MSBD_CREATE_TIMEOUT_SECS` | `300` | Boot deadline (covers cold OCI pulls). |
+| `MSBD_PULL_TIMEOUT_SECS` | `900` | Deadline for a standalone image pull (`POST /v1/images/pull`); larger than create since a cold pull of a big image can outlast a boot. |
+| `MSBD_JOB_MAX_BYTES` | `0` (1 MiB) | Per-stream cap on an async job's stdout/stderr ring buffer. `0` uses the built-in 1 MiB default; older output is dropped once the cap is hit. |
+| `MSBD_JOB_TTL_SECS` | `0` (15 min) | How long a finished job's output is retained before the janitor evicts it. `0` uses the built-in 15-minute default. |
 | `MSBD_SHUTDOWN_TIMEOUT_SECS` | `60` | Graceful-drain deadline on SIGTERM/Ctrl-C. A drain overrun warns and exits 0 (no spurious restart failure). |
 | `MSBD_HOST_PATHS` | *(empty)* | Comma-separated allowlist of host path prefixes the host-transfer endpoints (`copy-from-host`, `copy-to-host`, snapshot `export`/`import`) may touch. **Empty = all host transfers denied (403).** Symlinks are resolved to block escapes. |
 | `MSBD_LOG_LEVEL` | `info` | Log verbosity: `debug`, `info`, `warn`, `error`. Invalid values fail fast. Output is colorized on a TTY, plain otherwise. |

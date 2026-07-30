@@ -488,7 +488,11 @@ func (s *Service) Run(ctx context.Context, id string, p ExecParams) (*ExecResult
 	})
 }
 
-func runShell(ctx context.Context, sb *msb.Sandbox, p ExecParams) (*ExecResult, error) {
+// buildExecOptions translates the shared exec knobs (cwd/env/timeout) into SDK
+// options. It is the single source of truth for that mapping, shared by the
+// synchronous exec path (runShell) and the async job path (launch, which
+// appends its own stdin-pipe option on top).
+func buildExecOptions(p ExecParams) []msb.ExecOption {
 	var execOpts []msb.ExecOption
 	if strings.TrimSpace(p.Cwd) != "" {
 		execOpts = append(execOpts, msb.WithExecCwd(p.Cwd))
@@ -499,7 +503,11 @@ func runShell(ctx context.Context, sb *msb.Sandbox, p ExecParams) (*ExecResult, 
 	if p.Timeout > 0 {
 		execOpts = append(execOpts, msb.WithExecTimeout(p.Timeout))
 	}
-	out, err := sb.Shell(ctx, p.Cmd, execOpts...)
+	return execOpts
+}
+
+func runShell(ctx context.Context, sb *msb.Sandbox, p ExecParams) (*ExecResult, error) {
+	out, err := sb.Shell(ctx, p.Cmd, buildExecOptions(p)...)
 	if err != nil {
 		return nil, fmt.Errorf("exec: %w", err)
 	}
@@ -639,10 +647,14 @@ func (s *Service) instanceFromHandle(id string, h *msb.SandboxHandle) *Instance 
 	return inst
 }
 
-func newName() string {
-	var b [8]byte
-	_, _ = rand.Read(b[:])
-	return "sbx_" + hex.EncodeToString(b[:])
+func newName() string { return randID("sbx_", 8) }
+
+// randID returns prefix followed by n cryptographically-random bytes rendered as
+// hex. It's the shared minter behind sandbox/job/snapshot ids.
+func randID(prefix string, n int) string {
+	b := make([]byte, n)
+	_, _ = rand.Read(b)
+	return prefix + hex.EncodeToString(b)
 }
 
 func defaultWorkdir(wd string) string {

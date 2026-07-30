@@ -1,12 +1,16 @@
 package core
 
 // fs.go — native filesystem operations beyond read/write. Every call routes
-// through Registry.resolve so reconnect + transparent resume work uniformly.
+// through withSandbox (→ Registry.resolve) so reconnect + transparent resume
+// work uniformly, and a box that idle-stops between resolve and the op is
+// re-booted and the op retried once — the same resilience read/write get.
 
 import (
 	"context"
 	"fmt"
 	"time"
+
+	msb "github.com/superradcompany/microsandbox/sdk/go"
 )
 
 // FileEntry is one directory listing entry.
@@ -27,94 +31,84 @@ type FileStat struct {
 }
 
 func (s *Service) ListDir(ctx context.Context, id, path, cwd string) ([]FileEntry, error) {
-	sb, err := s.reg.resolve(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-	entries, err := sb.FS().List(ctx, resolvePath(path, cwd))
-	if err != nil {
-		return nil, fmt.Errorf("list %s: %w", path, err)
-	}
-	out := make([]FileEntry, 0, len(entries))
-	for _, e := range entries {
-		out = append(out, FileEntry{Path: e.Path, Kind: string(e.Kind), Size: e.Size, Mode: e.Mode})
-	}
-	return out, nil
+	return withSandbox(ctx, s, id, func(sb *msb.Sandbox) ([]FileEntry, error) {
+		entries, err := sb.FS().List(ctx, resolvePath(path, cwd))
+		if err != nil {
+			return nil, fmt.Errorf("list %s: %w", path, err)
+		}
+		out := make([]FileEntry, 0, len(entries))
+		for _, e := range entries {
+			out = append(out, FileEntry{Path: e.Path, Kind: string(e.Kind), Size: e.Size, Mode: e.Mode})
+		}
+		return out, nil
+	})
 }
 
 func (s *Service) Stat(ctx context.Context, id, path, cwd string) (*FileStat, error) {
-	sb, err := s.reg.resolve(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-	st, err := sb.FS().Stat(ctx, resolvePath(path, cwd))
-	if err != nil {
-		return nil, fmt.Errorf("stat %s: %w", path, err)
-	}
-	return &FileStat{Path: st.Path, Size: st.Size, Mode: st.Mode, ModTime: st.ModTime, IsDir: st.IsDir}, nil
+	return withSandbox(ctx, s, id, func(sb *msb.Sandbox) (*FileStat, error) {
+		st, err := sb.FS().Stat(ctx, resolvePath(path, cwd))
+		if err != nil {
+			return nil, fmt.Errorf("stat %s: %w", path, err)
+		}
+		return &FileStat{Path: st.Path, Size: st.Size, Mode: st.Mode, ModTime: st.ModTime, IsDir: st.IsDir}, nil
+	})
 }
 
 func (s *Service) Exists(ctx context.Context, id, path, cwd string) (bool, error) {
-	sb, err := s.reg.resolve(ctx, id)
-	if err != nil {
-		return false, err
-	}
-	ok, err := sb.FS().Exists(ctx, resolvePath(path, cwd))
-	if err != nil {
-		return false, fmt.Errorf("exists %s: %w", path, err)
-	}
-	return ok, nil
+	return withSandbox(ctx, s, id, func(sb *msb.Sandbox) (bool, error) {
+		ok, err := sb.FS().Exists(ctx, resolvePath(path, cwd))
+		if err != nil {
+			return false, fmt.Errorf("exists %s: %w", path, err)
+		}
+		return ok, nil
+	})
 }
 
 func (s *Service) Mkdir(ctx context.Context, id, path, cwd string) error {
-	sb, err := s.reg.resolve(ctx, id)
-	if err != nil {
-		return err
-	}
-	if err := sb.FS().Mkdir(ctx, resolvePath(path, cwd)); err != nil {
-		return fmt.Errorf("mkdir %s: %w", path, err)
-	}
-	return nil
+	_, err := withSandbox(ctx, s, id, func(sb *msb.Sandbox) (struct{}, error) {
+		if err := sb.FS().Mkdir(ctx, resolvePath(path, cwd)); err != nil {
+			return struct{}{}, fmt.Errorf("mkdir %s: %w", path, err)
+		}
+		return struct{}{}, nil
+	})
+	return err
 }
 
 func (s *Service) Remove(ctx context.Context, id, path, cwd string, recursive bool) error {
-	sb, err := s.reg.resolve(ctx, id)
-	if err != nil {
-		return err
-	}
-	dest := resolvePath(path, cwd)
-	if recursive {
-		if err := sb.FS().RemoveDir(ctx, dest); err != nil {
-			return fmt.Errorf("remove %s: %w", path, err)
+	_, err := withSandbox(ctx, s, id, func(sb *msb.Sandbox) (struct{}, error) {
+		dest := resolvePath(path, cwd)
+		if recursive {
+			if err := sb.FS().RemoveDir(ctx, dest); err != nil {
+				return struct{}{}, fmt.Errorf("remove %s: %w", path, err)
+			}
+			return struct{}{}, nil
 		}
-		return nil
-	}
-	if err := sb.FS().Remove(ctx, dest); err != nil {
-		return fmt.Errorf("remove %s: %w", path, err)
-	}
-	return nil
+		if err := sb.FS().Remove(ctx, dest); err != nil {
+			return struct{}{}, fmt.Errorf("remove %s: %w", path, err)
+		}
+		return struct{}{}, nil
+	})
+	return err
 }
 
 func (s *Service) Copy(ctx context.Context, id, src, dst, cwd string) error {
-	sb, err := s.reg.resolve(ctx, id)
-	if err != nil {
-		return err
-	}
-	if err := sb.FS().Copy(ctx, resolvePath(src, cwd), resolvePath(dst, cwd)); err != nil {
-		return fmt.Errorf("copy %s -> %s: %w", src, dst, err)
-	}
-	return nil
+	_, err := withSandbox(ctx, s, id, func(sb *msb.Sandbox) (struct{}, error) {
+		if err := sb.FS().Copy(ctx, resolvePath(src, cwd), resolvePath(dst, cwd)); err != nil {
+			return struct{}{}, fmt.Errorf("copy %s -> %s: %w", src, dst, err)
+		}
+		return struct{}{}, nil
+	})
+	return err
 }
 
 func (s *Service) Rename(ctx context.Context, id, src, dst, cwd string) error {
-	sb, err := s.reg.resolve(ctx, id)
-	if err != nil {
-		return err
-	}
-	if err := sb.FS().Rename(ctx, resolvePath(src, cwd), resolvePath(dst, cwd)); err != nil {
-		return fmt.Errorf("rename %s -> %s: %w", src, dst, err)
-	}
-	return nil
+	_, err := withSandbox(ctx, s, id, func(sb *msb.Sandbox) (struct{}, error) {
+		if err := sb.FS().Rename(ctx, resolvePath(src, cwd), resolvePath(dst, cwd)); err != nil {
+			return struct{}{}, fmt.Errorf("rename %s -> %s: %w", src, dst, err)
+		}
+		return struct{}{}, nil
+	})
+	return err
 }
 
 // CopyFromHost copies an allowlisted host path into the sandbox. The host path
@@ -125,14 +119,13 @@ func (s *Service) CopyFromHost(ctx context.Context, id, hostPath, guestPath, cwd
 	if err != nil {
 		return err
 	}
-	sb, err := s.reg.resolve(ctx, id)
-	if err != nil {
-		return err
-	}
-	if err := sb.FS().CopyFromHost(ctx, safe, resolvePath(guestPath, cwd)); err != nil {
-		return fmt.Errorf("copy from host %s -> %s: %w", hostPath, guestPath, err)
-	}
-	return nil
+	_, err = withSandbox(ctx, s, id, func(sb *msb.Sandbox) (struct{}, error) {
+		if err := sb.FS().CopyFromHost(ctx, safe, resolvePath(guestPath, cwd)); err != nil {
+			return struct{}{}, fmt.Errorf("copy from host %s -> %s: %w", hostPath, guestPath, err)
+		}
+		return struct{}{}, nil
+	})
+	return err
 }
 
 // CopyToHost copies a sandbox path to an allowlisted host destination. The host
@@ -142,12 +135,11 @@ func (s *Service) CopyToHost(ctx context.Context, id, guestPath, hostPath, cwd s
 	if err != nil {
 		return err
 	}
-	sb, err := s.reg.resolve(ctx, id)
-	if err != nil {
-		return err
-	}
-	if err := sb.FS().CopyToHost(ctx, resolvePath(guestPath, cwd), safe); err != nil {
-		return fmt.Errorf("copy to host %s -> %s: %w", guestPath, hostPath, err)
-	}
-	return nil
+	_, err = withSandbox(ctx, s, id, func(sb *msb.Sandbox) (struct{}, error) {
+		if err := sb.FS().CopyToHost(ctx, resolvePath(guestPath, cwd), safe); err != nil {
+			return struct{}{}, fmt.Errorf("copy to host %s -> %s: %w", guestPath, hostPath, err)
+		}
+		return struct{}{}, nil
+	})
+	return err
 }

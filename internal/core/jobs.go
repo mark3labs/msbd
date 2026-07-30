@@ -18,8 +18,6 @@ package core
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"fmt"
 	"strings"
 	"sync"
@@ -204,16 +202,7 @@ func (r *JobRegistry) ActiveJobs() int {
 func key(sandboxID, jobID string) string { return sandboxID + "\x00" + jobID }
 
 func (r *JobRegistry) launch(ctx context.Context, sandboxID string, sb *msb.Sandbox, p ExecParams) (string, error) {
-	var execOpts []msb.ExecOption
-	if strings.TrimSpace(p.Cwd) != "" {
-		execOpts = append(execOpts, msb.WithExecCwd(p.Cwd))
-	}
-	if len(p.Env) > 0 {
-		execOpts = append(execOpts, msb.WithExecEnv(p.Env))
-	}
-	if p.Timeout > 0 {
-		execOpts = append(execOpts, msb.WithExecTimeout(p.Timeout))
-	}
+	execOpts := buildExecOptions(p)
 	if p.Stdin {
 		execOpts = append(execOpts, msb.WithExecStdinPipe())
 	}
@@ -293,10 +282,15 @@ func drain(ctx context.Context, j *job) {
 	}
 }
 
-func (r *JobRegistry) poll(sandboxID, jobID string) (*JobStatus, error) {
+// lookup returns the tracked job for (sandboxID, jobID), or nil if unknown.
+func (r *JobRegistry) lookup(sandboxID, jobID string) *job {
 	r.mu.RLock()
-	j := r.jobs[key(sandboxID, jobID)]
-	r.mu.RUnlock()
+	defer r.mu.RUnlock()
+	return r.jobs[key(sandboxID, jobID)]
+}
+
+func (r *JobRegistry) poll(sandboxID, jobID string) (*JobStatus, error) {
+	j := r.lookup(sandboxID, jobID)
 	if j == nil {
 		return &JobStatus{State: JobGone}, nil
 	}
@@ -306,9 +300,7 @@ func (r *JobRegistry) poll(sandboxID, jobID string) (*JobStatus, error) {
 // writeStdin writes bytes to a running job's stdin pipe. Returns ErrNotFound if
 // the job is unknown, or an error if the job was not launched with a stdin pipe.
 func (r *JobRegistry) writeStdin(sandboxID, jobID string, data []byte) error {
-	r.mu.RLock()
-	j := r.jobs[key(sandboxID, jobID)]
-	r.mu.RUnlock()
+	j := r.lookup(sandboxID, jobID)
 	if j == nil {
 		return ErrNotFound
 	}
@@ -323,9 +315,7 @@ func (r *JobRegistry) writeStdin(sandboxID, jobID string, data []byte) error {
 
 // closeStdin closes a running job's stdin pipe (signals EOF to the process).
 func (r *JobRegistry) closeStdin(sandboxID, jobID string) error {
-	r.mu.RLock()
-	j := r.jobs[key(sandboxID, jobID)]
-	r.mu.RUnlock()
+	j := r.lookup(sandboxID, jobID)
 	if j == nil {
 		return ErrNotFound
 	}
@@ -353,9 +343,7 @@ func (r *JobRegistry) signal(ctx context.Context, sandboxID, jobID string, sig i
 	if sig <= 0 {
 		return r.cancelJob(sandboxID, jobID)
 	}
-	r.mu.RLock()
-	j := r.jobs[key(sandboxID, jobID)]
-	r.mu.RUnlock()
+	j := r.lookup(sandboxID, jobID)
 	if j == nil {
 		return ErrNotFound
 	}
@@ -382,9 +370,7 @@ func (r *JobRegistry) signal(ctx context.Context, sandboxID, jobID string, sig i
 // The job is marked JobKilled so callers can distinguish "the user stopped it"
 // from "it exited 0" — the runtime reports a killed process as a plain exit 0.
 func (r *JobRegistry) cancelJob(sandboxID, jobID string) error {
-	r.mu.RLock()
-	j := r.jobs[key(sandboxID, jobID)]
-	r.mu.RUnlock()
+	j := r.lookup(sandboxID, jobID)
 	if j == nil {
 		return ErrNotFound
 	}
@@ -443,8 +429,4 @@ func (r *JobRegistry) dropSandbox(sandboxID string) {
 	}
 }
 
-func newJobID() string {
-	var b [8]byte
-	_, _ = rand.Read(b[:])
-	return "job_" + hex.EncodeToString(b[:])
-}
+func newJobID() string { return randID("job_", 8) }

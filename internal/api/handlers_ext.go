@@ -565,7 +565,7 @@ func (s *Server) handleSnapshotCreate(w http.ResponseWriter, r *http.Request) {
 		RecordIntegrity: req.RecordIntegrity,
 	})
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "create_failed", err.Error())
+		notFoundOr(w, err)
 		return
 	}
 	writeJSON(w, http.StatusCreated, toSnapshotDTO(snap))

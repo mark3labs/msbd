@@ -108,12 +108,22 @@ func (s *Service) RemoveVolume(ctx context.Context, name string) error {
 // Volume file IO
 // ---------------------------------------------------------------------------
 
-func (s *Service) VolumeReadFile(ctx context.Context, name, relPath string) ([]byte, error) {
+// volumeFS resolves a named volume's filesystem, mapping a missing volume to
+// ErrNotFound. It's the shared prefix for every volume file-IO method.
+func volumeFS(ctx context.Context, name string) (*msb.VolumeFs, error) {
 	h, err := msb.GetVolume(ctx, name)
 	if err != nil {
 		return nil, ErrNotFound
 	}
-	b, err := h.FS().Read(relPath)
+	return h.FS(), nil
+}
+
+func (s *Service) VolumeReadFile(ctx context.Context, name, relPath string) ([]byte, error) {
+	fs, err := volumeFS(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+	b, err := fs.Read(relPath)
 	if err != nil {
 		return nil, fmt.Errorf("volume read %s: %w", relPath, err)
 	}
@@ -121,50 +131,50 @@ func (s *Service) VolumeReadFile(ctx context.Context, name, relPath string) ([]b
 }
 
 func (s *Service) VolumeWriteFile(ctx context.Context, name, relPath string, content []byte) error {
-	h, err := msb.GetVolume(ctx, name)
+	fs, err := volumeFS(ctx, name)
 	if err != nil {
-		return ErrNotFound
+		return err
 	}
-	if err := h.FS().Write(relPath, content); err != nil {
+	if err := fs.Write(relPath, content); err != nil {
 		return fmt.Errorf("volume write %s: %w", relPath, err)
 	}
 	return nil
 }
 
 func (s *Service) VolumeMkdir(ctx context.Context, name, relPath string) error {
-	h, err := msb.GetVolume(ctx, name)
+	fs, err := volumeFS(ctx, name)
 	if err != nil {
-		return ErrNotFound
+		return err
 	}
-	if err := h.FS().Mkdir(relPath); err != nil {
+	if err := fs.Mkdir(relPath); err != nil {
 		return fmt.Errorf("volume mkdir %s: %w", relPath, err)
 	}
 	return nil
 }
 
 func (s *Service) VolumeRemove(ctx context.Context, name, relPath string, recursive bool) error {
-	h, err := msb.GetVolume(ctx, name)
+	fs, err := volumeFS(ctx, name)
 	if err != nil {
-		return ErrNotFound
+		return err
 	}
 	if recursive {
-		if err := h.FS().RemoveAll(relPath); err != nil {
+		if err := fs.RemoveAll(relPath); err != nil {
 			return fmt.Errorf("volume remove %s: %w", relPath, err)
 		}
 		return nil
 	}
-	if err := h.FS().Remove(relPath); err != nil {
+	if err := fs.Remove(relPath); err != nil {
 		return fmt.Errorf("volume remove %s: %w", relPath, err)
 	}
 	return nil
 }
 
 func (s *Service) VolumeExists(ctx context.Context, name, relPath string) (bool, error) {
-	h, err := msb.GetVolume(ctx, name)
+	fs, err := volumeFS(ctx, name)
 	if err != nil {
-		return false, ErrNotFound
+		return false, err
 	}
-	ok, err := h.FS().Exists(relPath)
+	ok, err := fs.Exists(relPath)
 	if err != nil {
 		return false, fmt.Errorf("volume exists %s: %w", relPath, err)
 	}

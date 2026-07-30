@@ -5,8 +5,6 @@ package core
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"fmt"
 	"strings"
 	"time"
@@ -17,11 +15,7 @@ import (
 // newSnapshotName mints a server-side name for an unnamed snapshot. SDK 0.6.7
 // requires a name; msbd's API does not, so we supply one that cannot collide
 // with a user-chosen name or another generated one.
-func newSnapshotName() string {
-	var b [8]byte
-	_, _ = rand.Read(b[:])
-	return "snap_" + hex.EncodeToString(b[:])
-}
+func newSnapshotName() string { return randID("snap_", 8) }
 
 // Snapshot is the provider-neutral snapshot summary.
 type Snapshot struct {
@@ -83,6 +77,9 @@ func derefStr(s *string) string {
 // wants a checkpoint), so generate a stable, collision-resistant name in that
 // case rather than pushing the new constraint onto every client.
 func (s *Service) CreateSnapshot(ctx context.Context, p SnapshotCreateParams) (*Snapshot, error) {
+	if strings.TrimSpace(p.SourceSandbox) == "" {
+		return nil, fmt.Errorf("%w: source_sandbox is required", ErrInvalidParams)
+	}
 	name := strings.TrimSpace(p.Name)
 	if name == "" {
 		name = newSnapshotName()
