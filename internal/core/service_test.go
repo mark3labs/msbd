@@ -16,17 +16,27 @@ func applyOptions(opts []msb.SandboxOption) msb.SandboxConfig {
 	return cfg
 }
 
+// rootDiskSizeMiB reads the managed root-disk size the options wired through.
+// SDK 0.6.7 moved this out of the flat SandboxConfig.OCIUpperSizeMiB field and
+// into RootDisk, so asserting the old field would silently pass on zero.
+func rootDiskSizeMiB(cfg msb.SandboxConfig) uint32 {
+	if cfg.RootDisk == nil {
+		return 0
+	}
+	return cfg.RootDisk.SizeMiB
+}
+
 // TestBuildCreateOptionsDiskGB is the regression test for issue #1:
 // resources.disk_gb must be honored and converted from GiB to MiB before being
-// handed to the SDK's WithOCIUpperSize option.
+// handed to the SDK's managed root-disk option.
 func TestBuildCreateOptionsDiskGB(t *testing.T) {
 	opts, err := buildCreateOptions(CreateParams{DiskGB: 32}, "microsandbox/python")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	cfg := applyOptions(opts)
-	if got, want := cfg.OCIUpperSizeMiB, uint32(32*1024); got != want {
-		t.Fatalf("OCIUpperSizeMiB = %d, want %d (32 GiB -> MiB)", got, want)
+	if got, want := rootDiskSizeMiB(cfg), uint32(32*1024); got != want {
+		t.Fatalf("root disk size = %d MiB, want %d (32 GiB -> MiB)", got, want)
 	}
 }
 
@@ -39,8 +49,8 @@ func TestBuildCreateOptionsNoDiskGB(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	cfg := applyOptions(opts)
-	if cfg.OCIUpperSizeMiB != 0 {
-		t.Fatalf("OCIUpperSizeMiB = %d, want 0 when disk_gb is unset", cfg.OCIUpperSizeMiB)
+	if rootDiskSizeMiB(cfg) != 0 {
+		t.Fatalf("root disk size = %d MiB, want 0 when disk_gb is unset", rootDiskSizeMiB(cfg))
 	}
 }
 
@@ -70,8 +80,8 @@ func TestBuildCreateOptionsDiskGBMax(t *testing.T) {
 		t.Fatalf("unexpected error at max disk_gb: %v", err)
 	}
 	cfg := applyOptions(opts)
-	if got, want := cfg.OCIUpperSizeMiB, uint32(maxDiskGB)*1024; got != want {
-		t.Fatalf("OCIUpperSizeMiB = %d, want %d", got, want)
+	if got, want := rootDiskSizeMiB(cfg), uint32(maxDiskGB)*1024; got != want {
+		t.Fatalf("root disk size = %d MiB, want %d", got, want)
 	}
 }
 
@@ -89,8 +99,8 @@ func TestBuildCreateOptionsResources(t *testing.T) {
 	if cfg.MemoryMiB != 1024 {
 		t.Errorf("MemoryMiB = %d, want 1024", cfg.MemoryMiB)
 	}
-	if cfg.OCIUpperSizeMiB != 8*1024 {
-		t.Errorf("OCIUpperSizeMiB = %d, want %d", cfg.OCIUpperSizeMiB, 8*1024)
+	if rootDiskSizeMiB(cfg) != 8*1024 {
+		t.Errorf("root disk size = %d MiB, want %d", rootDiskSizeMiB(cfg), 8*1024)
 	}
 	if cfg.Image != "img" {
 		t.Errorf("Image = %q, want %q", cfg.Image, "img")

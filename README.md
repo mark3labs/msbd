@@ -189,6 +189,20 @@ MSBD_DASHBOARD_USER=admin MSBD_DASHBOARD_PASS=s3cret msbd serve
 # → open http://localhost:8099/dashboard
 ```
 
+Every section is a **real, bookmarkable URL** — `/dashboard` (overview), `/dashboard/sandboxes`, `/dashboard/sandboxes/{id}`, `/dashboard/volumes`, `/dashboard/images`, `/dashboard/snapshots` — so refresh, browser back/forward and shared links all work. Datastar SSE is used for in-page updates only.
+
+| Page | What you get |
+|---|---|
+| **Overview** | Fleet counts by state, capacity headroom against `--max-sandboxes`, aggregate CPU/memory across running sandboxes, cache sizes, recent sandboxes. |
+| **Sandboxes** | Sortable + searchable table with state filters, live auto-refresh (pausable, and gated on tab visibility), per-row start/stop/terminal/snapshot/delete. |
+| **Sandbox detail** | Live header (state + uptime stream in), full lifecycle actions, and tabs for **Overview** (metadata + charted live metrics), **Run**, **Logs**, **Files** and an embedded **Terminal**. |
+| **Run** | Commands execute as async **jobs**: output streams in as it is produced, long commands are **cancellable**, and the last 25 commands are offered as autocomplete. |
+| **Logs** | Timestamped and source-coloured, with source/tail filters, search, wrap and follow toggles, jump-to-bottom, and a plain-text download. |
+| **Files** | A real browser: breadcrumb navigation, view/edit/save, upload, download, new folder, delete, and a hidden-files toggle. Binary files get a read-only hex preview. |
+| **Volumes / Images / Snapshots** | Searchable, sortable tables showing creation and last-used times. Images can be inspected (OCI config + layers), are flagged when a live sandbox uses them, and can seed a new sandbox in one click. Prune reports exactly what it reclaimed. |
+
+Other niceties: a **light/dark/system theme** toggle (persisted, no flash of the wrong palette), a **responsive** layout with a mobile nav drawer and horizontally scrollable tables, **styled confirmation dialogs** (never `window.confirm`), busy states on every mutating control so a double-click can't boot two sandboxes, sticky error toasts plus inline errors next to the control that failed, and keyboard/screen-reader support (skip link, `aria-label`s on icon-only controls, table captions, `aria-sort` on sorted columns).
+
 It is server-rendered with [templ](https://templ.guide) + [templui](https://templui.io) components, styled with Tailwind, and made reactive with [Datastar](https://data-star.dev) (SSE-driven DOM patching). Everything — the compiled CSS, the Datastar runtime, xterm.js and the component JavaScript — is **embedded in the binary** (`//go:embed`); there are no external assets to deploy. Auth is independent of `MSBD_API_KEY`: the API stays bearer-gated while the dashboard gets its own optional Basic auth. The terminal page never embeds the API key — it uses a short-lived, single-use ticket — and if you set an API key but no dashboard auth, msbd **refuses to mount the dashboard** (override with `MSBD_DASHBOARD_ALLOW_INSECURE=true`).
 
 
@@ -286,10 +300,11 @@ internal/core/volume.go       # named persistent volumes + volume file IO
 internal/core/image.go        # cached OCI image inventory
 internal/core/snapshot.go     # sandbox rootfs snapshots
 internal/core/registry.go     # live handle cache + workdir cache + reconcile
-internal/core/jobs.go         # async job registry (+ stdin/signal)
+internal/core/jobs.go         # async job registry (+ stdin/signal/cancel)
 internal/core/version.go      # SDK / runtime version helpers
-internal/dashboard/dashboard.go    # web UI: routes + optional Basic auth (Mount on the api mux)
-internal/dashboard/handlers_*.go   # Datastar SSE handlers (sandboxes, volumes, images, snapshots)
+internal/dashboard/dashboard.go    # web UI: page + SSE routes, optional Basic auth (Mount on the api mux)
+internal/dashboard/handlers.go     # page handlers (one real URL per section) + shared SSE helpers
+internal/dashboard/handlers_*.go   # Datastar SSE handlers (overview, sandboxes, files, volumes, images, snapshots)
 internal/dashboard/views/*.templ   # templ pages/fragments (templui components + Datastar attrs)
 internal/dashboard/components/      # vendored templui components (via `templui add`)
 internal/dashboard/assets/          # input.css + committed output.css, datastar/xterm, component JS (embedded)

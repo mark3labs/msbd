@@ -5,11 +5,23 @@ package core
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
+	"strings"
 	"time"
 
 	msb "github.com/superradcompany/microsandbox/sdk/go"
 )
+
+// newSnapshotName mints a server-side name for an unnamed snapshot. SDK 0.6.7
+// requires a name; msbd's API does not, so we supply one that cannot collide
+// with a user-chosen name or another generated one.
+func newSnapshotName() string {
+	var b [8]byte
+	_, _ = rand.Read(b[:])
+	return "snap_" + hex.EncodeToString(b[:])
+}
 
 // Snapshot is the provider-neutral snapshot summary.
 type Snapshot struct {
@@ -48,17 +60,37 @@ func snapshotFromHandle(h *msb.SnapshotHandle) Snapshot {
 		Name:         h.Name(),
 		ParentDigest: h.ParentDigest(),
 		ImageRef:     h.ImageRef(),
-		Format:       h.Format(),
+		Format:       derefStr(h.Format()),
 		SizeBytes:    h.SizeBytes(),
 		Path:         h.Path(),
 		CreatedAt:    h.CreatedAt(),
 	}
 }
 
+// derefStr flattens an optional SDK string into the plain one msbd's wire
+// contract uses (SDK 0.6.7 made several snapshot accessors return *string).
+func derefStr(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
+}
+
+// CreateSnapshot captures a sandbox's rootfs.
+//
+// SDK 0.6.7 moved the source sandbox into the options struct and made Name
+// REQUIRED. msbd's API has always allowed an unnamed snapshot (the caller just
+// wants a checkpoint), so generate a stable, collision-resistant name in that
+// case rather than pushing the new constraint onto every client.
 func (s *Service) CreateSnapshot(ctx context.Context, p SnapshotCreateParams) (*Snapshot, error) {
-	art, err := msb.Snapshot.Create(ctx, p.SourceSandbox, msb.SnapshotCreateOptions{
-		Name:            p.Name,
-		Path:            p.Path,
+	name := strings.TrimSpace(p.Name)
+	if name == "" {
+		name = newSnapshotName()
+	}
+	art, err := msb.Snapshot.Create(ctx, msb.SnapshotCreateOptions{
+		Name:            name,
+		FromSandbox:     p.SourceSandbox,
+		DestDir:         p.Path,
 		Labels:          p.Labels,
 		Force:           p.Force,
 		RecordIntegrity: p.RecordIntegrity,
@@ -66,18 +98,14 @@ func (s *Service) CreateSnapshot(ctx context.Context, p SnapshotCreateParams) (*
 	if err != nil {
 		return nil, fmt.Errorf("create snapshot: %w", err)
 	}
-	parent := art.Parent()
 	created, _ := time.Parse(time.RFC3339, art.CreatedAt())
-	var name *string
-	if n := art.SourceSandbox(); n != nil {
-		name = n
-	}
 	return &Snapshot{
 		Digest:       art.Digest(),
-		Name:         name,
-		ParentDigest: parent,
+		Name:         &name,
+		ParentDigest: art.Parent(),
 		ImageRef:     art.ImageRef(),
 		Format:       art.Format(),
+		SizeBytes:    art.SizeBytes(),
 		Path:         art.Path(),
 		CreatedAt:    created,
 	}, nil
@@ -137,12 +165,15 @@ func (s *Service) ReindexSnapshots(ctx context.Context, dir string) (uint32, err
 	return n, nil
 }
 
+// ExportSnapshot writes a snapshot to a portable archive on the msbd host.
+// SDK 0.6.7 renamed Export → Save; msbd keeps the export/import vocabulary
+// because it is part of the REST contract.
 func (s *Service) ExportSnapshot(ctx context.Context, nameOrPath, outPath string, withParents, withImage, plainTar bool) error {
 	safe, err := s.checkHostPath(outPath)
 	if err != nil {
 		return err
 	}
-	if err := msb.Snapshot.Export(ctx, nameOrPath, safe, msb.SnapshotExportOptions{
+	if err := msb.Snapshot.Save(ctx, nameOrPath, safe, msb.SnapshotSaveOptions{
 		WithParents: withParents,
 		WithImage:   withImage,
 		PlainTar:    plainTar,
@@ -152,6 +183,7 @@ func (s *Service) ExportSnapshot(ctx context.Context, nameOrPath, outPath string
 	return nil
 }
 
+// ImportSnapshot restores a snapshot archive. SDK 0.6.7 renamed Import → Load.
 func (s *Service) ImportSnapshot(ctx context.Context, archive, dest string) (*Snapshot, error) {
 	safeArchive, err := s.checkHostPath(archive)
 	if err != nil {
@@ -161,7 +193,7 @@ func (s *Service) ImportSnapshot(ctx context.Context, archive, dest string) (*Sn
 	if err != nil {
 		return nil, err
 	}
-	h, err := msb.Snapshot.Import(ctx, safeArchive, safeDest)
+	h, err := msb.Snapshot.Load(ctx, safeArchive, safeDest)
 	if err != nil {
 		return nil, fmt.Errorf("import snapshot: %w", err)
 	}

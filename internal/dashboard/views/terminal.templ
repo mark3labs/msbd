@@ -4,13 +4,17 @@ package views
 // WebSocket terminal endpoint. wsBase is the absolute ws(s):// URL for the
 // sandbox terminal WITHOUT query params; ticket is a short-lived, single-use
 // terminal ticket (NOT the long-lived API key) forwarded as ?ticket=.
-templ TerminalPage(id, wsBase, ticket string) {
+//
+// embed=true trims the chrome so the page can be iframed into the sandbox
+// detail page's Terminal tab.
+templ TerminalPage(id, wsBase, ticket string, embed bool) {
 	<!DOCTYPE html>
 	<html lang="en" class="dark">
 		<head>
 			<meta charset="UTF-8"/>
 			<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 			<title>{ id } — terminal</title>
+			<link rel="icon" href="/dashboard/assets/favicon.svg" type="image/svg+xml"/>
 			<link rel="stylesheet" href="/dashboard/assets/vendor/xterm.css"/>
 			<script src="/dashboard/assets/vendor/xterm.js"></script>
 			<script src="/dashboard/assets/vendor/addon-fit.js"></script>
@@ -27,13 +31,52 @@ templ TerminalPage(id, wsBase, ticket string) {
 					padding: 6px;
 					box-sizing: border-box;
 				}
-				#status {
+				#bar {
 					position: fixed;
-					top: 6px;
-					right: 10px;
-					font: 12px monospace;
-					color: #888;
+					top: 0;
+					right: 0;
+					left: 0;
 					z-index: 10;
+					display: flex;
+					align-items: center;
+					gap: 10px;
+					padding: 4px 10px;
+					font: 12px ui-monospace, monospace;
+					color: #999;
+					background: rgba(0, 0, 0, 0.65);
+				}
+				#bar.hidden {
+					display: none;
+				}
+				#bar .grow {
+					flex: 1;
+				}
+				#dot {
+					width: 8px;
+					height: 8px;
+					border-radius: 50%;
+					background: #666;
+				}
+				#dot.ok {
+					background: #34d399;
+				}
+				#dot.bad {
+					background: #ef4444;
+				}
+				#dot.wait {
+					background: #f59e0b;
+				}
+				#bar button {
+					font: 12px ui-monospace, monospace;
+					padding: 2px 8px;
+					color: #ddd;
+					background: #1a1a1a;
+					border: 1px solid #3a3a3a;
+					border-radius: 5px;
+					cursor: pointer;
+				}
+				#bar button:hover {
+					background: #262626;
 				}
 				#overlay {
 					position: fixed;
@@ -45,7 +88,7 @@ templ TerminalPage(id, wsBase, ticket string) {
 					z-index: 20;
 				}
 				#overlay .box {
-					font-family: monospace;
+					font-family: ui-monospace, monospace;
 					color: #ddd;
 					text-align: center;
 					padding: 24px 28px;
@@ -54,7 +97,7 @@ templ TerminalPage(id, wsBase, ticket string) {
 					background: #0a0a0a;
 				}
 				#overlay button {
-					font: 13px monospace;
+					font: 13px ui-monospace, monospace;
 					margin: 12px 6px 0;
 					padding: 6px 14px;
 					color: #eee;
@@ -69,25 +112,53 @@ templ TerminalPage(id, wsBase, ticket string) {
 			</style>
 		</head>
 		<body>
-			<div id="status">connecting…</div>
-			<div id="term" data-id={ id } data-ws={ wsBase } data-ticket={ ticket }></div>
+			<div id="bar" class={ templ.KV("hidden", embed) }>
+				<span id="dot" class="wait"></span>
+				<span id="status">connecting…</span>
+				<span class="grow"></span>
+				<button id="btn-smaller" type="button" title="Decrease font size" aria-label="Decrease font size">A−</button>
+				<button id="btn-bigger" type="button" title="Increase font size" aria-label="Increase font size">A+</button>
+				<button id="btn-clear" type="button" title="Clear the screen">Clear</button>
+				<a href="/dashboard" style="color:#8ab4ff;text-decoration:none">← dashboard</a>
+			</div>
+			<div
+				id="term"
+				data-id={ id }
+				data-ws={ wsBase }
+				data-ticket={ ticket }
+				if embed {
+					data-embed="1"
+					style="top:0"
+				} else {
+					style="top:26px"
+				}
+			></div>
 			<div id="overlay">
 				<div class="box">
 					<div id="overlay-msg">Session ended.</div>
 					<button id="btn-reconnect" type="button">Reconnect</button>
-					<button id="btn-back" type="button">Back to dashboard</button>
+					if !embed {
+						<button id="btn-back" type="button">Back to dashboard</button>
+					}
 				</div>
 			</div>
 			<script>
 				(function () {
 					const el = document.getElementById("term");
 					const status = document.getElementById("status");
+					const dot = document.getElementById("dot");
 					const overlay = document.getElementById("overlay");
 					const overlayMsg = document.getElementById("overlay-msg");
+
+					const FONT_KEY = "msbd-term-font";
+					let fontSize = parseInt(localStorage.getItem(FONT_KEY) || "13", 10);
+					if (!(fontSize >= 8 && fontSize <= 28)) fontSize = 13;
+
 					const term = new Terminal({
 						cursorBlink: true,
-						fontFamily: "monospace",
-						fontSize: 13,
+						fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+						fontSize: fontSize,
+						scrollback: 5000,
 						theme: { background: "#000000" },
 					});
 					const fit = new FitAddon.FitAddon();
@@ -99,6 +170,11 @@ templ TerminalPage(id, wsBase, ticket string) {
 					// fresh one to reconnect. Seeded with the server-minted ticket.
 					let ticket = el.dataset.ticket;
 					const BACK_TO = "/dashboard";
+
+					function setStatus(text, cls) {
+						status.textContent = text;
+						dot.className = cls || "";
+					}
 
 					function wsURL() {
 						const u = new URL(el.dataset.ws);
@@ -137,12 +213,12 @@ templ TerminalPage(id, wsBase, ticket string) {
 					function connect() {
 						overlay.style.display = "none";
 						cleanExit = false;
-						status.textContent = "connecting…";
+						setStatus("connecting…", "wait");
 						ws = new WebSocket(wsURL());
 						ws.binaryType = "arraybuffer";
 						ws.onopen = () => {
 							opened = true;
-							status.textContent = "connected";
+							setStatus("connected", "ok");
 							sendResize();
 						};
 						ws.onmessage = (ev) => {
@@ -151,7 +227,7 @@ templ TerminalPage(id, wsBase, ticket string) {
 									const msg = JSON.parse(ev.data);
 									if (msg.type === "exit") {
 										cleanExit = true;
-										status.textContent = "exited (" + msg.exit_code + ")";
+										setStatus("exited (" + msg.exit_code + ")", "bad");
 										showOverlay("Process exited (code " + msg.exit_code + ").");
 									}
 								} catch (e) {}
@@ -160,10 +236,12 @@ templ TerminalPage(id, wsBase, ticket string) {
 							term.write(new Uint8Array(ev.data));
 						};
 						ws.onclose = () => {
-							status.textContent = "disconnected";
-							// Scrollback + status are preserved; the user decides
-							// whether to reconnect (a fresh ticket is minted on click).
+							// A clean exit already set a more informative status
+							// ("exited (N)"); don't clobber it with "disconnected".
 							if (!cleanExit) {
+								setStatus("disconnected", "bad");
+								// Scrollback is preserved; the user decides whether to
+								// reconnect (a fresh ticket is minted on click).
 								showOverlay(
 									opened
 										? "Disconnected. The connection dropped."
@@ -172,7 +250,7 @@ templ TerminalPage(id, wsBase, ticket string) {
 							}
 						};
 						ws.onerror = () => {
-							status.textContent = "error";
+							setStatus("error", "bad");
 						};
 					}
 
@@ -186,14 +264,26 @@ templ TerminalPage(id, wsBase, ticket string) {
 						term.focus();
 					}
 
-					document
-						.getElementById("btn-reconnect")
-						.addEventListener("click", reconnect);
-					document
-						.getElementById("btn-back")
-						.addEventListener("click", () => {
+					function setFont(next) {
+						fontSize = Math.max(8, Math.min(28, next));
+						term.options.fontSize = fontSize;
+						try { localStorage.setItem(FONT_KEY, String(fontSize)); } catch (e) {}
+						refit();
+					}
+
+					document.getElementById("btn-reconnect").addEventListener("click", reconnect);
+					const back = document.getElementById("btn-back");
+					if (back) {
+						back.addEventListener("click", () => {
 							window.location.href = BACK_TO;
 						});
+					}
+					const bigger = document.getElementById("btn-bigger");
+					if (bigger) bigger.addEventListener("click", () => setFont(fontSize + 1));
+					const smaller = document.getElementById("btn-smaller");
+					if (smaller) smaller.addEventListener("click", () => setFont(fontSize - 1));
+					const clear = document.getElementById("btn-clear");
+					if (clear) clear.addEventListener("click", () => { term.clear(); term.focus(); });
 
 					function sendResize() {
 						if (ws && ws.readyState === WebSocket.OPEN) {
@@ -245,7 +335,7 @@ templ TerminalNotFound(id string) {
 					height: 100%;
 					background: #000;
 					color: #ddd;
-					font-family: monospace;
+					font-family: ui-monospace, monospace;
 					display: flex;
 					align-items: center;
 					justify-content: center;
@@ -258,7 +348,7 @@ templ TerminalNotFound(id string) {
 		<body>
 			<div style="text-align:center">
 				<p>Sandbox <b>{ id }</b> was not found.</p>
-				<p><a href="/dashboard">← Back to dashboard</a></p>
+				<p><a href="/dashboard/sandboxes">← Back to dashboard</a></p>
 			</div>
 		</body>
 	</html>

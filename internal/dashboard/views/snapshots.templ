@@ -8,82 +8,132 @@ import (
 )
 
 // SnapshotsPage is the Snapshots section.
-templ SnapshotsPage(rows []SnapshotRow) {
-	@PageHeader("Snapshots") {
-		@button.Button(button.Props{
-			Variant:    button.VariantOutline,
-			Size:       button.SizeSm,
-			Attributes: templ.Attributes{"data-on:click": "@get('/dashboard/api/snapshots')"},
-		}) {
-			@icon.RefreshCw(icon.Props{Class: "size-4"})
-			Refresh
-		}
-		@dialogOpenButton("create-snapshot", "New snapshot")
-	}
-	@card.Card() {
-		@table.Table() {
-			@table.Header() {
-				@table.Row() {
-					@table.Head() {
-						Name
-					}
-					@table.Head() {
-						Digest
-					}
-					@table.Head() {
-						Image
-					}
-					@table.Head() {
-						Format
-					}
-					@table.Head() {
-						Size
-					}
-					@table.Head(table.HeadProps{Class: "text-right"}) {
-						Actions
-					}
-				}
+templ SnapshotsPage(rows []SnapshotRow, sandboxes []SandboxRow, s TableSort) {
+	<div data-signals="{q:''}">
+		@PageHeader("Snapshots") {
+			@SearchBox("Filter snapshots…")
+			@button.Button(button.Props{
+				Variant: button.VariantOutline,
+				Size:    button.SizeSm,
+				Attributes: templ.Attributes{
+					"data-on:click":  "@get('/dashboard/api/snapshots/table')",
+					"data-indicator": "snaprefresh",
+					"aria-label":     "Refresh snapshot list",
+				},
+			}) {
+				@Busy("snaprefresh")
+				@icon.RefreshCw(icon.Props{Class: "size-4"})
+				Refresh
 			}
-			@table.Body() {
-				if len(rows) == 0 {
-					@table.Row() {
-						@table.Cell(table.CellProps{Class: "text-muted-foreground", Attributes: templ.Attributes{"colspan": "6"}}) {
-							No snapshots.
+			@dialogOpenButton("create-snapshot", "New snapshot")
+		}
+		@card.Card(card.Props{Class: "overflow-hidden"}) {
+			@SnapshotTable(rows, s)
+		}
+		@CreateSnapshotDialog(sandboxes, "")
+	</div>
+}
+
+// SnapshotTable is the refreshable fragment.
+templ SnapshotTable(rows []SnapshotRow, s TableSort) {
+	<div id="snap-table">
+		if len(rows) == 0 {
+			@EmptyState("camera", "No snapshots", "Capture a sandbox's rootfs so you can rebuild it later.") {
+				@dialogOpenButton("create-snapshot", "New snapshot")
+			}
+		} else {
+			<div class="overflow-x-auto">
+				@table.Table() {
+					<caption class="sr-only">Snapshots, { itoa(len(rows)) } total</caption>
+					@table.Header() {
+						@table.Row() {
+							@table.Head() {
+								@SortHead("/dashboard/api/snapshots/table", "name", "Name", s)
+							}
+							@table.Head(table.HeadProps{Class: "hidden md:table-cell"}) {
+								Digest
+							}
+							@table.Head(table.HeadProps{Class: "hidden lg:table-cell"}) {
+								Image
+							}
+							@table.Head(table.HeadProps{Class: "hidden sm:table-cell"}) {
+								Format
+							}
+							@table.Head() {
+								@SortHead("/dashboard/api/snapshots/table", "size", "Size", s)
+							}
+							@table.Head(table.HeadProps{Class: "hidden sm:table-cell"}) {
+								@SortHead("/dashboard/api/snapshots/table", "created", "Created", s)
+							}
+							@table.Head(table.HeadProps{Class: "text-right"}) {
+								Actions
+							}
 						}
 					}
-				}
-				for _, s := range rows {
-					@table.Row() {
-						@table.Cell(table.CellProps{Class: "font-medium"}) {
-							{ s.Name }
+					@table.Body() {
+						for _, sn := range rows {
+							@table.Row(table.RowProps{Attributes: templ.Attributes{
+								"data-show": textFilterExpr(sn.Haystack()),
+							}}) {
+								@table.Cell(table.CellProps{Class: "font-medium"}) {
+									{ sn.Name }
+								}
+								@table.Cell(table.CellProps{Class: "hidden font-mono text-xs md:table-cell"}) {
+									<span title={ sn.Digest }>{ ShortDigest(sn.Digest) }</span>
+								}
+								@table.Cell(table.CellProps{Class: "hidden max-w-[16rem] truncate font-mono text-xs lg:table-cell"}) {
+									<span title={ sn.ImageRef }>{ sn.ImageRef }</span>
+								}
+								@table.Cell(table.CellProps{Class: "hidden text-xs sm:table-cell"}) {
+									{ sn.Format }
+								}
+								@table.Cell(table.CellProps{Class: "text-xs whitespace-nowrap"}) {
+									{ sn.Size }
+								}
+								@table.Cell(table.CellProps{Class: "hidden text-xs whitespace-nowrap sm:table-cell"}) {
+									@TimeAgo(sn.CreatedAt)
+								}
+								@table.Cell(table.CellProps{Class: "text-right"}) {
+									<div class="flex items-center justify-end gap-1">
+										@iconButton("Verify integrity of "+sn.Name, "shield-check",
+											dsPost("/dashboard/api/snapshots/"+pathSeg(sn.Digest)+"/verify"))
+										@button.Button(button.Props{
+											Variant: button.VariantGhost,
+											Size:    button.SizeIcon,
+											Class:   "size-8 text-destructive",
+											Attributes: templ.Attributes{
+												"title":      "Delete " + sn.Name,
+												"aria-label": "Delete snapshot " + sn.Name,
+												"data-on:click": confirmAction(
+													"Delete snapshot?",
+													sn.Name+" ("+ShortDigest(sn.Digest)+") will be removed. This cannot be undone.",
+													"Delete",
+													dsDelete("/dashboard/api/snapshots/"+pathSeg(sn.Digest)),
+												),
+											},
+										}) {
+											@icon.Trash2(icon.Props{Class: "size-4"})
+										}
+									</div>
+								}
+							}
 						}
-						@table.Cell(table.CellProps{Class: "font-mono text-xs"}) {
-							{ ShortDigest(s.Digest) }
-						}
-						@table.Cell(table.CellProps{Class: "font-mono text-xs"}) {
-							{ s.ImageRef }
-						}
-						@table.Cell(table.CellProps{Class: "text-xs"}) {
-							{ s.Format }
-						}
-						@table.Cell(table.CellProps{Class: "text-xs"}) {
-							{ s.Size }
-						}
-						@table.Cell(table.CellProps{Class: "text-right"}) {
-							@button.Button(button.Props{
-								Variant: button.VariantGhost,
-								Size:    button.SizeIcon,
-								Class:   "size-8 text-destructive",
-								Attributes: templ.Attributes{
-									"data-on:click": "confirm('Delete this snapshot?') && @delete(" + jsExpr("/dashboard/api/snapshots/"+pathSeg(s.Digest)) + ")",
-								},
-							}) {
-								@icon.Trash2(icon.Props{Class: "size-4"})
+						@table.Row(table.RowProps{Attributes: templ.Attributes{"data-show": noMatchTextExpr(snapshotHaystacks(rows))}}) {
+							@table.Cell(table.CellProps{Class: "text-muted-foreground", Attributes: templ.Attributes{"colspan": "7"}}) {
+								No snapshots match the current filter.
 							}
 						}
 					}
 				}
-			}
+			</div>
 		}
+	</div>
+}
+
+func snapshotHaystacks(rows []SnapshotRow) []string {
+	out := make([]string, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, r.Haystack())
 	}
+	return out
 }

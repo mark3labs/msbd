@@ -1,0 +1,177 @@
+package views
+
+import (
+	"github.com/mark3labs/msbd/internal/dashboard/components/badge"
+	"github.com/mark3labs/msbd/internal/dashboard/components/button"
+	"github.com/mark3labs/msbd/internal/dashboard/components/card"
+	"github.com/mark3labs/msbd/internal/dashboard/components/icon"
+	"github.com/mark3labs/msbd/internal/dashboard/components/progress"
+)
+
+// OverviewPage is the landing page: fleet health at a glance, capacity
+// headroom, aggregate resource use and the most recent sandboxes.
+templ OverviewPage(m Meta, d OverviewData) {
+	<div data-signals="{q:''}">
+		@PageHeader("Overview") {
+			@button.Button(button.Props{
+				Variant:    button.VariantOutline,
+				Size:       button.SizeSm,
+				Attributes: templ.Attributes{"data-on:click": "@get('/dashboard/api/overview')", "data-indicator": "ovbusy"},
+			}) {
+				@Busy("ovbusy")
+				@icon.RefreshCw(icon.Props{Class: "size-4"})
+				Refresh
+			}
+			@dialogOpenButton("create-sandbox", "New sandbox")
+		}
+		<div data-on-interval.10s="@get('/dashboard/api/overview')">
+			@OverviewBody(d)
+		</div>
+		@CreateSandboxDialog(m)
+	</div>
+}
+
+// OverviewBody is the refreshable part of the overview.
+templ OverviewBody(d OverviewData) {
+	<div id="overview-body" class="space-y-4">
+		<div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+			@statCard("Sandboxes", itoa(d.Total), "server", statSub(d))
+			@statCard("Running", itoa(d.Running), "circle-play", itoa(d.Stopped)+" stopped, "+itoa(d.Failed)+" failed")
+			@statCard("Images", itoa(d.Images), "layers", d.ImagesSize+" cached")
+			@statCard("Volumes", itoa(d.Volumes), "hard-drive", d.VolumesUsed+" used")
+		</div>
+		<div class="grid gap-4 lg:grid-cols-3">
+			@card.Card(card.Props{Class: "lg:col-span-1"}) {
+				@card.Header() {
+					@card.Title() {
+						Capacity
+					}
+					@card.Description() {
+						if d.MaxSandboxes > 0 {
+							{ itoa(d.Running) } of { itoa(d.MaxSandboxes) } slots in use
+						} else {
+							No hard cap configured
+						}
+					}
+				}
+				@card.Content(card.ContentProps{Class: "space-y-4"}) {
+					if d.MaxSandboxes > 0 {
+						@progress.Progress(progress.Props{
+							Value:     d.CapPercent,
+							Max:       100,
+							ShowValue: true,
+							Label:     "Sandbox slots",
+							Variant:   capacityVariant(d.CapPercent),
+						})
+						if d.CapPercent >= 90 {
+							<p class="text-xs text-destructive">
+								Nearly full — further creates will fail with "capacity reached".
+							</p>
+						}
+					} else {
+						<p class="text-sm text-muted-foreground">
+							Set <code class="font-mono text-xs">--max-sandboxes</code> to enforce a limit.
+						</p>
+					}
+					<div class="flex items-center justify-between text-sm">
+						<span class="text-muted-foreground">Active jobs</span>
+						<span class="font-medium">{ itoa(d.ActiveJobs) }</span>
+					</div>
+				}
+			}
+			@card.Card(card.Props{Class: "lg:col-span-2"}) {
+				@card.Header() {
+					@card.Title() {
+						Fleet resources
+					}
+					@card.Description() {
+						Aggregate across every running sandbox
+					}
+				}
+				@card.Content(card.ContentProps{Class: "space-y-4"}) {
+					if !d.MetricsOK {
+						<p class="text-sm text-muted-foreground">{ orDashS(d.MetricsNote) }</p>
+					} else {
+						@progress.Progress(progress.Props{
+							Value:     pct(d.CPUPercent),
+							Max:       100,
+							ShowValue: true,
+							Label:     "CPU " + pct1(d.CPUPercent),
+						})
+						@progress.Progress(progress.Props{
+							Value:     d.MemPercent,
+							Max:       100,
+							ShowValue: true,
+							Label:     "Memory " + d.MemUsed + " / " + d.MemLimit,
+						})
+					}
+				}
+			}
+		</div>
+		@card.Card() {
+			@card.Header(card.HeaderProps{Class: "flex-row items-center justify-between space-y-0"}) {
+				@card.Title() {
+					Recent sandboxes
+				}
+				<a href="/dashboard/sandboxes" class="text-sm text-muted-foreground hover:text-foreground">View all →</a>
+			}
+			@card.Content() {
+				if len(d.Recent) == 0 {
+					@EmptyState("server", "No sandboxes yet", "Boot a microVM to get started.") {
+						@dialogOpenButton("create-sandbox", "New sandbox")
+					}
+				} else {
+					<ul class="divide-y">
+						for _, r := range d.Recent {
+							<li class="flex items-center gap-3 py-2">
+								<span class={ "size-2 shrink-0 rounded-full", stateDot(r.State) } aria-hidden="true"></span>
+								<a
+									href={ templ.SafeURL("/dashboard/sandboxes/" + pathSeg(r.ID)) }
+									class="font-mono text-xs hover:underline"
+								>{ r.ID }</a>
+								<span class="hidden flex-1 truncate text-xs text-muted-foreground sm:block">{ r.Image }</span>
+								@badge.Badge(badge.Props{Variant: badgeVariant(r.State)}) {
+									{ r.State }
+								}
+								<span class="w-16 text-right text-xs text-muted-foreground">{ r.Uptime }</span>
+							</li>
+						}
+					</ul>
+				}
+			}
+		}
+	</div>
+}
+
+templ statCard(title, value, ico, sub string) {
+	@card.Card() {
+		@card.Content(card.ContentProps{Class: "flex items-center gap-4 p-5"}) {
+			<div class="rounded-lg bg-muted p-2.5 text-muted-foreground">
+				@icon.Icon(ico)(icon.Props{Class: "size-5"})
+			</div>
+			<div class="min-w-0">
+				<p class="text-xs font-medium tracking-wide text-muted-foreground uppercase">{ title }</p>
+				<p class="text-2xl font-semibold tabular-nums">{ value }</p>
+				<p class="truncate text-xs text-muted-foreground">{ sub }</p>
+			</div>
+		}
+	}
+}
+
+func statSub(d OverviewData) string {
+	if d.MaxSandboxes > 0 {
+		return "cap " + itoa(d.MaxSandboxes)
+	}
+	return "no cap"
+}
+
+func capacityVariant(p int) progress.Variant {
+	switch {
+	case p >= 90:
+		return progress.VariantDanger
+	case p >= 70:
+		return progress.VariantWarning
+	default:
+		return progress.VariantSuccess
+	}
+}

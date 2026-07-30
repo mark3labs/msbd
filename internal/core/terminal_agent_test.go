@@ -17,7 +17,18 @@ import (
 // the new microsandbox protocol crate (crates/protocol/lib), then update this
 // constant to match. The terminal is the only feature riding the raw agent
 // protocol; nothing else in msbd depends on this wire format.
-const verifiedSDKVersion = "0.6.1"
+//
+// 0.6.1 → 0.6.7 verification (protocol generation 5 → 6):
+//   - crates/protocol/lib/exec.rs is byte-identical between the two tags, so
+//     every wire* payload struct in terminal_agent.go is still correct.
+//   - message.rs only appends four generation-6 core message types
+//     (core.ping/pong/touch/touched), which msbd does not use; all exec message
+//     strings and frame flags are unchanged.
+//   - sdk/go/agent.go (the transport this backend rides) is byte-identical.
+//   - Confirmed end-to-end against a live microVM: connect, stdin/stdout round
+//     trip, real PTY device in the guest, core.exec.resize changing `stty size`,
+//     Ctrl-C interrupting a command, and a clean core.exec.exited with code 0.
+const verifiedSDKVersion = "0.6.7"
 
 func TestPinnedSDKVersion(t *testing.T) {
 	if got := msb.SDKVersion(); got != verifiedSDKVersion {

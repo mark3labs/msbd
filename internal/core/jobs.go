@@ -34,6 +34,10 @@ const (
 	JobDone    = "done"
 	JobDead    = "dead"
 	JobGone    = "gone"
+	// JobKilled marks a job the caller explicitly cancelled. The runtime reports
+	// a killed process as exit 0, so without this a cancelled command is
+	// indistinguishable from a successful one.
+	JobKilled = "killed"
 )
 
 const (
@@ -41,6 +45,9 @@ const (
 	defaultJobTTL      = 15 * time.Minute
 	jobSweepInterval   = time.Minute
 	jobKillTimeout     = 5 * time.Second
+	// jobSignalTimeout bounds a live Signal/Kill on a running job so a blocked
+	// agent ack can't pin an HTTP request open for the whole command.
+	jobSignalTimeout = 5 * time.Second
 )
 
 type JobStatus struct {
@@ -333,7 +340,19 @@ func (r *JobRegistry) closeStdin(sandboxID, jobID string) error {
 
 // signal sends a signal to a running job's process. A negative or zero signal
 // number is treated as a kill request. Serialized against drain's handle use.
+//
+// IMPORTANT: while a job is running, drain is parked in handle.Recv on the same
+// SDK stream. The SDK's Signal/Kill wait for an agent ack that the parked Recv
+// consumes, so calling them "live" blocks until the command finishes on its own
+// — which wedges the calling HTTP request for the lifetime of the command. We
+// therefore bound the call: on timeout the caller gets a clear error instead of
+// a hung connection. Callers who want to *terminate* a job should use
+// cancelJob, which unblocks Recv first (the pattern dropSandbox already uses).
 func (r *JobRegistry) signal(ctx context.Context, sandboxID, jobID string, sig int) error {
+	// A kill request is a termination, so take the path that actually works.
+	if sig <= 0 {
+		return r.cancelJob(sandboxID, jobID)
+	}
 	r.mu.RLock()
 	j := r.jobs[key(sandboxID, jobID)]
 	r.mu.RUnlock()
@@ -345,15 +364,55 @@ func (r *JobRegistry) signal(ctx context.Context, sandboxID, jobID string, sig i
 	if j.closed {
 		return fmt.Errorf("job %s already finished", jobID)
 	}
-	if sig <= 0 {
-		if err := j.handle.Kill(ctx); err != nil {
-			return fmt.Errorf("kill job %s: %w", jobID, err)
-		}
-		return nil
-	}
-	if err := j.handle.Signal(ctx, sig); err != nil {
+	sctx, cancel := context.WithTimeout(ctx, jobSignalTimeout)
+	defer cancel()
+	if err := j.handle.Signal(sctx, sig); err != nil {
 		return fmt.Errorf("signal job %s: %w", jobID, err)
 	}
+	return nil
+}
+
+// cancelJob terminates a running job deterministically and promptly.
+//
+// It follows the same sequence dropSandbox uses, and for the same reason: the
+// drain goroutine is blocked in handle.Recv, so we cancel the job context FIRST
+// to unblock it, and only then take handleMu and Kill. Doing it the other way
+// round deadlocks against the parked Recv.
+//
+// The job is marked JobKilled so callers can distinguish "the user stopped it"
+// from "it exited 0" — the runtime reports a killed process as a plain exit 0.
+func (r *JobRegistry) cancelJob(sandboxID, jobID string) error {
+	r.mu.RLock()
+	j := r.jobs[key(sandboxID, jobID)]
+	r.mu.RUnlock()
+	if j == nil {
+		return ErrNotFound
+	}
+
+	j.mu.Lock()
+	already := j.state != JobRunning
+	j.mu.Unlock()
+	if already {
+		return nil // idempotent: cancelling a finished job is a no-op
+	}
+
+	// Unblock drain's Recv so the handle is free for a Kill.
+	if j.cancel != nil {
+		j.cancel()
+	}
+
+	j.handleMu.Lock()
+	if !j.closed && j.handle != nil {
+		kctx, cancel := context.WithTimeout(context.Background(), jobKillTimeout)
+		_ = j.handle.Kill(kctx)
+		cancel()
+	}
+	j.handleMu.Unlock()
+
+	j.mu.Lock()
+	j.state = JobKilled
+	j.finishedAt = time.Now()
+	j.mu.Unlock()
 	return nil
 }
 

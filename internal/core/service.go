@@ -89,7 +89,7 @@ func (s *Service) Reconcile(ctx context.Context) (int, error) { return s.reg.Rec
 // ---------------------------------------------------------------------------
 
 // maxDiskGB bounds CreateParams.DiskGB so the GiB->MiB conversion stays within
-// the uint32 the SDK's WithOCIUpperSize option accepts (math.MaxUint32 / 1024).
+// the uint32 the SDK's managed root-disk size accepts (math.MaxUint32 / 1024).
 const maxDiskGB = 4194303
 
 // CreateParams is the provider-neutral create input.
@@ -310,7 +310,11 @@ func buildCreateOptions(p CreateParams, image string) ([]msb.SandboxOption, erro
 		if p.DiskGB > maxDiskGB {
 			return nil, fmt.Errorf("invalid disk_gb: %d (exceeds maximum of %d GiB)", p.DiskGB, maxDiskGB)
 		}
-		opts = append(opts, msb.WithOCIUpperSize(uint32(p.DiskGB)*1024))
+		// SDK 0.6.7 replaced WithOCIUpperSize with the explicit root-disk
+		// factory (the old option is now a deprecated alias). "Managed" is the
+		// writable overlay on top of an OCI image, which is what disk_gb has
+		// always meant here.
+		opts = append(opts, msb.WithRootDisk(msb.RootDisk.Managed(uint32(p.DiskGB)*1024)))
 	}
 	if len(p.Env) > 0 {
 		opts = append(opts, msb.WithEnv(p.Env))
@@ -589,6 +593,15 @@ func (s *Service) CloseJobStdin(id, job string) error {
 }
 
 // SignalJob sends a signal to a running job (sig <= 0 means kill).
+// CancelJob terminates a running job promptly. Prefer this over SignalJob for
+// a user-facing "stop this command" action: it unblocks the drain goroutine
+// first, so it returns immediately instead of waiting on an agent ack that the
+// parked Recv would swallow, and it marks the job JobKilled so the caller can
+// tell a cancellation apart from a clean exit 0.
+func (s *Service) CancelJob(id, job string) error {
+	return s.jobs.cancelJob(id, job)
+}
+
 func (s *Service) SignalJob(ctx context.Context, id, job string, sig int) error {
 	return s.jobs.signal(ctx, id, job, sig)
 }
@@ -654,18 +667,30 @@ func resolvePath(path, cwd string) string {
 	return cwd + path
 }
 
-// networkConfig maps a policy preset name to an SDK NetworkConfig, or nil for
-// the empty/default case.
+// networkConfig maps msbd's stable policy-preset name onto an SDK
+// NetworkConfig, or nil for the empty/default case.
+//
+// SDK 0.6.7 removed the flat NetworkPolicyPreset enum in favour of composable
+// deny-by-default *profiles* (public / private / host). The preset names below
+// are msbd's WIRE CONTRACT (they appear in openapi.yaml and every generated
+// client), so they are kept verbatim and translated here. Mapping, matching the
+// semantics the old presets documented:
+//
+//	none        → deny everything (unchanged factory)
+//	public-only → public internet only; RFC-1918 private ranges blocked
+//	allow-all   → permit everything (unchanged factory)
+//	non-local   → public internet + private/LAN egress, still no loopback,
+//	              link-local or metadata — i.e. every profile except host
 func networkConfig(policy string) *msb.NetworkConfig {
 	switch strings.ToLower(strings.TrimSpace(policy)) {
 	case "none":
-		return &msb.NetworkConfig{Policy: msb.NetworkPolicyPresetNone}
+		return msb.NetworkPolicy.None()
 	case "public-only", "public_only":
-		return &msb.NetworkConfig{Policy: msb.NetworkPolicyPresetPublicOnly}
+		return msb.NetworkPolicy.FromProfiles(msb.NetworkProfilePublic)
 	case "allow-all", "allow_all":
-		return &msb.NetworkConfig{Policy: msb.NetworkPolicyPresetAllowAll}
+		return msb.NetworkPolicy.AllowAll()
 	case "non-local", "non_local":
-		return &msb.NetworkConfig{Policy: msb.NetworkPolicyPresetNonLocal}
+		return msb.NetworkPolicy.FromProfiles(msb.NetworkProfilePublic, msb.NetworkProfilePrivate)
 	default:
 		return nil
 	}

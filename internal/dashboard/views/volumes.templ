@@ -1,6 +1,7 @@
 package views
 
 import (
+	"github.com/mark3labs/msbd/internal/dashboard/components/badge"
 	"github.com/mark3labs/msbd/internal/dashboard/components/button"
 	"github.com/mark3labs/msbd/internal/dashboard/components/card"
 	"github.com/mark3labs/msbd/internal/dashboard/components/icon"
@@ -8,82 +9,148 @@ import (
 )
 
 // VolumesPage is the Volumes section.
-templ VolumesPage(rows []VolumeRow) {
-	@PageHeader("Volumes") {
-		@button.Button(button.Props{
-			Variant:    button.VariantOutline,
-			Size:       button.SizeSm,
-			Attributes: templ.Attributes{"data-on:click": "@get('/dashboard/api/volumes')"},
-		}) {
-			@icon.RefreshCw(icon.Props{Class: "size-4"})
-			Refresh
-		}
-		@dialogOpenButton("create-volume", "New volume")
-	}
-	@card.Card() {
-		@table.Table() {
-			@table.Header() {
-				@table.Row() {
-					@table.Head() {
-						Name
-					}
-					@table.Head() {
-						Kind
-					}
-					@table.Head() {
-						Path
-					}
-					@table.Head() {
-						Used
-					}
-					@table.Head() {
-						Capacity
-					}
-					@table.Head(table.HeadProps{Class: "text-right"}) {
-						Actions
-					}
-				}
+templ VolumesPage(rows []VolumeRow, s TableSort) {
+	<div data-signals="{q:''}">
+		@PageHeader("Volumes") {
+			@SearchBox("Filter volumes…")
+			@button.Button(button.Props{
+				Variant: button.VariantOutline,
+				Size:    button.SizeSm,
+				Attributes: templ.Attributes{
+					"data-on:click":  "@get('/dashboard/api/volumes/table')",
+					"data-indicator": "volrefresh",
+					"aria-label":     "Refresh volume list",
+				},
+			}) {
+				@Busy("volrefresh")
+				@icon.RefreshCw(icon.Props{Class: "size-4"})
+				Refresh
 			}
-			@table.Body() {
-				if len(rows) == 0 {
-					@table.Row() {
-						@table.Cell(table.CellProps{Class: "text-muted-foreground", Attributes: templ.Attributes{"colspan": "6"}}) {
-							No volumes.
+			@dialogOpenButton("create-volume", "New volume")
+		}
+		@card.Card(card.Props{Class: "overflow-hidden"}) {
+			@VolumeTable(rows, s)
+		}
+		@CreateVolumeDialog()
+	</div>
+}
+
+// VolumeTable is the refreshable fragment.
+templ VolumeTable(rows []VolumeRow, s TableSort) {
+	<div id="vol-table">
+		if len(rows) == 0 {
+			@EmptyState("hard-drive", "No volumes", "Named volumes persist data across sandbox restarts. Mount them when creating a sandbox.") {
+				@dialogOpenButton("create-volume", "New volume")
+			}
+		} else {
+			<div class="overflow-x-auto">
+				@table.Table() {
+					<caption class="sr-only">Volumes, { itoa(len(rows)) } total</caption>
+					@table.Header() {
+						@table.Row() {
+							@table.Head() {
+								@SortHead("/dashboard/api/volumes/table", "name", "Name", s)
+							}
+							@table.Head() {
+								Kind
+							}
+							@table.Head(table.HeadProps{Class: "hidden lg:table-cell"}) {
+								Path
+							}
+							@table.Head() {
+								@SortHead("/dashboard/api/volumes/table", "used", "Used", s)
+							}
+							@table.Head(table.HeadProps{Class: "hidden sm:table-cell"}) {
+								@SortHead("/dashboard/api/volumes/table", "created", "Created", s)
+							}
+							@table.Head(table.HeadProps{Class: "text-right"}) {
+								Actions
+							}
 						}
 					}
-				}
-				for _, v := range rows {
-					@table.Row() {
-						@table.Cell(table.CellProps{Class: "font-medium"}) {
-							{ v.Name }
+					@table.Body() {
+						for _, v := range rows {
+							@table.Row(table.RowProps{Attributes: templ.Attributes{
+								"data-show": textFilterExpr(v.Haystack()),
+							}}) {
+								@table.Cell(table.CellProps{Class: "font-medium"}) {
+									{ v.Name }
+								}
+								@table.Cell(table.CellProps{Class: "text-xs"}) {
+									@badge.Badge(badge.Props{Variant: badge.VariantOutline}) {
+										{ v.Kind }
+									}
+								}
+								@table.Cell(table.CellProps{Class: "hidden max-w-[20rem] truncate font-mono text-xs lg:table-cell"}) {
+									<span title={ v.Path }>{ v.Path }</span>
+								}
+								@table.Cell(table.CellProps{Class: "text-xs whitespace-nowrap"}) {
+									{ v.Used }
+									if v.Capacity != "—" {
+										<span class="text-muted-foreground"> / { v.Capacity }</span>
+									}
+								}
+								@table.Cell(table.CellProps{Class: "hidden text-xs whitespace-nowrap sm:table-cell"}) {
+									@TimeAgo(v.CreatedAt)
+								}
+								@table.Cell(table.CellProps{Class: "text-right"}) {
+									@button.Button(button.Props{
+										Variant: button.VariantGhost,
+										Size:    button.SizeIcon,
+										Class:   "size-8 text-destructive",
+										Attributes: templ.Attributes{
+											"title":      "Delete " + v.Name,
+											"aria-label": "Delete volume " + v.Name,
+											"data-on:click": confirmAction(
+												"Delete volume?",
+												v.Name+" and everything stored in it will be removed. This cannot be undone.",
+												"Delete",
+												dsDelete("/dashboard/api/volumes/"+pathSeg(v.Name)),
+											),
+										},
+									}) {
+										@icon.Trash2(icon.Props{Class: "size-4"})
+									}
+								}
+							}
 						}
-						@table.Cell(table.CellProps{Class: "text-xs"}) {
-							{ v.Kind }
-						}
-						@table.Cell(table.CellProps{Class: "font-mono text-xs"}) {
-							{ v.Path }
-						}
-						@table.Cell(table.CellProps{Class: "text-xs"}) {
-							{ v.Used }
-						}
-						@table.Cell(table.CellProps{Class: "text-xs"}) {
-							{ v.Capacity }
-						}
-						@table.Cell(table.CellProps{Class: "text-right"}) {
-							@button.Button(button.Props{
-								Variant: button.VariantGhost,
-								Size:    button.SizeIcon,
-								Class:   "size-8 text-destructive",
-								Attributes: templ.Attributes{
-									"data-on:click": "confirm('Delete this volume?') && @delete(" + jsExpr("/dashboard/api/volumes/"+pathSeg(v.Name)) + ")",
-								},
-							}) {
-								@icon.Trash2(icon.Props{Class: "size-4"})
+						@table.Row(table.RowProps{Attributes: templ.Attributes{"data-show": noMatchTextExpr(volumeHaystacks(rows))}}) {
+							@table.Cell(table.CellProps{Class: "text-muted-foreground", Attributes: templ.Attributes{"colspan": "6"}}) {
+								No volumes match the current filter.
 							}
 						}
 					}
 				}
-			}
+			</div>
 		}
+	</div>
+}
+
+// textFilterExpr is the shared single-signal search expression.
+func textFilterExpr(haystack string) string {
+	return "!$q || " + jsExpr(haystack) + ".includes($q.toLowerCase())"
+}
+
+// noMatchTextExpr is true when the search filter hides every row.
+func noMatchTextExpr(hays []string) string {
+	if len(hays) == 0 {
+		return "false"
 	}
+	expr := "!["
+	for i, h := range hays {
+		if i > 0 {
+			expr += ","
+		}
+		expr += jsExpr(h)
+	}
+	expr += "].some(x => !$q || x.includes($q.toLowerCase()))"
+	return expr
+}
+
+func volumeHaystacks(rows []VolumeRow) []string {
+	out := make([]string, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, r.Haystack())
+	}
+	return out
 }

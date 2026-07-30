@@ -6,5 +6,5 @@ import "embed"
 // component JavaScript. output.css is produced by `task dashboard:assets`
 // (tailwindcss) and committed so a plain `go build` works without Node/Tailwind.
 //
-//go:embed assets/css/output.css assets/vendor assets/js
+//go:embed assets/css/output.css assets/vendor assets/js assets/favicon.svg
 var assetFS embed.FS

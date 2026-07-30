@@ -19,3 +19,6 @@
 *.swp
 .idea/
 .vscode/
+
+# Local agent/MCP tooling config (playwriter, etc.)
+/.kit.yml

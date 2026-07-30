@@ -29,6 +29,11 @@ templ field(forID, lbl string) {
 	</div>
 }
 
+// hint is small helper text under a form control.
+templ hint(text string) {
+	<p class="text-xs text-muted-foreground">{ text }</p>
+}
+
 templ selectField(forID, lbl, bind string, opts []string) {
 	<div class="grid gap-1.5">
 		@label.Label(label.Props{For: forID}) {
@@ -37,7 +42,7 @@ templ selectField(forID, lbl, bind string, opts []string) {
 		<select
 			id={ forID }
 			data-bind={ bind }
-			class="flex h-9 w-full rounded-md border bg-background px-3 py-1 text-sm shadow-xs focus-visible:ring-2 focus-visible:ring-ring outline-none"
+			class="flex h-9 w-full rounded-md border bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:ring-2 focus-visible:ring-ring"
 		>
 			for _, o := range opts {
 				<option value={ o }>{ optionLabel(o) }</option>
@@ -53,13 +58,75 @@ func optionLabel(o string) string {
 	return o
 }
 
+// ---------------------------------------------------------------------------
+// Confirm dialog
+// ---------------------------------------------------------------------------
+
+// ConfirmDialog is the single, styled replacement for window.confirm(). It is
+// rendered once per page; callers arm it via @confirm(...) which fills the
+// title/body signals and stashes the Datastar action to run on confirm.
+//
+// Signals: cfmtitle, cfmbody, cfmlabel, cfmdanger, cfmaction (a JS thunk).
+templ ConfirmDialog() {
+	<div data-signals="{cfmtitle:'Are you sure?', cfmbody:'', cfmlabel:'Confirm', cfmdanger:true}">
+		@dialog.Dialog(dialog.Props{ID: "confirm"}) {
+			@dialog.Content(dialog.ContentProps{Class: "sm:max-w-md"}) {
+				@dialog.Header() {
+					@dialog.Title() {
+						<span data-text="$cfmtitle"></span>
+					}
+					@dialog.Description() {
+						<span class="break-words" data-text="$cfmbody"></span>
+					}
+				}
+				@dialog.Footer() {
+					@dialog.Close() {
+						@button.Button(button.Props{Variant: button.VariantOutline}) {
+							Cancel
+						}
+					}
+					<button
+						type="button"
+						id="confirm-go"
+						class="inline-flex h-9 items-center justify-center gap-2 rounded-md bg-destructive px-4 text-sm font-medium text-white transition-colors hover:bg-destructive/90 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+						data-class="{'bg-destructive':$cfmdanger,'hover:bg-destructive/90':$cfmdanger,'bg-primary':!$cfmdanger,'text-primary-foreground':!$cfmdanger,'hover:bg-primary/90':!$cfmdanger}"
+						data-text="$cfmlabel"
+						data-on:click="window.__msbdConfirmRun && window.__msbdConfirmRun()"
+					></button>
+				}
+			}
+		}
+	</div>
+}
+
+// confirmAction builds the data-on:click expression that opens the confirm
+// dialog and, on approval, runs `action`.
+//
+// The action is stashed on window as a thunk rather than interpolated into the
+// dialog markup, so guest-controlled names can never become executable text —
+// they only ever flow through the (text-only) cfmbody signal.
+func confirmAction(title, body, label, action string) string {
+	return "$cfmtitle=" + jsExpr(title) +
+		";$cfmbody=" + jsExpr(body) +
+		";$cfmlabel=" + jsExpr(label) +
+		";$cfmdanger=true" +
+		";window.__msbdConfirmRun=()=>{window.tui.dialog.close('confirm');" + action + "}" +
+		";window.tui.dialog.open('confirm')"
+}
+
+// ---------------------------------------------------------------------------
+// Create sandbox
+// ---------------------------------------------------------------------------
+
 // CreateSandboxDialog is the new-sandbox modal. Form fields bind to Datastar
-// signals; submit POSTs them to the dashboard API.
-templ CreateSandboxDialog(defaultImage string) {
+// signals; submit POSTs them to the dashboard API. Advanced options (ports,
+// mounts, secrets, labels) live behind a disclosure so the common path stays
+// two fields deep.
+templ CreateSandboxDialog(m Meta) {
 	@dialog.Dialog(dialog.Props{ID: "create-sandbox"}) {
-		@dialog.Content(dialog.ContentProps{Class: "sm:max-w-lg"}) {
+		@dialog.Content(dialog.ContentProps{Class: "sm:max-w-2xl"}) {
 			<div
-				data-signals={ "{sbximage:'" + defaultImage + "', sbxcpu:1, sbxmemory:512, sbxdisk:0, sbxworkdir:'', sbxnetwork:'', sbxenv:''}" }
+				data-signals={ createSandboxSignals(m.DefaultImage) }
 			>
 				@dialog.Header() {
 					@dialog.Title() {
@@ -69,22 +136,36 @@ templ CreateSandboxDialog(defaultImage string) {
 						Boot a new microVM from an OCI image.
 					}
 				}
+				<div id="create-sandbox-error"></div>
 				<form
-					class="grid gap-4 py-4"
-					data-on:submit="@post('/dashboard/api/sandboxes')"
+					class="grid max-h-[65vh] gap-4 overflow-y-auto py-4 pr-1"
+					data-on:submit="@post('/dashboard/api/sandboxes', {retry:'never'})"
+					data-indicator="sbxbusy"
 				>
 					@field("sbximage", "Image") {
-						@input.Input(input.Props{ID: "sbximage", Placeholder: "microsandbox/python", Attributes: templ.Attributes{"data-bind": "sbximage"}})
+						@input.Input(input.Props{
+							ID:          "sbximage",
+							Placeholder: "microsandbox/python",
+							Attributes:  templ.Attributes{"data-bind": "sbximage", "list": "img-options", "required": "true"},
+						})
+						<datalist id="img-options">
+							for _, im := range m.Images {
+								<option value={ im }></option>
+							}
+						</datalist>
 					}
-					<div class="grid grid-cols-3 gap-3">
+					<div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
 						@field("sbxcpu", "vCPU") {
-							@input.Input(input.Props{ID: "sbxcpu", Type: input.TypeNumber, Attributes: templ.Attributes{"data-bind": "sbxcpu", "step": "0.5", "min": "0"}})
+							@input.Input(input.Props{ID: "sbxcpu", Type: input.TypeNumber, Attributes: templ.Attributes{"data-bind": "sbxcpu", "step": "0.5", "min": "0", "max": "255"}})
 						}
 						@field("sbxmemory", "Memory (MB)") {
 							@input.Input(input.Props{ID: "sbxmemory", Type: input.TypeNumber, Attributes: templ.Attributes{"data-bind": "sbxmemory", "min": "0"}})
 						}
 						@field("sbxdisk", "Disk (GB)") {
 							@input.Input(input.Props{ID: "sbxdisk", Type: input.TypeNumber, Attributes: templ.Attributes{"data-bind": "sbxdisk", "min": "0"}})
+						}
+						@field("sbxautostop", "Auto-stop (s)") {
+							@input.Input(input.Props{ID: "sbxautostop", Type: input.TypeNumber, Attributes: templ.Attributes{"data-bind": "sbxautostop", "min": "0"}})
 						}
 					</div>
 					@field("sbxworkdir", "Workdir (optional)") {
@@ -94,6 +175,38 @@ templ CreateSandboxDialog(defaultImage string) {
 					@field("sbxenv", "Env (KEY=VALUE per line)") {
 						@textarea.Textarea(textarea.Props{ID: "sbxenv", Rows: 3, Placeholder: "FOO=bar", Attributes: templ.Attributes{"data-bind": "sbxenv"}})
 					}
+					<details class="rounded-md border p-3">
+						<summary class="cursor-pointer text-sm font-medium">Advanced</summary>
+						<div class="grid gap-4 pt-4">
+							@field("sbxports", "Port forwards (host:guest per line)") {
+								@textarea.Textarea(textarea.Props{ID: "sbxports", Rows: 2, Placeholder: "8080:80\n5432:5432/tcp", Attributes: templ.Attributes{"data-bind": "sbxports"}})
+								@hint("Publishes a guest port on the msbd host.")
+							}
+							@field("sbxmounts", "Volume mounts (volume:/guest/path per line)") {
+								@textarea.Textarea(textarea.Props{ID: "sbxmounts", Rows: 2, Placeholder: "my-data:/data", Attributes: templ.Attributes{"data-bind": "sbxmounts", "list": "vol-options"}})
+								if len(m.Volumes) > 0 {
+									@hint("Available volumes: " + joinMax(m.Volumes, 6))
+								} else {
+									@hint("No volumes yet — create one on the Volumes page first.")
+								}
+							}
+							@field("sbxsecrets", "Secrets (KEY=VALUE per line)") {
+								@textarea.Textarea(textarea.Props{ID: "sbxsecrets", Rows: 2, Placeholder: "API_TOKEN=…", Attributes: templ.Attributes{"data-bind": "sbxsecrets"}})
+								@hint("Injected as guest env vars by the runtime; never logged.")
+							}
+							@field("sbxlabels", "Labels (KEY=VALUE per line)") {
+								@textarea.Textarea(textarea.Props{ID: "sbxlabels", Rows: 2, Placeholder: "team=platform", Attributes: templ.Attributes{"data-bind": "sbxlabels"}})
+							}
+							<div class="grid grid-cols-2 gap-3">
+								@field("sbxuser", "User") {
+									@input.Input(input.Props{ID: "sbxuser", Placeholder: "root", Attributes: templ.Attributes{"data-bind": "sbxuser"}})
+								}
+								@field("sbxhostname", "Hostname") {
+									@input.Input(input.Props{ID: "sbxhostname", Attributes: templ.Attributes{"data-bind": "sbxhostname"}})
+								}
+							</div>
+						</div>
+					</details>
 				</form>
 				@dialog.Footer() {
 					@dialog.Close() {
@@ -101,7 +214,14 @@ templ CreateSandboxDialog(defaultImage string) {
 							Cancel
 						}
 					}
-					@button.Button(button.Props{Attributes: templ.Attributes{"data-on:click": "@post('/dashboard/api/sandboxes')"}}) {
+					@button.Button(button.Props{
+						Attributes: templ.Attributes{
+							"data-on:click":  "@post('/dashboard/api/sandboxes', {retry:'never'})",
+							"data-indicator": "sbxbusy",
+							"data-attr":     "{disabled: $sbxbusy || !$sbximage}",
+						},
+					}) {
+						@Busy("sbxbusy")
 						Create
 					}
 				}
@@ -110,32 +230,47 @@ templ CreateSandboxDialog(defaultImage string) {
 	}
 }
 
+func createSandboxSignals(defaultImage string) string {
+	return "{sbximage:" + jsExpr(defaultImage) + ", sbxcpu:1, sbxmemory:512, sbxdisk:0, sbxautostop:0," +
+		" sbxworkdir:'', sbxnetwork:'', sbxenv:'', sbxports:'', sbxmounts:'', sbxsecrets:'', sbxlabels:''," +
+		" sbxuser:'', sbxhostname:''}"
+}
+
+// ---------------------------------------------------------------------------
+// Volumes / images / snapshots
+// ---------------------------------------------------------------------------
+
 // CreateVolumeDialog is the new-volume modal.
 templ CreateVolumeDialog() {
 	@dialog.Dialog(dialog.Props{ID: "create-volume"}) {
 		@dialog.Content() {
-			<div data-signals="{volname:'', volkind:'overlay', volsize:0, volquota:0}">
+			<div data-signals="{volname:'', volkind:'dir', volsize:0, volquota:0, vollabels:''}">
 				@dialog.Header() {
 					@dialog.Title() {
 						New volume
 					}
 					@dialog.Description() {
-						Create a named persistent volume.
+						Create a named persistent volume, then mount it when you create a sandbox.
 					}
 				}
-				<form class="grid gap-4 py-4" data-on:submit="@post('/dashboard/api/volumes')">
+				<div id="create-volume-error"></div>
+				<form class="grid gap-4 py-4" data-on:submit="@post('/dashboard/api/volumes', {retry:'never'})" data-indicator="volbusy">
 					@field("volname", "Name") {
-						@input.Input(input.Props{ID: "volname", Placeholder: "my-data", Attributes: templ.Attributes{"data-bind": "volname"}})
+						@input.Input(input.Props{ID: "volname", Placeholder: "my-data", Attributes: templ.Attributes{"data-bind": "volname", "required": "true"}})
 					}
-					@selectField("volkind", "Kind", "volkind", []string{"overlay", "disk"})
+					@selectField("volkind", "Kind", "volkind", []string{"dir", "disk"})
 					<div class="grid grid-cols-2 gap-3">
 						@field("volsize", "Size (MB)") {
 							@input.Input(input.Props{ID: "volsize", Type: input.TypeNumber, Attributes: templ.Attributes{"data-bind": "volsize", "min": "0"}})
+							@hint("disk-backed volumes only")
 						}
 						@field("volquota", "Quota (MB)") {
 							@input.Input(input.Props{ID: "volquota", Type: input.TypeNumber, Attributes: templ.Attributes{"data-bind": "volquota", "min": "0"}})
 						}
 					</div>
+					@field("vollabels", "Labels (KEY=VALUE per line)") {
+						@textarea.Textarea(textarea.Props{ID: "vollabels", Rows: 2, Attributes: templ.Attributes{"data-bind": "vollabels"}})
+					}
 				</form>
 				@dialog.Footer() {
 					@dialog.Close() {
@@ -143,7 +278,14 @@ templ CreateVolumeDialog() {
 							Cancel
 						}
 					}
-					@button.Button(button.Props{Attributes: templ.Attributes{"data-on:click": "@post('/dashboard/api/volumes')"}}) {
+					@button.Button(button.Props{
+						Attributes: templ.Attributes{
+							"data-on:click":  "@post('/dashboard/api/volumes', {retry:'never'})",
+							"data-indicator": "volbusy",
+							"data-attr":     "{disabled: $volbusy || !$volname}",
+						},
+					}) {
+						@Busy("volbusy")
 						Create
 					}
 				}
@@ -153,27 +295,56 @@ templ CreateVolumeDialog() {
 }
 
 // PullImageDialog is the pull-image modal. The pull is long-running (it boots a
-// throwaway microVM); the handler toasts progress over the open SSE stream.
-templ PullImageDialog() {
+// throwaway microVM); the handler streams progress over the open SSE stream.
+templ PullImageDialog(m Meta) {
 	@dialog.Dialog(dialog.Props{ID: "pull-image"}) {
-		@dialog.Content() {
+		@dialog.Content(dialog.ContentProps{Class: "sm:max-w-lg"}) {
 			<div data-signals="{imgref:'', imgforce:false}">
 				@dialog.Header() {
 					@dialog.Title() {
 						Pull image
 					}
 					@dialog.Description() {
-						Fetch an OCI image into the local cache. This can take a while.
+						Fetch an OCI image into the local cache so sandboxes boot from it instantly.
 					}
 				}
-				<form class="grid gap-4 py-4" data-on:submit="@post('/dashboard/api/images/pull')">
+				<div id="pull-image-error"></div>
+				<form class="grid gap-4 py-4" data-on:submit="@post('/dashboard/api/images/pull', {retry:'never'})" data-indicator="pullbusy">
 					@field("imgref", "Reference") {
-						@input.Input(input.Props{ID: "imgref", Placeholder: "microsandbox/python", Attributes: templ.Attributes{"data-bind": "imgref"}})
+						@input.Input(input.Props{
+							ID:          "imgref",
+							Class:       "font-mono",
+							Placeholder: "microsandbox/python",
+							Attributes:  templ.Attributes{"data-bind": "imgref", "required": "true", "list": "pull-suggestions", "autocomplete": "off"},
+						})
+						<datalist id="pull-suggestions">
+							for _, sg := range pullSuggestions(m) {
+								<option value={ sg }></option>
+							}
+						</datalist>
+						@hint("Any OCI reference: repo, repo:tag, registry/repo:tag, or repo@sha256:… Untagged means :latest.")
 					}
-					<label class="flex items-center gap-2 text-sm" for="imgforce">
-						<input id="imgforce" type="checkbox" data-bind="imgforce" class="size-4 rounded border"/>
-						Force re-pull even if cached
+					<div class="flex flex-wrap gap-1.5">
+						for _, sg := range starterImages() {
+							<button
+								type="button"
+								class="rounded-full border px-2.5 py-1 font-mono text-xs transition-colors hover:bg-accent"
+								data-on:click={ "$imgref = " + jsExpr(sg) }
+							>{ sg }</button>
+						}
+					</div>
+					<label class="flex items-start gap-2 text-sm" for="imgforce">
+						<input id="imgforce" type="checkbox" data-bind="imgforce" class="mt-0.5 size-4 rounded border"/>
+						<span>
+							Force re-pull even if cached
+							<span class="block text-xs text-muted-foreground">Without this, an already-cached reference is a no-op.</span>
+						</span>
 					</label>
+					<!-- Moving tags are exactly where people expect "pull" to fetch a
+					     newer copy; nudge them toward Force so it actually does. -->
+					<p class="text-xs text-amber-500" data-show={ mutableTagExpr }>
+						This is a moving tag. If it is already cached, tick Force to fetch a newer copy.
+					</p>
 				</form>
 				@dialog.Footer() {
 					@dialog.Close() {
@@ -181,7 +352,15 @@ templ PullImageDialog() {
 							Cancel
 						}
 					}
-					@button.Button(button.Props{Attributes: templ.Attributes{"data-on:click": "@post('/dashboard/api/images/pull')"}}) {
+					@button.Button(button.Props{
+						Attributes: templ.Attributes{
+							"data-on:click":  "@post('/dashboard/api/images/pull', {retry:'never'})",
+							"data-indicator": "pullbusy",
+							"data-attr":      "{disabled: $pullbusy || !$imgref}",
+						},
+					}) {
+						@Busy("pullbusy")
+						@icon.Download(icon.Props{Class: "size-4"})
 						Pull
 					}
 				}
@@ -190,26 +369,80 @@ templ PullImageDialog() {
 	}
 }
 
-// CreateSnapshotDialog is the new-snapshot modal.
-templ CreateSnapshotDialog() {
+// mutableTagExpr is the client-side mirror of IsMutableTag: true when the typed
+// reference is not digest-pinned and has no tag (implicit :latest) or :latest.
+const mutableTagExpr = "!$imgforce && $imgref && !$imgref.includes('@') && " +
+	"(!$imgref.split('/').pop().includes(':') || $imgref.endsWith(':latest'))"
+
+// starterImages are the first-party sandbox images most people want, offered as
+// one-click chips so a new user does not have to guess a reference.
+func starterImages() []string {
+	return []string{
+		"microsandbox/python",
+		"microsandbox/node",
+		"microsandbox/command",
+		"alpine:3",
+		"debian:bookworm-slim",
+	}
+}
+
+// pullSuggestions is the autocomplete list: the starter images plus everything
+// already cached (handy for re-pulling a moving tag).
+func pullSuggestions(m Meta) []string {
+	seen := map[string]bool{}
+	out := make([]string, 0, len(m.Images)+len(starterImages()))
+	for _, s := range append(starterImages(), m.Images...) {
+		if s != "" && !seen[s] {
+			seen[s] = true
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// CreateSnapshotDialog is the new-snapshot modal. The source is chosen from a
+// real list of sandboxes rather than typed by hand.
+templ CreateSnapshotDialog(sandboxes []SandboxRow, preselect string) {
 	@dialog.Dialog(dialog.Props{ID: "create-snapshot"}) {
 		@dialog.Content() {
-			<div data-signals="{snapsource:'', snapname:''}">
+			<div data-signals={ "{snapsource:" + jsExpr(preselect) + ", snapname:'', snapforce:false}" }>
 				@dialog.Header() {
 					@dialog.Title() {
 						New snapshot
 					}
 					@dialog.Description() {
-						Snapshot a stopped sandbox's rootfs.
+						Capture a sandbox's rootfs. The sandbox should be stopped.
 					}
 				}
-				<form class="grid gap-4 py-4" data-on:submit="@post('/dashboard/api/snapshots')">
-					@field("snapsource", "Source sandbox") {
-						@input.Input(input.Props{ID: "snapsource", Placeholder: "sbx_…", Attributes: templ.Attributes{"data-bind": "snapsource"}})
-					}
+				<div id="create-snapshot-error"></div>
+				<form class="grid gap-4 py-4" data-on:submit="@post('/dashboard/api/snapshots', {retry:'never'})" data-indicator="snapbusy">
+					<div class="grid gap-1.5">
+						@label.Label(label.Props{For: "snapsource"}) {
+							Source sandbox
+						}
+						if len(sandboxes) == 0 {
+							@input.Input(input.Props{ID: "snapsource", Placeholder: "sbx_…", Attributes: templ.Attributes{"data-bind": "snapsource"}})
+							@hint("No sandboxes found — create one first.")
+						} else {
+							<select
+								id="snapsource"
+								data-bind="snapsource"
+								class="flex h-9 w-full rounded-md border bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:ring-2 focus-visible:ring-ring"
+							>
+								<option value="">Select a sandbox…</option>
+								for _, s := range sandboxes {
+									<option value={ s.ID }>{ s.ID } ({ s.State })</option>
+								}
+							</select>
+						}
+					</div>
 					@field("snapname", "Name (optional)") {
 						@input.Input(input.Props{ID: "snapname", Placeholder: "my-snapshot", Attributes: templ.Attributes{"data-bind": "snapname"}})
 					}
+					<label class="flex items-center gap-2 text-sm" for="snapforce">
+						<input id="snapforce" type="checkbox" data-bind="snapforce" class="size-4 rounded border"/>
+						Force (allow snapshotting a running sandbox)
+					</label>
 				</form>
 				@dialog.Footer() {
 					@dialog.Close() {
@@ -217,11 +450,103 @@ templ CreateSnapshotDialog() {
 							Cancel
 						}
 					}
-					@button.Button(button.Props{Attributes: templ.Attributes{"data-on:click": "@post('/dashboard/api/snapshots')"}}) {
+					@button.Button(button.Props{
+						Attributes: templ.Attributes{
+							"data-on:click":  "@post('/dashboard/api/snapshots', {retry:'never'})",
+							"data-indicator": "snapbusy",
+							"data-attr":     "{disabled: $snapbusy || !$snapsource}",
+						},
+					}) {
+						@Busy("snapbusy")
 						Create
 					}
 				}
 			</div>
 		}
 	}
+}
+
+// ImageDetailDialog shows the full OCI config + layer list for a cached image.
+templ ImageDetailDialog(d ImageDetailView) {
+	<div id="image-detail-slot">
+		@dialog.Dialog(dialog.Props{ID: "image-detail"}) {
+			@dialog.Content(dialog.ContentProps{Class: "sm:max-w-2xl"}) {
+				@dialog.Header() {
+					@dialog.Title() {
+						{ d.Reference }
+					}
+					@dialog.Description() {
+						{ d.Architecture } / { d.OS } · { itoa(int(d.Layers)) } layers · { d.Size }
+					}
+				}
+				<div class="max-h-[60vh] space-y-3 overflow-y-auto py-2 text-sm">
+					@kv("Digest") {
+						@Copyable("img-digest", ShortDigest(d.Digest), "text-xs")
+					}
+					@kv("Entrypoint") {
+						<span class="font-mono text-xs">{ orDashS(d.Entrypoint) }</span>
+					}
+					@kv("Cmd") {
+						<span class="font-mono text-xs">{ orDashS(d.Cmd) }</span>
+					}
+					@kv("Workdir") {
+						<span class="font-mono text-xs">{ orDashS(d.WorkingDir) }</span>
+					}
+					@kv("User") {
+						<span class="font-mono text-xs">{ orDashS(d.User) }</span>
+					}
+					@kv("Created") {
+						@TimeAgo(d.CreatedAt)
+					}
+					@kv("Last used") {
+						@TimeAgo(d.LastUsedAt)
+					}
+					if len(d.Env) > 0 {
+						<div>
+							<p class="mb-1 text-xs font-medium text-muted-foreground">Environment</p>
+							<pre class="max-h-40 overflow-auto rounded bg-muted p-2 text-xs">{ joinLines(d.Env) }</pre>
+						</div>
+					}
+					if len(d.LayerRows) > 0 {
+						<div>
+							<p class="mb-1 text-xs font-medium text-muted-foreground">Layers</p>
+							<div class="divide-y rounded border">
+								for _, l := range d.LayerRows {
+									<div class="flex items-center gap-2 px-2 py-1 text-xs">
+										<span class="flex-1 truncate font-mono">{ ShortDigest(l.Digest) }</span>
+										<span class="text-muted-foreground">{ l.Size }</span>
+									</div>
+								}
+							</div>
+						</div>
+					}
+				</div>
+				@dialog.Footer() {
+					@dialog.Close() {
+						@button.Button(button.Props{Variant: button.VariantOutline}) {
+							Close
+						}
+					}
+					@button.Button(button.Props{
+						Attributes: templ.Attributes{
+							"data-on:click": "$sbximage=" + jsExpr(d.Reference) + ";" + closeDialogJS("image-detail") + openDialogJS("create-sandbox"),
+						},
+					}) {
+						@icon.Play(icon.Props{Class: "size-4"})
+						Launch sandbox
+					}
+				}
+			}
+		}
+	</div>
+}
+
+// closeDialogJS / openDialogJS drive templui dialogs from a Datastar expression
+// via the component's public window.tui.dialog API.
+func closeDialogJS(id string) string {
+	return "window.tui.dialog.close(" + jsExpr(id) + ");"
+}
+
+func openDialogJS(id string) string {
+	return "window.tui.dialog.open(" + jsExpr(id) + ");"
 }

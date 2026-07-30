@@ -71,7 +71,7 @@
           # Single direct dependency (the microsandbox SDK) plus the CLI/logging
           # stack (cobra, fang, charmbracelet/log). If go.mod changes, run
           # `nix build .#msbd` and replace this with the hash Nix reports.
-          vendorHash = "sha256-wnoOafmWc7FPa7fET123/TE1ovI6X6ttidNPOj3jnn4=";
+          vendorHash = "sha256-xidi4BuGc+oSXwDPM6bUlFYvaxZK2By8x1dpErtBriE=";
 
           subPackages = [ "cmd/msbd" ];
 

@@ -48,8 +48,22 @@ import (
 // only way it changes is a deliberate SDK bump in go.mod, which trips the
 // guard in TestPinnedSDKVersion (terminal_agent_test.go): re-verify these
 // constants against the new microsandbox protocol crate when that test fails.
+//
+// Verification log:
+//
+//	SDK 0.6.1 → PROTOCOL_VERSION 5
+//	SDK 0.6.7 → PROTOCOL_VERSION 6. crates/protocol/lib/exec.rs is byte-identical
+//	  between the two tags (every exec payload struct below is unchanged), and
+//	  message.rs only APPENDS four generation-6 core message types
+//	  (core.ping/pong/touch/touched) that msbd does not use. All exec message
+//	  type strings and their frame flags are untouched.
+//
+// `v` advertises OUR generation to the guest: MessageType::is_available_at
+// gates what the peer may send back. Exec messages are generation-1 baseline,
+// so they are valid at any generation, but we declare the true one so the guest
+// is free to use current-generation behaviour.
 const (
-	protocolVersion uint8 = 5
+	protocolVersion uint8 = 6
 
 	flagTerminal     uint8 = 0b0000_0001 // last frame for a correlation id
 	flagSessionStart uint8 = 0b0000_0010 // first frame of a session

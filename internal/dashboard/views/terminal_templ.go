@@ -12,7 +12,10 @@ import templruntime "github.com/a-h/templ/runtime"
 // WebSocket terminal endpoint. wsBase is the absolute ws(s):// URL for the
 // sandbox terminal WITHOUT query params; ticket is a short-lived, single-use
 // terminal ticket (NOT the long-lived API key) forwarded as ?ticket=.
-func TerminalPage(id, wsBase, ticket string) templ.Component {
+//
+// embed=true trims the chrome so the page can be iframed into the sandbox
+// detail page's Terminal tab.
+func TerminalPage(id, wsBase, ticket string, embed bool) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
@@ -40,52 +43,99 @@ func TerminalPage(id, wsBase, ticket string) templ.Component {
 		var templ_7745c5c3_Var2 string
 		templ_7745c5c3_Var2, templ_7745c5c3_Err = templ.JoinStringErrs(id)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/dashboard/views/terminal.templ`, Line: 13, Col: 14}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/dashboard/views/terminal.templ`, Line: 16, Col: 14}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var2))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, " — terminal</title><link rel=\"stylesheet\" href=\"/dashboard/assets/vendor/xterm.css\"><script src=\"/dashboard/assets/vendor/xterm.js\"></script><script src=\"/dashboard/assets/vendor/addon-fit.js\"></script><style>\n\t\t\t\thtml,\n\t\t\t\tbody {\n\t\t\t\t\tmargin: 0;\n\t\t\t\t\theight: 100%;\n\t\t\t\t\tbackground: #000;\n\t\t\t\t}\n\t\t\t\t#term {\n\t\t\t\t\tposition: fixed;\n\t\t\t\t\tinset: 0;\n\t\t\t\t\tpadding: 6px;\n\t\t\t\t\tbox-sizing: border-box;\n\t\t\t\t}\n\t\t\t\t#status {\n\t\t\t\t\tposition: fixed;\n\t\t\t\t\ttop: 6px;\n\t\t\t\t\tright: 10px;\n\t\t\t\t\tfont: 12px monospace;\n\t\t\t\t\tcolor: #888;\n\t\t\t\t\tz-index: 10;\n\t\t\t\t}\n\t\t\t\t#overlay {\n\t\t\t\t\tposition: fixed;\n\t\t\t\t\tinset: 0;\n\t\t\t\t\tdisplay: none;\n\t\t\t\t\talign-items: center;\n\t\t\t\t\tjustify-content: center;\n\t\t\t\t\tbackground: rgba(0, 0, 0, 0.72);\n\t\t\t\t\tz-index: 20;\n\t\t\t\t}\n\t\t\t\t#overlay .box {\n\t\t\t\t\tfont-family: monospace;\n\t\t\t\t\tcolor: #ddd;\n\t\t\t\t\ttext-align: center;\n\t\t\t\t\tpadding: 24px 28px;\n\t\t\t\t\tborder: 1px solid #333;\n\t\t\t\t\tborder-radius: 8px;\n\t\t\t\t\tbackground: #0a0a0a;\n\t\t\t\t}\n\t\t\t\t#overlay button {\n\t\t\t\t\tfont: 13px monospace;\n\t\t\t\t\tmargin: 12px 6px 0;\n\t\t\t\t\tpadding: 6px 14px;\n\t\t\t\t\tcolor: #eee;\n\t\t\t\t\tbackground: #1a1a1a;\n\t\t\t\t\tborder: 1px solid #444;\n\t\t\t\t\tborder-radius: 6px;\n\t\t\t\t\tcursor: pointer;\n\t\t\t\t}\n\t\t\t\t#overlay button:hover {\n\t\t\t\t\tbackground: #262626;\n\t\t\t\t}\n\t\t\t</style></head><body><div id=\"status\">connecting…</div><div id=\"term\" data-id=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, " — terminal</title><link rel=\"icon\" href=\"/dashboard/assets/favicon.svg\" type=\"image/svg+xml\"><link rel=\"stylesheet\" href=\"/dashboard/assets/vendor/xterm.css\"><script src=\"/dashboard/assets/vendor/xterm.js\"></script><script src=\"/dashboard/assets/vendor/addon-fit.js\"></script><style>\n\t\t\t\thtml,\n\t\t\t\tbody {\n\t\t\t\t\tmargin: 0;\n\t\t\t\t\theight: 100%;\n\t\t\t\t\tbackground: #000;\n\t\t\t\t}\n\t\t\t\t#term {\n\t\t\t\t\tposition: fixed;\n\t\t\t\t\tinset: 0;\n\t\t\t\t\tpadding: 6px;\n\t\t\t\t\tbox-sizing: border-box;\n\t\t\t\t}\n\t\t\t\t#bar {\n\t\t\t\t\tposition: fixed;\n\t\t\t\t\ttop: 0;\n\t\t\t\t\tright: 0;\n\t\t\t\t\tleft: 0;\n\t\t\t\t\tz-index: 10;\n\t\t\t\t\tdisplay: flex;\n\t\t\t\t\talign-items: center;\n\t\t\t\t\tgap: 10px;\n\t\t\t\t\tpadding: 4px 10px;\n\t\t\t\t\tfont: 12px ui-monospace, monospace;\n\t\t\t\t\tcolor: #999;\n\t\t\t\t\tbackground: rgba(0, 0, 0, 0.65);\n\t\t\t\t}\n\t\t\t\t#bar.hidden {\n\t\t\t\t\tdisplay: none;\n\t\t\t\t}\n\t\t\t\t#bar .grow {\n\t\t\t\t\tflex: 1;\n\t\t\t\t}\n\t\t\t\t#dot {\n\t\t\t\t\twidth: 8px;\n\t\t\t\t\theight: 8px;\n\t\t\t\t\tborder-radius: 50%;\n\t\t\t\t\tbackground: #666;\n\t\t\t\t}\n\t\t\t\t#dot.ok {\n\t\t\t\t\tbackground: #34d399;\n\t\t\t\t}\n\t\t\t\t#dot.bad {\n\t\t\t\t\tbackground: #ef4444;\n\t\t\t\t}\n\t\t\t\t#dot.wait {\n\t\t\t\t\tbackground: #f59e0b;\n\t\t\t\t}\n\t\t\t\t#bar button {\n\t\t\t\t\tfont: 12px ui-monospace, monospace;\n\t\t\t\t\tpadding: 2px 8px;\n\t\t\t\t\tcolor: #ddd;\n\t\t\t\t\tbackground: #1a1a1a;\n\t\t\t\t\tborder: 1px solid #3a3a3a;\n\t\t\t\t\tborder-radius: 5px;\n\t\t\t\t\tcursor: pointer;\n\t\t\t\t}\n\t\t\t\t#bar button:hover {\n\t\t\t\t\tbackground: #262626;\n\t\t\t\t}\n\t\t\t\t#overlay {\n\t\t\t\t\tposition: fixed;\n\t\t\t\t\tinset: 0;\n\t\t\t\t\tdisplay: none;\n\t\t\t\t\talign-items: center;\n\t\t\t\t\tjustify-content: center;\n\t\t\t\t\tbackground: rgba(0, 0, 0, 0.72);\n\t\t\t\t\tz-index: 20;\n\t\t\t\t}\n\t\t\t\t#overlay .box {\n\t\t\t\t\tfont-family: ui-monospace, monospace;\n\t\t\t\t\tcolor: #ddd;\n\t\t\t\t\ttext-align: center;\n\t\t\t\t\tpadding: 24px 28px;\n\t\t\t\t\tborder: 1px solid #333;\n\t\t\t\t\tborder-radius: 8px;\n\t\t\t\t\tbackground: #0a0a0a;\n\t\t\t\t}\n\t\t\t\t#overlay button {\n\t\t\t\t\tfont: 13px ui-monospace, monospace;\n\t\t\t\t\tmargin: 12px 6px 0;\n\t\t\t\t\tpadding: 6px 14px;\n\t\t\t\t\tcolor: #eee;\n\t\t\t\t\tbackground: #1a1a1a;\n\t\t\t\t\tborder: 1px solid #444;\n\t\t\t\t\tborder-radius: 6px;\n\t\t\t\t\tcursor: pointer;\n\t\t\t\t}\n\t\t\t\t#overlay button:hover {\n\t\t\t\t\tbackground: #262626;\n\t\t\t\t}\n\t\t\t</style></head><body>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		var templ_7745c5c3_Var3 string
-		templ_7745c5c3_Var3, templ_7745c5c3_Err = templ.ResolveAttributeValue(id)
-		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/dashboard/views/terminal.templ`, Line: 73, Col: 30}
-		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var3)
+		var templ_7745c5c3_Var3 = []any{templ.KV("hidden", embed)}
+		templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_Var3...)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "\" data-ws=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "<div id=\"bar\" class=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var4 string
-		templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.ResolveAttributeValue(wsBase)
+		templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.ResolveAttributeValue(templ.CSSClasses(templ_7745c5c3_Var3).String())
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/dashboard/views/terminal.templ`, Line: 73, Col: 49}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/dashboard/views/terminal.templ`, Line: 1, Col: 0}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var4)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "\" data-ticket=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "\"><span id=\"dot\" class=\"wait\"></span> <span id=\"status\">connecting…</span> <span class=\"grow\"></span> <button id=\"btn-smaller\" type=\"button\" title=\"Decrease font size\" aria-label=\"Decrease font size\">A−</button> <button id=\"btn-bigger\" type=\"button\" title=\"Increase font size\" aria-label=\"Increase font size\">A+</button> <button id=\"btn-clear\" type=\"button\" title=\"Clear the screen\">Clear</button> <a href=\"/dashboard\" style=\"color:#8ab4ff;text-decoration:none\">← dashboard</a></div><div id=\"term\" data-id=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var5 string
-		templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.ResolveAttributeValue(ticket)
+		templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.ResolveAttributeValue(id)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/dashboard/views/terminal.templ`, Line: 73, Col: 72}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/dashboard/views/terminal.templ`, Line: 126, Col: 16}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var5)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "\"></div><div id=\"overlay\"><div class=\"box\"><div id=\"overlay-msg\">Session ended.</div><button id=\"btn-reconnect\" type=\"button\">Reconnect</button> <button id=\"btn-back\" type=\"button\">Back to dashboard</button></div></div><script>\n\t\t\t\t(function () {\n\t\t\t\t\tconst el = document.getElementById(\"term\");\n\t\t\t\t\tconst status = document.getElementById(\"status\");\n\t\t\t\t\tconst overlay = document.getElementById(\"overlay\");\n\t\t\t\t\tconst overlayMsg = document.getElementById(\"overlay-msg\");\n\t\t\t\t\tconst term = new Terminal({\n\t\t\t\t\t\tcursorBlink: true,\n\t\t\t\t\t\tfontFamily: \"monospace\",\n\t\t\t\t\t\tfontSize: 13,\n\t\t\t\t\t\ttheme: { background: \"#000000\" },\n\t\t\t\t\t});\n\t\t\t\t\tconst fit = new FitAddon.FitAddon();\n\t\t\t\t\tterm.loadAddon(fit);\n\t\t\t\t\tterm.open(el);\n\t\t\t\t\tfit.fit();\n\n\t\t\t\t\t// A ticket is single-use, so once consumed we must fetch a\n\t\t\t\t\t// fresh one to reconnect. Seeded with the server-minted ticket.\n\t\t\t\t\tlet ticket = el.dataset.ticket;\n\t\t\t\t\tconst BACK_TO = \"/dashboard\";\n\n\t\t\t\t\tfunction wsURL() {\n\t\t\t\t\t\tconst u = new URL(el.dataset.ws);\n\t\t\t\t\t\tu.searchParams.set(\"rows\", String(term.rows));\n\t\t\t\t\t\tu.searchParams.set(\"cols\", String(term.cols));\n\t\t\t\t\t\tif (ticket) u.searchParams.set(\"ticket\", ticket);\n\t\t\t\t\t\treturn u.toString();\n\t\t\t\t\t}\n\n\t\t\t\t\tasync function freshTicket() {\n\t\t\t\t\t\ttry {\n\t\t\t\t\t\t\tconst res = await fetch(\n\t\t\t\t\t\t\t\t\"/dashboard/api/sandboxes/\" +\n\t\t\t\t\t\t\t\t\tencodeURIComponent(el.dataset.id) +\n\t\t\t\t\t\t\t\t\t\"/terminal-ticket\",\n\t\t\t\t\t\t\t\t{ method: \"POST\" },\n\t\t\t\t\t\t\t);\n\t\t\t\t\t\t\tif (!res.ok) return false;\n\t\t\t\t\t\t\tconst body = await res.json();\n\t\t\t\t\t\t\tticket = body.ticket;\n\t\t\t\t\t\t\treturn !!ticket;\n\t\t\t\t\t\t} catch (e) {\n\t\t\t\t\t\t\treturn false;\n\t\t\t\t\t\t}\n\t\t\t\t\t}\n\n\t\t\t\t\tlet ws;\n\t\t\t\t\tlet cleanExit = false;\n\t\t\t\t\tlet opened = false;\n\n\t\t\t\t\tfunction showOverlay(msg) {\n\t\t\t\t\t\toverlayMsg.textContent = msg;\n\t\t\t\t\t\toverlay.style.display = \"flex\";\n\t\t\t\t\t}\n\n\t\t\t\t\tfunction connect() {\n\t\t\t\t\t\toverlay.style.display = \"none\";\n\t\t\t\t\t\tcleanExit = false;\n\t\t\t\t\t\tstatus.textContent = \"connecting…\";\n\t\t\t\t\t\tws = new WebSocket(wsURL());\n\t\t\t\t\t\tws.binaryType = \"arraybuffer\";\n\t\t\t\t\t\tws.onopen = () => {\n\t\t\t\t\t\t\topened = true;\n\t\t\t\t\t\t\tstatus.textContent = \"connected\";\n\t\t\t\t\t\t\tsendResize();\n\t\t\t\t\t\t};\n\t\t\t\t\t\tws.onmessage = (ev) => {\n\t\t\t\t\t\t\tif (typeof ev.data === \"string\") {\n\t\t\t\t\t\t\t\ttry {\n\t\t\t\t\t\t\t\t\tconst msg = JSON.parse(ev.data);\n\t\t\t\t\t\t\t\t\tif (msg.type === \"exit\") {\n\t\t\t\t\t\t\t\t\t\tcleanExit = true;\n\t\t\t\t\t\t\t\t\t\tstatus.textContent = \"exited (\" + msg.exit_code + \")\";\n\t\t\t\t\t\t\t\t\t\tshowOverlay(\"Process exited (code \" + msg.exit_code + \").\");\n\t\t\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\t\t} catch (e) {}\n\t\t\t\t\t\t\t\treturn;\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\tterm.write(new Uint8Array(ev.data));\n\t\t\t\t\t\t};\n\t\t\t\t\t\tws.onclose = () => {\n\t\t\t\t\t\t\tstatus.textContent = \"disconnected\";\n\t\t\t\t\t\t\t// Scrollback + status are preserved; the user decides\n\t\t\t\t\t\t\t// whether to reconnect (a fresh ticket is minted on click).\n\t\t\t\t\t\t\tif (!cleanExit) {\n\t\t\t\t\t\t\t\tshowOverlay(\n\t\t\t\t\t\t\t\t\topened\n\t\t\t\t\t\t\t\t\t\t? \"Disconnected. The connection dropped.\"\n\t\t\t\t\t\t\t\t\t\t: \"Could not connect to this terminal.\",\n\t\t\t\t\t\t\t\t);\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t};\n\t\t\t\t\t\tws.onerror = () => {\n\t\t\t\t\t\t\tstatus.textContent = \"error\";\n\t\t\t\t\t\t};\n\t\t\t\t\t}\n\n\t\t\t\t\tasync function reconnect() {\n\t\t\t\t\t\toverlay.style.display = \"none\";\n\t\t\t\t\t\tif (!(await freshTicket())) {\n\t\t\t\t\t\t\tshowOverlay(\"Could not obtain a new terminal ticket.\");\n\t\t\t\t\t\t\treturn;\n\t\t\t\t\t\t}\n\t\t\t\t\t\tconnect();\n\t\t\t\t\t\tterm.focus();\n\t\t\t\t\t}\n\n\t\t\t\t\tdocument\n\t\t\t\t\t\t.getElementById(\"btn-reconnect\")\n\t\t\t\t\t\t.addEventListener(\"click\", reconnect);\n\t\t\t\t\tdocument\n\t\t\t\t\t\t.getElementById(\"btn-back\")\n\t\t\t\t\t\t.addEventListener(\"click\", () => {\n\t\t\t\t\t\t\twindow.location.href = BACK_TO;\n\t\t\t\t\t\t});\n\n\t\t\t\t\tfunction sendResize() {\n\t\t\t\t\t\tif (ws && ws.readyState === WebSocket.OPEN) {\n\t\t\t\t\t\t\tws.send(\n\t\t\t\t\t\t\t\tJSON.stringify({\n\t\t\t\t\t\t\t\t\ttype: \"resize\",\n\t\t\t\t\t\t\t\t\trows: term.rows,\n\t\t\t\t\t\t\t\t\tcols: term.cols,\n\t\t\t\t\t\t\t\t}),\n\t\t\t\t\t\t\t);\n\t\t\t\t\t\t}\n\t\t\t\t\t}\n\n\t\t\t\t\tterm.onData((d) => {\n\t\t\t\t\t\tif (ws && ws.readyState === WebSocket.OPEN) {\n\t\t\t\t\t\t\tws.send(new TextEncoder().encode(d));\n\t\t\t\t\t\t}\n\t\t\t\t\t});\n\n\t\t\t\t\tfunction refit() {\n\t\t\t\t\t\tfit.fit();\n\t\t\t\t\t\tsendResize();\n\t\t\t\t\t}\n\t\t\t\t\twindow.addEventListener(\"resize\", refit);\n\t\t\t\t\t// Mobile: react to the on-screen keyboard resizing the viewport.\n\t\t\t\t\tif (window.visualViewport) {\n\t\t\t\t\t\twindow.visualViewport.addEventListener(\"resize\", refit);\n\t\t\t\t\t}\n\t\t\t\t\tconnect();\n\t\t\t\t\tterm.focus();\n\t\t\t\t})();\n\t\t\t</script></body></html>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "\" data-ws=\"")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		var templ_7745c5c3_Var6 string
+		templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.ResolveAttributeValue(wsBase)
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/dashboard/views/terminal.templ`, Line: 127, Col: 20}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var6)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "\" data-ticket=\"")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		var templ_7745c5c3_Var7 string
+		templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.ResolveAttributeValue(ticket)
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/dashboard/views/terminal.templ`, Line: 128, Col: 24}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var7)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "\"")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		if embed {
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, " data-embed=\"1\" style=\"top:0\"")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+		} else {
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, " style=\"top:26px\"")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "></div><div id=\"overlay\"><div class=\"box\"><div id=\"overlay-msg\">Session ended.</div><button id=\"btn-reconnect\" type=\"button\">Reconnect</button> ")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		if !embed {
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 11, "<button id=\"btn-back\" type=\"button\">Back to dashboard</button>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, "</div></div><script>\n\t\t\t\t(function () {\n\t\t\t\t\tconst el = document.getElementById(\"term\");\n\t\t\t\t\tconst status = document.getElementById(\"status\");\n\t\t\t\t\tconst dot = document.getElementById(\"dot\");\n\t\t\t\t\tconst overlay = document.getElementById(\"overlay\");\n\t\t\t\t\tconst overlayMsg = document.getElementById(\"overlay-msg\");\n\n\t\t\t\t\tconst FONT_KEY = \"msbd-term-font\";\n\t\t\t\t\tlet fontSize = parseInt(localStorage.getItem(FONT_KEY) || \"13\", 10);\n\t\t\t\t\tif (!(fontSize >= 8 && fontSize <= 28)) fontSize = 13;\n\n\t\t\t\t\tconst term = new Terminal({\n\t\t\t\t\t\tcursorBlink: true,\n\t\t\t\t\t\tfontFamily: \"ui-monospace, SFMono-Regular, Menlo, monospace\",\n\t\t\t\t\t\tfontSize: fontSize,\n\t\t\t\t\t\tscrollback: 5000,\n\t\t\t\t\t\ttheme: { background: \"#000000\" },\n\t\t\t\t\t});\n\t\t\t\t\tconst fit = new FitAddon.FitAddon();\n\t\t\t\t\tterm.loadAddon(fit);\n\t\t\t\t\tterm.open(el);\n\t\t\t\t\tfit.fit();\n\n\t\t\t\t\t// A ticket is single-use, so once consumed we must fetch a\n\t\t\t\t\t// fresh one to reconnect. Seeded with the server-minted ticket.\n\t\t\t\t\tlet ticket = el.dataset.ticket;\n\t\t\t\t\tconst BACK_TO = \"/dashboard\";\n\n\t\t\t\t\tfunction setStatus(text, cls) {\n\t\t\t\t\t\tstatus.textContent = text;\n\t\t\t\t\t\tdot.className = cls || \"\";\n\t\t\t\t\t}\n\n\t\t\t\t\tfunction wsURL() {\n\t\t\t\t\t\tconst u = new URL(el.dataset.ws);\n\t\t\t\t\t\tu.searchParams.set(\"rows\", String(term.rows));\n\t\t\t\t\t\tu.searchParams.set(\"cols\", String(term.cols));\n\t\t\t\t\t\tif (ticket) u.searchParams.set(\"ticket\", ticket);\n\t\t\t\t\t\treturn u.toString();\n\t\t\t\t\t}\n\n\t\t\t\t\tasync function freshTicket() {\n\t\t\t\t\t\ttry {\n\t\t\t\t\t\t\tconst res = await fetch(\n\t\t\t\t\t\t\t\t\"/dashboard/api/sandboxes/\" +\n\t\t\t\t\t\t\t\t\tencodeURIComponent(el.dataset.id) +\n\t\t\t\t\t\t\t\t\t\"/terminal-ticket\",\n\t\t\t\t\t\t\t\t{ method: \"POST\" },\n\t\t\t\t\t\t\t);\n\t\t\t\t\t\t\tif (!res.ok) return false;\n\t\t\t\t\t\t\tconst body = await res.json();\n\t\t\t\t\t\t\tticket = body.ticket;\n\t\t\t\t\t\t\treturn !!ticket;\n\t\t\t\t\t\t} catch (e) {\n\t\t\t\t\t\t\treturn false;\n\t\t\t\t\t\t}\n\t\t\t\t\t}\n\n\t\t\t\t\tlet ws;\n\t\t\t\t\tlet cleanExit = false;\n\t\t\t\t\tlet opened = false;\n\n\t\t\t\t\tfunction showOverlay(msg) {\n\t\t\t\t\t\toverlayMsg.textContent = msg;\n\t\t\t\t\t\toverlay.style.display = \"flex\";\n\t\t\t\t\t}\n\n\t\t\t\t\tfunction connect() {\n\t\t\t\t\t\toverlay.style.display = \"none\";\n\t\t\t\t\t\tcleanExit = false;\n\t\t\t\t\t\tsetStatus(\"connecting…\", \"wait\");\n\t\t\t\t\t\tws = new WebSocket(wsURL());\n\t\t\t\t\t\tws.binaryType = \"arraybuffer\";\n\t\t\t\t\t\tws.onopen = () => {\n\t\t\t\t\t\t\topened = true;\n\t\t\t\t\t\t\tsetStatus(\"connected\", \"ok\");\n\t\t\t\t\t\t\tsendResize();\n\t\t\t\t\t\t};\n\t\t\t\t\t\tws.onmessage = (ev) => {\n\t\t\t\t\t\t\tif (typeof ev.data === \"string\") {\n\t\t\t\t\t\t\t\ttry {\n\t\t\t\t\t\t\t\t\tconst msg = JSON.parse(ev.data);\n\t\t\t\t\t\t\t\t\tif (msg.type === \"exit\") {\n\t\t\t\t\t\t\t\t\t\tcleanExit = true;\n\t\t\t\t\t\t\t\t\t\tsetStatus(\"exited (\" + msg.exit_code + \")\", \"bad\");\n\t\t\t\t\t\t\t\t\t\tshowOverlay(\"Process exited (code \" + msg.exit_code + \").\");\n\t\t\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\t\t} catch (e) {}\n\t\t\t\t\t\t\t\treturn;\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\tterm.write(new Uint8Array(ev.data));\n\t\t\t\t\t\t};\n\t\t\t\t\t\tws.onclose = () => {\n\t\t\t\t\t\t\t// A clean exit already set a more informative status\n\t\t\t\t\t\t\t// (\"exited (N)\"); don't clobber it with \"disconnected\".\n\t\t\t\t\t\t\tif (!cleanExit) {\n\t\t\t\t\t\t\t\tsetStatus(\"disconnected\", \"bad\");\n\t\t\t\t\t\t\t\t// Scrollback is preserved; the user decides whether to\n\t\t\t\t\t\t\t\t// reconnect (a fresh ticket is minted on click).\n\t\t\t\t\t\t\t\tshowOverlay(\n\t\t\t\t\t\t\t\t\topened\n\t\t\t\t\t\t\t\t\t\t? \"Disconnected. The connection dropped.\"\n\t\t\t\t\t\t\t\t\t\t: \"Could not connect to this terminal.\",\n\t\t\t\t\t\t\t\t);\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t};\n\t\t\t\t\t\tws.onerror = () => {\n\t\t\t\t\t\t\tsetStatus(\"error\", \"bad\");\n\t\t\t\t\t\t};\n\t\t\t\t\t}\n\n\t\t\t\t\tasync function reconnect() {\n\t\t\t\t\t\toverlay.style.display = \"none\";\n\t\t\t\t\t\tif (!(await freshTicket())) {\n\t\t\t\t\t\t\tshowOverlay(\"Could not obtain a new terminal ticket.\");\n\t\t\t\t\t\t\treturn;\n\t\t\t\t\t\t}\n\t\t\t\t\t\tconnect();\n\t\t\t\t\t\tterm.focus();\n\t\t\t\t\t}\n\n\t\t\t\t\tfunction setFont(next) {\n\t\t\t\t\t\tfontSize = Math.max(8, Math.min(28, next));\n\t\t\t\t\t\tterm.options.fontSize = fontSize;\n\t\t\t\t\t\ttry { localStorage.setItem(FONT_KEY, String(fontSize)); } catch (e) {}\n\t\t\t\t\t\trefit();\n\t\t\t\t\t}\n\n\t\t\t\t\tdocument.getElementById(\"btn-reconnect\").addEventListener(\"click\", reconnect);\n\t\t\t\t\tconst back = document.getElementById(\"btn-back\");\n\t\t\t\t\tif (back) {\n\t\t\t\t\t\tback.addEventListener(\"click\", () => {\n\t\t\t\t\t\t\twindow.location.href = BACK_TO;\n\t\t\t\t\t\t});\n\t\t\t\t\t}\n\t\t\t\t\tconst bigger = document.getElementById(\"btn-bigger\");\n\t\t\t\t\tif (bigger) bigger.addEventListener(\"click\", () => setFont(fontSize + 1));\n\t\t\t\t\tconst smaller = document.getElementById(\"btn-smaller\");\n\t\t\t\t\tif (smaller) smaller.addEventListener(\"click\", () => setFont(fontSize - 1));\n\t\t\t\t\tconst clear = document.getElementById(\"btn-clear\");\n\t\t\t\t\tif (clear) clear.addEventListener(\"click\", () => { term.clear(); term.focus(); });\n\n\t\t\t\t\tfunction sendResize() {\n\t\t\t\t\t\tif (ws && ws.readyState === WebSocket.OPEN) {\n\t\t\t\t\t\t\tws.send(\n\t\t\t\t\t\t\t\tJSON.stringify({\n\t\t\t\t\t\t\t\t\ttype: \"resize\",\n\t\t\t\t\t\t\t\t\trows: term.rows,\n\t\t\t\t\t\t\t\t\tcols: term.cols,\n\t\t\t\t\t\t\t\t}),\n\t\t\t\t\t\t\t);\n\t\t\t\t\t\t}\n\t\t\t\t\t}\n\n\t\t\t\t\tterm.onData((d) => {\n\t\t\t\t\t\tif (ws && ws.readyState === WebSocket.OPEN) {\n\t\t\t\t\t\t\tws.send(new TextEncoder().encode(d));\n\t\t\t\t\t\t}\n\t\t\t\t\t});\n\n\t\t\t\t\tfunction refit() {\n\t\t\t\t\t\tfit.fit();\n\t\t\t\t\t\tsendResize();\n\t\t\t\t\t}\n\t\t\t\t\twindow.addEventListener(\"resize\", refit);\n\t\t\t\t\t// Mobile: react to the on-screen keyboard resizing the viewport.\n\t\t\t\t\tif (window.visualViewport) {\n\t\t\t\t\t\twindow.visualViewport.addEventListener(\"resize\", refit);\n\t\t\t\t\t}\n\t\t\t\t\tconnect();\n\t\t\t\t\tterm.focus();\n\t\t\t\t})();\n\t\t\t</script></body></html>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -110,25 +160,25 @@ func TerminalNotFound(id string) templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var6 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var6 == nil {
-			templ_7745c5c3_Var6 = templ.NopComponent
+		templ_7745c5c3_Var8 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var8 == nil {
+			templ_7745c5c3_Var8 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "<!doctype html><html lang=\"en\" class=\"dark\"><head><meta charset=\"UTF-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\"><title>terminal — not found</title><style>\n\t\t\t\thtml,\n\t\t\t\tbody {\n\t\t\t\t\tmargin: 0;\n\t\t\t\t\theight: 100%;\n\t\t\t\t\tbackground: #000;\n\t\t\t\t\tcolor: #ddd;\n\t\t\t\t\tfont-family: monospace;\n\t\t\t\t\tdisplay: flex;\n\t\t\t\t\talign-items: center;\n\t\t\t\t\tjustify-content: center;\n\t\t\t\t}\n\t\t\t\ta {\n\t\t\t\t\tcolor: #6ab0ff;\n\t\t\t\t}\n\t\t\t</style></head><body><div style=\"text-align:center\"><p>Sandbox <b>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 13, "<!doctype html><html lang=\"en\" class=\"dark\"><head><meta charset=\"UTF-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\"><title>terminal — not found</title><style>\n\t\t\t\thtml,\n\t\t\t\tbody {\n\t\t\t\t\tmargin: 0;\n\t\t\t\t\theight: 100%;\n\t\t\t\t\tbackground: #000;\n\t\t\t\t\tcolor: #ddd;\n\t\t\t\t\tfont-family: ui-monospace, monospace;\n\t\t\t\t\tdisplay: flex;\n\t\t\t\t\talign-items: center;\n\t\t\t\t\tjustify-content: center;\n\t\t\t\t}\n\t\t\t\ta {\n\t\t\t\t\tcolor: #6ab0ff;\n\t\t\t\t}\n\t\t\t</style></head><body><div style=\"text-align:center\"><p>Sandbox <b>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		var templ_7745c5c3_Var7 string
-		templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinStringErrs(id)
+		var templ_7745c5c3_Var9 string
+		templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.JoinStringErrs(id)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/dashboard/views/terminal.templ`, Line: 260, Col: 22}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/dashboard/views/terminal.templ`, Line: 350, Col: 22}
 		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var7))
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var9))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "</b> was not found.</p><p><a href=\"/dashboard\">← Back to dashboard</a></p></div></body></html>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 14, "</b> was not found.</p><p><a href=\"/dashboard/sandboxes\">← Back to dashboard</a></p></div></body></html>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

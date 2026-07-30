@@ -8,116 +8,206 @@ import (
 	"github.com/mark3labs/msbd/internal/dashboard/components/table"
 )
 
-// SandboxesPage is the full Sandboxes section: header actions + the live table.
-templ SandboxesPage(rows []SandboxRow) {
-	@PageHeader("Sandboxes") {
-		@button.Button(button.Props{
-			Variant:    button.VariantOutline,
-			Size:       button.SizeSm,
-			Attributes: templ.Attributes{"data-on:click": "@get('/dashboard/api/sandboxes/table')"},
-		}) {
-			@icon.RefreshCw(icon.Props{Class: "size-4"})
-			Refresh
+// SandboxesPage is the full Sandboxes section: header actions, filters and the
+// live table.
+templ SandboxesPage(m Meta, rows []SandboxRow, s TableSort) {
+	<div data-signals="{q:'', statef:'', live:true}">
+		@PageHeader("Sandboxes") {
+			@SearchBox("Filter sandboxes…")
+			@button.Button(button.Props{
+				Variant: button.VariantOutline,
+				Size:    button.SizeSm,
+				Attributes: templ.Attributes{
+					"data-on:click":  "@get('/dashboard/api/sandboxes/table')",
+					"data-indicator": "sbxrefresh",
+					"aria-label":     "Refresh sandbox list",
+				},
+			}) {
+				@Busy("sbxrefresh")
+				@icon.RefreshCw(icon.Props{Class: "size-4"})
+				Refresh
+			}
+			@dialogOpenButton("create-sandbox", "New sandbox")
 		}
-		@dialogOpenButton("create-sandbox", "New sandbox")
-	}
-	@card.Card() {
-		@SandboxTable(rows)
-	}
+		<div class="mb-3 flex flex-wrap items-center gap-2">
+			@stateChip("", "All")
+			@stateChip("running", "Running")
+			@stateChip("stopped", "Stopped")
+			@stateChip("crashed", "Crashed")
+			<label class="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
+				<input type="checkbox" class="size-3.5 rounded border" data-bind="live"/>
+				Auto-refresh
+			</label>
+		</div>
+		@card.Card(card.Props{Class: "overflow-hidden"}) {
+			@SandboxTable(rows, s)
+		}
+		@CreateSandboxDialog(m)
+		@CreateSnapshotDialog(rows, "")
+	</div>
 }
 
 // SandboxTable is the refreshable table fragment (id matches the SSE target).
-templ SandboxTable(rows []SandboxRow) {
-	<div id="sbx-table" data-on-interval.5s="@get('/dashboard/api/sandboxes/table')">
-		@table.Table() {
-			@table.Header() {
-				@table.Row() {
-					@table.Head() {
-						ID
-					}
-					@table.Head() {
-						Image
-					}
-					@table.Head() {
-						State
-					}
-					@table.Head() {
-						Workdir
-					}
-					@table.Head() {
-						Uptime
-					}
-					@table.Head(table.HeadProps{Class: "text-right"}) {
-						Actions
-					}
-				}
+//
+// The 5s poll is gated on the `live` signal AND document visibility, so a
+// hidden tab or an open modal stops hammering the daemon.
+templ SandboxTable(rows []SandboxRow, s TableSort) {
+	<div
+		id="sbx-table"
+		data-on-interval.5s="$live && document.visibilityState==='visible' && @get('/dashboard/api/sandboxes/table')"
+	>
+		if len(rows) == 0 {
+			@EmptyState("server", "No sandboxes yet", "Boot a microVM from an OCI image to get started.") {
+				@dialogOpenButton("create-sandbox", "New sandbox")
 			}
-			@table.Body() {
-				if len(rows) == 0 {
-					@table.Row() {
-						@table.Cell(table.CellProps{Class: "text-muted-foreground", Attributes: templ.Attributes{"colspan": "6"}}) {
-							No sandboxes yet. Create one to get started.
-						}
-					}
-				}
-				for _, r := range rows {
-					@table.Row() {
-						@table.Cell() {
-							<button
-								class="font-mono text-xs hover:underline"
-								data-on:click={ "@get('/dashboard/api/sandboxes/" + r.ID + "')" }
-							>
-								{ r.ID }
-							</button>
-						}
-						@table.Cell(table.CellProps{Class: "text-xs"}) {
-							{ r.Image }
-						}
-						@table.Cell() {
-							@badge.Badge(badge.Props{Variant: badgeVariant(r.State)}) {
-								{ r.State }
+		} else {
+			<div class="overflow-x-auto">
+				@table.Table() {
+					<caption class="sr-only">Sandboxes, { itoa(len(rows)) } total</caption>
+					@table.Header() {
+						@table.Row() {
+							@table.Head() {
+								@SortHead("/dashboard/api/sandboxes/table", "id", "ID", s)
+							}
+							@table.Head() {
+								@SortHead("/dashboard/api/sandboxes/table", "image", "Image", s)
+							}
+							@table.Head() {
+								@SortHead("/dashboard/api/sandboxes/table", "state", "State", s)
+							}
+							@table.Head(table.HeadProps{Class: "hidden md:table-cell"}) {
+								Workdir
+							}
+							@table.Head() {
+								@SortHead("/dashboard/api/sandboxes/table", "uptime", "Uptime", s)
+							}
+							@table.Head(table.HeadProps{Class: "text-right"}) {
+								Actions
 							}
 						}
-						@table.Cell(table.CellProps{Class: "font-mono text-xs"}) {
-							{ r.Workdir }
+					}
+					@table.Body() {
+						for _, r := range rows {
+							@table.Row(table.RowProps{Attributes: templ.Attributes{
+								"data-show": rowFilterExpr(r.Haystack(), r.State),
+							}}) {
+								@table.Cell() {
+									<a
+										href={ templ.SafeURL("/dashboard/sandboxes/" + pathSeg(r.ID)) }
+										class="font-mono text-xs hover:underline"
+										title={ "Open " + r.ID }
+									>
+										{ r.ID }
+									</a>
+								}
+								@table.Cell(table.CellProps{Class: "max-w-[18rem] truncate text-xs"}) {
+									<span title={ r.Image }>{ r.Image }</span>
+								}
+								@table.Cell() {
+									<span class="inline-flex items-center gap-2">
+										<span class={ "size-2 rounded-full", stateDot(r.State) } aria-hidden="true"></span>
+										@badge.Badge(badge.Props{Variant: badgeVariant(r.State)}) {
+											{ r.State }
+										}
+									</span>
+								}
+								@table.Cell(table.CellProps{Class: "hidden font-mono text-xs md:table-cell"}) {
+									{ r.Workdir }
+								}
+								@table.Cell(table.CellProps{Class: "text-xs whitespace-nowrap"}) {
+									<span title={ "created " + AbsTime(r.CreatedAt) }>{ r.Uptime }</span>
+								}
+								@table.Cell(table.CellProps{Class: "text-right"}) {
+									@rowActions(r)
+								}
+							}
 						}
-						@table.Cell(table.CellProps{Class: "text-xs"}) {
-							{ r.Uptime }
-						}
-						@table.Cell(table.CellProps{Class: "text-right"}) {
-							@rowActions(r)
+						<!-- Shown only when the client-side filter hides every row. -->
+						@table.Row(table.RowProps{Attributes: templ.Attributes{
+							"data-show": noMatchExpr(rows),
+						}}) {
+							@table.Cell(table.CellProps{Class: "text-muted-foreground", Attributes: templ.Attributes{"colspan": "6"}}) {
+								No sandboxes match the current filter.
+							}
 						}
 					}
 				}
-			}
+			</div>
 		}
 	</div>
+}
+
+// stateChip is a client-side state filter toggle.
+templ stateChip(state, lbl string) {
+	<button
+		type="button"
+		class="rounded-full border px-3 py-1 text-xs font-medium transition-colors hover:bg-accent"
+		aria-pressed="false"
+		data-class={ "{'bg-primary': $statef === " + jsExpr(state) + ", 'text-primary-foreground': $statef === " + jsExpr(state) + "}" }
+		data-attr={ "{'aria-pressed': ($statef === " + jsExpr(state) + ") ? 'true' : 'false'}" }
+		data-on:click={ "$statef = " + jsExpr(state) }
+	>
+		{ lbl }
+	</button>
+}
+
+// rowFilterExpr is the per-row data-show expression: text search AND state chip.
+func rowFilterExpr(haystack, state string) string {
+	return "(!$q || " + jsExpr(haystack) + ".includes($q.toLowerCase())) && (!$statef || $statef === " + jsExpr(state) + ")"
+}
+
+// noMatchExpr is true when every row is filtered out.
+func noMatchExpr(rows []SandboxRow) string {
+	if len(rows) == 0 {
+		return "false"
+	}
+	expr := "!["
+	for i, r := range rows {
+		if i > 0 {
+			expr += ","
+		}
+		expr += "[" + jsExpr(r.Haystack()) + "," + jsExpr(r.State) + "]"
+	}
+	expr += "].some(x => (!$q || x[0].includes($q.toLowerCase())) && (!$statef || $statef === x[1]))"
+	return expr
 }
 
 // rowActions renders the per-sandbox action buttons.
 templ rowActions(r SandboxRow) {
 	<div class="flex items-center justify-end gap-1">
 		if r.State == "running" {
-			@iconButton("Stop", "circle-stop", "@post('/dashboard/api/sandboxes/"+r.ID+"/stop')")
+			@iconButton("Stop "+r.ID, "circle-stop", dsPost("/dashboard/api/sandboxes/"+pathSeg(r.ID)+"/stop"))
 		} else {
-			@iconButton("Start", "circle-play", "@post('/dashboard/api/sandboxes/"+r.ID+"/start')")
+			@iconButton("Start "+r.ID, "circle-play", dsPost("/dashboard/api/sandboxes/"+pathSeg(r.ID)+"/start"))
 		}
 		@button.Button(button.Props{
 			Variant: button.VariantGhost,
 			Size:    button.SizeIcon,
-			Href:    "/dashboard/terminal/" + r.ID,
+			Href:    "/dashboard/terminal/" + pathSeg(r.ID),
 			Target:  "_blank",
 			Class:   "size-8",
+			Attributes: templ.Attributes{
+				"title":      "Open a terminal in " + r.ID,
+				"aria-label": "Open a terminal in " + r.ID,
+				"rel":        "noopener",
+			},
 		}) {
 			@icon.Terminal(icon.Props{Class: "size-4"})
 		}
-		@iconButton("Inspect", "search", "@get('/dashboard/api/sandboxes/"+r.ID+"')")
+		@iconButton("Snapshot "+r.ID, "camera", "$snapsource="+jsExpr(r.ID)+";"+openDialogJS("create-snapshot"))
 		@button.Button(button.Props{
 			Variant: button.VariantGhost,
 			Size:    button.SizeIcon,
 			Class:   "size-8 text-destructive",
 			Attributes: templ.Attributes{
-				"data-on:click": "confirm('Delete this sandbox?') && @delete(" + jsExpr("/dashboard/api/sandboxes/"+pathSeg(r.ID)) + ")",
+				"title":      "Delete " + r.ID,
+				"aria-label": "Delete " + r.ID,
+				"data-on:click": confirmAction(
+					"Delete sandbox?",
+					r.ID+" will be stopped and removed. This cannot be undone.",
+					"Delete",
+					dsDelete("/dashboard/api/sandboxes/"+pathSeg(r.ID)),
+				),
 			},
 		}) {
 			@icon.Trash2(icon.Props{Class: "size-4"})
@@ -127,11 +217,15 @@ templ rowActions(r SandboxRow) {
 
 templ iconButton(label, ico, action string) {
 	@button.Button(button.Props{
-		Variant:    button.VariantGhost,
-		Size:       button.SizeIcon,
-		Class:      "size-8",
-		Attributes: templ.Attributes{"data-on:click": action, "title": label},
+		Variant: button.VariantGhost,
+		Size:    button.SizeIcon,
+		Class:   "size-8",
+		Attributes: templ.Attributes{
+			"data-on:click": action,
+			"title":         label,
+			"aria-label":    label,
+		},
 	}) {
-		@icon.Icon(ico)()
+		@icon.Icon(ico)(icon.Props{Class: "size-4"})
 	}
 }
