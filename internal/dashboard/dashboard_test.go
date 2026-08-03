@@ -1,9 +1,11 @@
 package dashboard
 
 import (
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -444,4 +446,51 @@ func firstLine(s string) string {
 		}
 	}
 	return strings.TrimSpace(s)
+}
+
+// TestConcurrentRendersAreRaceFree renders pages and SSE fragments from many
+// goroutines at once. It is the end-to-end guard for the data race that broke
+// CI: templui components merge Tailwind classes on whatever goroutine is
+// serving the request, and the upstream tailwind-merge-go global is not
+// goroutine-safe (see internal/dashboard/twmerge). Meaningful under -race.
+func TestConcurrentRendersAreRaceFree(t *testing.T) {
+	ts := newTestServer(Config{Enabled: true})
+	defer ts.Close()
+
+	paths := []string{
+		"/dashboard",
+		"/dashboard/sandboxes",
+		"/dashboard/volumes",
+		"/dashboard/images",
+		"/dashboard/snapshots",
+		"/dashboard/api/overview",
+		"/dashboard/api/sandboxes/table",
+		"/dashboard/api/volumes/table",
+		"/dashboard/api/images/table",
+		"/dashboard/api/snapshots/table",
+	}
+
+	var wg sync.WaitGroup
+	for g := range 8 {
+		wg.Add(1)
+		go func(g int) {
+			defer wg.Done()
+			for i := range paths {
+				// Stagger the starting path so goroutines hit different
+				// handlers simultaneously instead of marching in lockstep.
+				p := paths[(i+g)%len(paths)]
+				resp, err := http.Get(ts.URL + p)
+				if err != nil {
+					t.Errorf("GET %s: %v", p, err)
+					return
+				}
+				_, _ = io.Copy(io.Discard, resp.Body)
+				_ = resp.Body.Close()
+				if resp.StatusCode >= 500 {
+					t.Errorf("GET %s = %d", p, resp.StatusCode)
+				}
+			}
+		}(g)
+	}
+	wg.Wait()
 }

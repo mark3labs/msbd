@@ -11,11 +11,18 @@ import (
 
 	"github.com/a-h/templ"
 
-	twmerge "github.com/Oudwins/tailwind-merge-go"
+	"github.com/mark3labs/msbd/internal/dashboard/twmerge"
 )
 
 // TwMerge combines Tailwind classes and resolves conflicts.
 // Example: "bg-red-500 hover:bg-blue-500", "bg-green-500" → "hover:bg-blue-500 bg-green-500"
+//
+// NOTE (msbd local change): upstream templui calls tailwind-merge-go's global
+// twmerge.Merge here, which is NOT goroutine-safe — its lazy init and its
+// default LRU cache both race, and templ renders on per-request goroutines.
+// We delegate to internal/dashboard/twmerge instead, which wraps the same
+// library in a properly synchronized single instance. Re-apply this after a
+// `templui` upgrade overwrites this file.
 func TwMerge(classes ...string) string {
 	return twmerge.Merge(classes...)
 }
