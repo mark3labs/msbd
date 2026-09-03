@@ -2,6 +2,11 @@
 #
 # Install: https://taskfile.dev/installation/ (or `nix run nixpkgs#go-task`).
 # Run `task` with no args to list available tasks.
+#
+# Per-dev overrides go in a local .env (see .env.example). The msbd binary
+# loads .env itself via godotenv, so anything there — MSBD_API_KEY,
+# MSBD_LISTEN, MSBD_DASHBOARD_ALLOW_INSECURE, etc. — works for `task dev`,
+# `./bin/msbd serve`, Docker, and the Nix module identically.
 version: "3"
 
 vars:
@@ -34,8 +39,11 @@ tasks:
   # all in parallel via `task dev`.
   #
   #   • Browser:      http://localhost:7332   (templ proxy, auto-reloads)
-  #   • msbd app:     http://localhost:8099    (proxied; terminal WS lives here)
-  #   • API key:      devkey                   (dashboard terminal uses ?key=)
+  #   • msbd app:     http://localhost:8099   (proxied; terminal WS lives here)
+  #
+  # Per-dev config (API key, dashboard auth, listen address, ports…) goes in
+  # a local `.env` — the msbd binary loads it on startup. Copy .env.example
+  # to .env once and edit to taste.
   #
   # Requires `air` and `templ` on PATH and a host with /dev/kvm (CGO build).
   # ---------------------------------------------------------------------------
@@ -55,9 +63,11 @@ tasks:
 
   dev:server:
     desc: air hot-reload of the msbd binary (CGO; rebuilds + restarts on .go changes)
+    # No MSBD_* vars here on purpose: they belong in .env so `./bin/msbd serve`
+    # and `task dev` see the same config. If .env is missing, msbd's own
+    # defaults apply (empty API key -> unauthenticated dev mode; :8099 listen).
     env:
       CGO_ENABLED: "1"
-      MSBD_API_KEY: devkey
     cmds:
       - >
         air

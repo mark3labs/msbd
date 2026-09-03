@@ -157,7 +157,7 @@ cat /sys/module/kvm_{intel,amd}/parameters/nested 2>/dev/null   # Y/1 if VM
 
 ## Configuration
 
-All via environment variables.
+All via environment variables (also settable as `--flag` — see `msbd serve --help`). A `.env` file in the working directory is loaded on startup via [godotenv](https://github.com/joho/godotenv); shell env and `-e` still win over `.env`, and CLI flags win over env. Copy `.env.example` to `.env` for a documented starting point.
 
 | Var | Default | Description |
 |---|---|---|

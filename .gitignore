@@ -14,6 +14,11 @@
 /msbd
 /.microsandbox/
 
+# Local dev config for msbd (API key, dashboard auth, listen address, …).
+# The msbd binary loads .env from its working directory on startup via
+# godotenv. See .env.example for the full set of MSBD_* keys. Never commit.
+/.env
+
 # Editor / OS
 .DS_Store
 *.swp

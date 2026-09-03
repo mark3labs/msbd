@@ -22,6 +22,7 @@ import (
 
 	"github.com/charmbracelet/fang"
 	"github.com/charmbracelet/log"
+	"github.com/joho/godotenv"
 	"github.com/spf13/cobra"
 
 	"github.com/mark3labs/msbd/internal/api"
@@ -43,6 +44,18 @@ var (
 )
 
 func main() {
+	// Load .env from the CWD into the process env BEFORE cobra builds the
+	// command tree — flag defaults are seeded from MSBD_* env vars in
+	// newServeCmd, so anything in .env has to be exported by now to be seen.
+	// godotenv.Load never overrides an already-set variable (shell env / Docker
+	// -e still win) and is a no-op when the file is absent. A malformed .env
+	// (present but unparseable) is surfaced as a stderr warning rather than a
+	// crash so a typo in someone else's dev file can't lock the daemon out of
+	// booting. Absent-file errors are silently swallowed.
+	if err := godotenv.Load(); err != nil && !os.IsNotExist(err) {
+		fmt.Fprintf(os.Stderr, "warning: .env present but not parseable: %v (ignoring)\n", err)
+	}
+
 	if err := fang.Execute(
 		context.Background(),
 		newRootCmd(),
