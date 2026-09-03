@@ -28,7 +28,18 @@ import (
 //   - Confirmed end-to-end against a live microVM: connect, stdin/stdout round
 //     trip, real PTY device in the guest, core.exec.resize changing `stty size`,
 //     Ctrl-C interrupting a command, and a clean core.exec.exited with code 0.
-const verifiedSDKVersion = "0.6.7"
+//
+// 0.6.7 → 0.6.16 verification (protocol generation 6 → 7):
+//   - crates/protocol/lib/exec.rs is byte-identical between the two tags, so
+//     every wire* payload struct in terminal_agent.go is still correct.
+//   - message.rs only appends ONE generation-7 core message type
+//     (core.bootstrap, flags=0, host→guest one-shot boot config), which msbd
+//     does not use. Every exec message string, its frame flag, and its
+//     min_protocol_version (baseline gen 1) is unchanged, so declaring v=7 in
+//     the ExecRequest we send is equivalent to declaring v=6 for peer-gating
+//     purposes: exec is available at every generation.
+//   - sdk/go/agent.go (the transport this backend rides) is byte-identical.
+const verifiedSDKVersion = "0.6.16"
 
 func TestPinnedSDKVersion(t *testing.T) {
 	if got := msb.SDKVersion(); got != verifiedSDKVersion {

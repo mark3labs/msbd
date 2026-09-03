@@ -123,7 +123,7 @@ func (s *Service) VolumeReadFile(ctx context.Context, name, relPath string) ([]b
 	if err != nil {
 		return nil, err
 	}
-	b, err := fs.Read(relPath)
+	b, err := fs.Read(ctx, relPath)
 	if err != nil {
 		return nil, fmt.Errorf("volume read %s: %w", relPath, err)
 	}
@@ -135,7 +135,7 @@ func (s *Service) VolumeWriteFile(ctx context.Context, name, relPath string, con
 	if err != nil {
 		return err
 	}
-	if err := fs.Write(relPath, content); err != nil {
+	if err := fs.Write(ctx, relPath, content); err != nil {
 		return fmt.Errorf("volume write %s: %w", relPath, err)
 	}
 	return nil
@@ -146,7 +146,7 @@ func (s *Service) VolumeMkdir(ctx context.Context, name, relPath string) error {
 	if err != nil {
 		return err
 	}
-	if err := fs.Mkdir(relPath); err != nil {
+	if err := fs.Mkdir(ctx, relPath); err != nil {
 		return fmt.Errorf("volume mkdir %s: %w", relPath, err)
 	}
 	return nil
@@ -158,12 +158,12 @@ func (s *Service) VolumeRemove(ctx context.Context, name, relPath string, recurs
 		return err
 	}
 	if recursive {
-		if err := fs.RemoveAll(relPath); err != nil {
+		if err := fs.RemoveAll(ctx, relPath); err != nil {
 			return fmt.Errorf("volume remove %s: %w", relPath, err)
 		}
 		return nil
 	}
-	if err := fs.Remove(relPath); err != nil {
+	if err := fs.Remove(ctx, relPath); err != nil {
 		return fmt.Errorf("volume remove %s: %w", relPath, err)
 	}
 	return nil
@@ -174,7 +174,7 @@ func (s *Service) VolumeExists(ctx context.Context, name, relPath string) (bool,
 	if err != nil {
 		return false, err
 	}
-	ok, err := fs.Exists(relPath)
+	ok, err := fs.Exists(ctx, relPath)
 	if err != nil {
 		return false, fmt.Errorf("volume exists %s: %w", relPath, err)
 	}

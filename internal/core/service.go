@@ -393,8 +393,32 @@ func (s *Service) Inspect(ctx context.Context, id string) (*InspectResult, error
 	}, nil
 }
 
+// listAllSandboxes drains every page of the SDK's paginated sandbox listing.
+// The SDK returned a flat []*SandboxHandle up through 0.6.7 and switched to
+// cursor-based *SandboxPage in 0.6.8+; msbd wants "every sandbox on the host"
+// at each call site (List, Reconcile, count) so we walk NextCursor to
+// exhaustion. Each cursor request is a fresh SDK call under the same ctx.
+func listAllSandboxes(ctx context.Context) ([]*msb.SandboxHandle, error) {
+	var out []*msb.SandboxHandle
+	page, err := msb.ListSandboxes(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for page != nil {
+		out = append(out, page.Sandboxes...)
+		if page.NextCursor == nil || *page.NextCursor == "" {
+			break
+		}
+		page, err = msb.ListSandboxesWith(ctx, msb.WithListCursor(*page.NextCursor))
+		if err != nil {
+			return nil, err
+		}
+	}
+	return out, nil
+}
+
 func (s *Service) List(ctx context.Context) ([]Instance, error) {
-	handles, err := msb.ListSandboxes(ctx)
+	handles, err := listAllSandboxes(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list sandboxes: %w", err)
 	}
@@ -406,7 +430,7 @@ func (s *Service) List(ctx context.Context) ([]Instance, error) {
 }
 
 func (s *Service) count(ctx context.Context) (int, error) {
-	handles, err := msb.ListSandboxes(ctx)
+	handles, err := listAllSandboxes(ctx)
 	if err != nil {
 		return 0, err
 	}

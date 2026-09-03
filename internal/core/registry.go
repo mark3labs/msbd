@@ -249,7 +249,7 @@ func verifyAgentUp(ctx context.Context, name string) error {
 // doesn't orphan running sandboxes. Best-effort: a handle that fails to connect
 // is left for lazy resolve() on next use.
 func (r *Registry) Reconcile(ctx context.Context) (int, error) {
-	handles, err := msb.ListSandboxes(ctx)
+	handles, err := listAllSandboxes(ctx)
 	if err != nil {
 		return 0, err
 	}
