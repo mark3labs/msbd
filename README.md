@@ -436,9 +436,11 @@ git push origin HEAD v1.2.3         # push to trigger the release workflow
 task release:push NEW_VERSION=1.2.3
 ```
 
-The task refuses to run on a dirty tree, validates semver, and won't clobber an
-existing tag. The release workflow then verifies `v$(cat VERSION)` equals the
-pushed tag and fails on mismatch.
+The task refuses to run on a dirty tree, validates semver, won't clobber an
+existing tag, and seds `openapi.yaml`'s `info.version` in the same commit so the
+published spec always carries the release number. The release workflow then
+verifies the tag equals both `VERSION` and the spec's version, failing on any
+mismatch (i.e. a hand-made tag after the spec drifted).
 
 GoReleaser injects the version from the tag (`-X main.version`); the Nix flake
 reads the same number from `VERSION` (flakes can't see git tags), so `nix build`

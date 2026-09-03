@@ -159,9 +159,16 @@ tasks:
         msg: "NEW_VERSION must be semver, e.g. 1.2.3 (no leading v)"
       - sh: '! git rev-parse -q --verify "refs/tags/v{{.NEW_VERSION}}" >/dev/null'
         msg: "tag v{{.NEW_VERSION}} already exists"
+      # openapi.yaml's info.version must stay in lockstep with the tag: the
+      # spec is embedded, served at /docs, and client generators stamp its
+      # version. Counting to exactly 1 keeps the sed below well-defined (it
+      # rewrites every match) and fails loudly if the spec is ever reformatted.
+      - sh: '[ "$(grep -cE "^  version: [0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$" openapi.yaml)" -eq 1 ]'
+        msg: "openapi.yaml must declare exactly one '  version: X.Y.Z' under info:"
     cmds:
       - printf '%s\n' "{{.NEW_VERSION}}" > VERSION
-      - git add VERSION
+      - 'sed -i -E "s/^  version: .*/  version: {{.NEW_VERSION}}/" openapi.yaml'
+      - git add VERSION openapi.yaml
       - 'git commit -m "release: v{{.NEW_VERSION}}"'
       # -c tag.gpgsign=false keeps this a lightweight, non-interactive tag even
       # when the user's global config sets tag.gpgsign=true (which would force a

@@ -202,7 +202,9 @@ Gotchas:
 
 Bump the `VERSION` file to `X.Y.Z`, commit, then tag a commit `vX.Y.Z` and push — or just run `task release:push NEW_VERSION=X.Y.Z`, which does the bump+commit+tag+push atomically. GoReleaser builds linux/amd64 + linux/arm64 binaries, multi-arch Docker images pushed to `ghcr.io/mark3labs/msbd`, and a GitHub release with the rendered changelog. See `Taskfile.yml`, `.github/workflows/release.yml` and `.goreleaser.yaml`.
 
-The tag is the source of truth for the version. `cmd/msbd/main.go` declares `version`/`commit`/`date` package vars; GoReleaser injects them from the tag via `-ldflags -X main.*`. The Nix flake reads the version from the `VERSION` file (flakes can't see git tags) and `commit`/`date` from flake metadata. A CI guard fails the release if `v$(cat VERSION)` doesn't match the pushed tag, so both build paths report the same number.
+The tag is the source of truth for the version. `cmd/msbd/main.go` declares `version`/`commit`/`date` package vars; GoReleaser injects them from the tag via `-ldflags -X main.*`. The Nix flake reads the version from the `VERSION` file (flakes can't see git tags) and `commit`/`date` from flake metadata. A CI guard fails the release unless the tag, `VERSION` and `openapi.yaml`'s `info.version` all agree, so every build path reports the same number and `/docs` advertises the contract it actually serves.
+
+The release task is the ONLY thing that keeps the three in sync — it seds `openapi.yaml`'s `  version:` line in the same commit as the `VERSION` bump. Never `git tag` by hand: a hand-made tag fails the guard when the spec has drifted, and a matching hand-made tag silently skips nothing — the spec still says whatever it last said. This drift actually shipped once: v0.6.0's spec label survived two releases until v0.8.0.
 
 CGO is enabled in the release build because the SDK is cgo. Cross-compilation across CPU architectures uses native runners (one job per arch) so we don't have to chase a cross-compiling C toolchain.
 
