@@ -13,10 +13,15 @@ info:
     `/healthz`, `/readyz`, `/metrics`, `/docs` and `/openapi.yaml` sit at the
     root, and the root itself (`/`, `/sandboxes`, `/volumes`, `/images`,
     `/snapshots`, `/settings/*`) is the optional web dashboard, which
-    authenticates with its own login session rather than a bearer token.
+    authenticates with its own login session rather than a bearer token. The
+    dashboard also serves `/ui/*` for its own server-sent-event fragments;
+    those are internal to the web UI, cookie-authenticated, and not part of
+    this API.
 
 
-    All endpoints except `/healthz` and `/readyz` require a bearer token.
+    All endpoints documented here require a bearer token. The unauthenticated
+    ones are `/healthz`, `/readyz` (probes) and `/docs`, `/openapi.yaml` (this
+    spec is not a secret).
 
 
     Tokens come from either `--api-key` / `MSBD_API_KEY` (comma-separated for

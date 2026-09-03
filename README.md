@@ -128,7 +128,7 @@ As a NixOS service:
   services.msbd = {
     enable = true;
     listen = ":8099";
-    apiKeyFile = "/run/secrets/msbd.env";   # systemd EnvironmentFile with MSBD_API_KEY=...
+    apiKeyTokenFile = "/run/secrets/msbd-token";  # file holding ONLY the token
     openFirewall = true;
   };
 }
@@ -136,6 +136,33 @@ As a NixOS service:
 
 The module joins the service to the `kvm` group, allows `/dev/kvm`, and keeps the
 runtime + image cache under `/var/lib/msbd`.
+
+Two ways to pass the API key, and the distinction matters:
+
+| Option | File format | Use for |
+|---|---|---|
+| `apiKeyTokenFile` | the bare token, nothing else | agenix / sops-nix secrets (`MSBD_API_KEY_FILE`) |
+| `environmentFile` | systemd `KEY=value` lines | several secrets at once, e.g. `MSBD_API_KEY` + `MSBD_DASHBOARD_PASS` |
+
+`apiKeyFile` is the old name for `environmentFile` and still works, but warns —
+despite the name it is an EnvironmentFile, not a token file. Point it at a bare
+token and the whole `KEY=value` line becomes your token.
+
+The module also exposes `dashboard`, `dashboardUser`, `dashboardAllowInsecure`,
+`hostPaths`, `pullTimeoutSecs`, `jobTtlSecs`, `jobMaxBytes` and
+`shutdownTimeoutSecs`; anything else goes through `environment`. There is
+deliberately no `dashboardPass` option, since it would write the password into
+the world-readable Nix store — set `MSBD_DASHBOARD_PASS` via `environmentFile`,
+or just run `msbd users add`.
+
+> **Heads-up on a fresh NixOS deploy.** Setting an API key but no dashboard
+> credentials makes `GET /` return the 403 "Dashboard locked" page (see [Web
+> dashboard](#web-dashboard)). Because the service runs as a `DynamicUser`, the
+> state directory is really `/var/lib/private/msbd` owned by a per-unit UID, so
+> running `msbd users add --data-dir ...` as root can leave SQLite sidecar files
+> the service cannot write. Create the account as the service identity instead
+> — the module header in `nix/module.nix` carries a ready-made `systemd-run`
+> recipe.
 
 ## Host requirements
 
@@ -264,8 +291,19 @@ It is server-rendered with [templ](https://templ.guide) + [templui](https://temp
 
 If the API requires a key but the dashboard would have no auth at all, msbd **locks the dashboard** — every route serves a short page telling you to run `msbd users add`, which takes effect on the next reload with no restart. Override with `MSBD_DASHBOARD_ALLOW_INSECURE=true`.
 
+Note what this means now that the dashboard lives at the **root**: a deployment that sets `MSBD_API_KEY` but no dashboard credentials (the Docker quickstart above) answers `GET /` with a `403` "Dashboard locked" page rather than the `404` it used to. That is the safety refusal working as intended, not a broken deploy — `msbd users add <name>` clears it on the next reload. `/healthz` and `/readyz` are unaffected, so container and Kubernetes probes keep passing; only point uptime checks at those, never at `/`.
+
 
 ## REST API
+
+> **Breaking change since v0.7.1.** Every versioned endpoint is now under **`/api/v1`** (was `/v1`), and the web dashboard moved to the **root** (was `/dashboard`). There are no redirects or aliases — the old paths return `404`, so update clients, bookmarks and any path-based reverse-proxy rules. The unversioned ops endpoints (`/healthz`, `/readyz`, `/metrics`, `/docs`, `/openapi.yaml`) did **not** move. In most clients this is a one-line base-URL change:
+>
+> ```diff
+> - http://msbd.internal:8099/v1
+> + http://msbd.internal:8099/api/v1
+> ```
+>
+> If you proxy msbd by path, note that the dashboard now owns the root and serves its own SSE endpoints under `/ui/*`. Those are **internal to the web UI** and cookie-authenticated — they are not a public API, and nothing outside the browser should call them. Reserve `/api` for the REST API when adding routes in front of msbd.
 
 | Method & path | Purpose |
 |---|---|

@@ -72,6 +72,25 @@ The two-package split (`api` ↔ `core`) is the boundary that keeps DTO churn fr
 5. Document it in `openapi.yaml` — schemas under `components/schemas`, response examples, error envelopes. The spec is embedded, so a rebuild reflects it at `/docs`.
 6. Update the endpoint table in `README.md` if it's user-visible.
 
+## Adding a config knob
+
+A new `MSBD_*` setting has more surfaces than it looks, and they drift silently
+— the NixOS module was missing 10 of 18 env vars before anyone noticed, because
+nothing fails when it lags:
+
+1. Flag + env in `newServeCmd` (`cmd/msbd/main.go`), using the `envOr`/`envInt`/`envBool`/`envList` helpers so precedence stays flag › env › `.env` › default.
+2. The Configuration table in `README.md`.
+3. `.env.example`, which doubles as the dev-loop config.
+4. `nix/module.nix` — a typed option plus the `environment` entry. Secrets get a **file** option (never a `str`, which lands world-readable in the Nix store); an unset optional string should be omitted via `lib.optionalAttrs`, not set to `""`.
+5. `docker-compose.yml` if it is something an operator would plausibly tune.
+
+Verify the module end to end rather than by eye — `nix flake check` only proves
+it evaluates, so also render the unit and read the result back:
+
+```
+nix eval --impure --json --expr '((import <nixpkgs/nixos> { configuration = { imports = [ ... ]; services.msbd.enable = true; }; }).config).systemd.services.msbd.environment'
+```
+
 ## The URL space
 
 One mux serves three tenants, and the prefixes are what keep them from
@@ -82,7 +101,7 @@ colliding. Do not add a route that blurs them:
 | `/api/v1/…` | the REST API (`internal/api`) | bearer token (`s.auth` / `s.authWS`) |
 | `/ui/…` | the dashboard's Datastar SSE fragments + actions | dashboard session (`guardAPI` / `guardWrite`) |
 | `/assets/…` | embedded dashboard CSS/JS/favicon | none, on purpose |
-| `/login`, `/logout` | dashboard sign-in | none, by necessity |
+| `/login`, `/logout` | dashboard sign-in | no authentication (there is none yet), but cross-origin checked via `guardForm` |
 | `/healthz`, `/readyz`, `/metrics`, `/docs`, `/openapi.yaml` | ops + spec | none except `/metrics` (bearer) |
 | everything else at the root (`/`, `/sandboxes`, `/sandboxes/{id}`, `/volumes`, `/images`, `/snapshots`, `/settings/*`, `/terminal/{id}`) | dashboard pages | dashboard session (`guardPage` / `guardAdminPage`) |
 
@@ -119,7 +138,7 @@ stdlib affordances are used rather than reimplemented:
 - **`Run` is long-safe; `Exec` is not.** `Exec` is the fast path for one-shot provisioning helpers and intentionally does NOT ensure-running. `Run` blocks until completion and resumes a paused box first. Put no low-timeout proxy in front of `/run`.
 - **`Delete` stops before remove.** The SDK's `RemoveSandbox` refuses a running box; `core.Service.Delete` does a best-effort `Stop` first.
 - **Workdir resolution.** Create runs `pwd` in the booted guest and caches the result so `Instance.Workdir` reflects the image's real `WORKDIR` (e.g. `/workspace` for the kit image) instead of the SDK's `cfg.Workdir`, which only contains an explicitly-pinned value.
-- **glibc, not musl.** The SDK's embedded FFI and the downloaded `msb` supervisor link against glibc ≥ 2.28. The Dockerfile uses `debian:bookworm-slim` and apt-installs `libcap-ng0` because the prebuilt supervisor links it.
+- **glibc, not musl — and not bookworm either.** The SDK's embedded FFI and the downloaded `msb` supervisor are vanilla glibc binaries. As of SDK v0.6.x the FFI needs **glibc ≥ 2.38**, so both `Dockerfile` and `Dockerfile.release` run on `debian:trixie-slim` (glibc 2.41) and apt-install `libcap-ng0`, which the prebuilt supervisor links. Do NOT "simplify" the base back to `bookworm-slim` (glibc 2.36) or to Alpine/musl — the image builds fine and then fails at runtime with `GLIBC_2.38 not found` when the FFI is `dlopen`'d. On NixOS the same requirement is why `nix run` uses the `msbd-fhs` wrapper rather than the bare package.
 - **The dashboard locks itself rather than becoming a bypass.** If the REST API requires a token but the dashboard has no auth of its own, `Handler.locked` refuses every route with a page explaining the fix. It is evaluated PER REQUEST, not at boot, so `msbd users add` unlocks a running server — deciding it once in `runServe` would make that fix require a restart.
 - **Never signal a *running* job — cancel it.** A running job's drain goroutine is parked in `ExecHandle.Recv` on the same SDK stream that `Signal`/`Kill` use, so a "live" `Signal` waits on an ack the parked `Recv` already swallowed and **blocks until the command finishes on its own** (pinning the HTTP request open for the whole duration). `JobRegistry.cancelJob` does it correctly: cancel the job context first (unblocking `Recv`), *then* take `handleMu` and `Kill` — the sequence `dropSandbox` already used. `signal()` delegates `sig <= 0` to it and bounds any real signal with `jobSignalTimeout`. A cancelled job is marked `JobKilled`, because the runtime reports a killed process as a plain **exit 0** — without that state, "user cancelled" is indistinguishable from "succeeded". Regression tests live in `internal/core/jobs_cancel_test.go`.
 - **Errors flow through `notFoundOr`.** `core.ErrNotFound` → 404; anything else → 500 (or 507 from `Create` when capacity is hit). Always return a typed error from `core`, never an HTTP status.
