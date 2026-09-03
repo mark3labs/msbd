@@ -10,6 +10,14 @@ info:
 
 
     All endpoints except `/healthz` and `/readyz` require a bearer token.
+
+
+    Tokens come from either `--api-key` / `MSBD_API_KEY` (comma-separated for
+    rotation) or msbd's own key store, managed with `msbd keys create <name>`
+    and from the dashboard. Both kinds are accepted together; a stored key can
+    be revoked (`msbd keys revoke`) or given an expiry, after which it returns
+    401 like any other invalid token. If no key exists at all the server is
+    unauthenticated — intended for local development only.
 servers:
   - url: http://localhost:8099
     description: Local dev
@@ -997,6 +1005,10 @@ components:
     bearerAuth:
       type: http
       scheme: bearer
+      description: >
+        A token from `MSBD_API_KEY` or from the persisted key store
+        (`msbd keys create`). Stored tokens are shown once at creation and kept
+        only as a SHA-256 hash.
 
   parameters:
     SandboxId:

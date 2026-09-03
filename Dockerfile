@@ -44,8 +44,9 @@ RUN apt-get update \
 
 COPY --from=build /out/msbd /usr/local/bin/msbd
 
-# Persist the runtime (msb + libkrunfw) and the OCI image cache across restarts
-# so EnsureInstalled and cold image pulls don't repeat on every boot.
+# Persist the runtime (msb + libkrunfw), the OCI image cache AND msbd's own
+# state database across restarts, so EnsureInstalled and cold image pulls don't
+# repeat on every boot and stored users / API keys survive a redeploy.
 VOLUME ["/root/.microsandbox"]
 
 ENV MSBD_LISTEN=":8099"

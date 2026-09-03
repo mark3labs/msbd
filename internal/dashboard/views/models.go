@@ -23,7 +23,44 @@ const (
 	SectionVolumes   Section = "volumes"
 	SectionImages    Section = "images"
 	SectionSnapshots Section = "snapshots"
+	SectionKeys      Section = "keys"
+	SectionUsers     Section = "users"
 )
+
+// KeyRow is one REST API key in the Settings table.
+type KeyRow struct {
+	ID         string
+	Name       string
+	Prefix     string
+	Status     string // active | revoked | expired
+	CreatedBy  string
+	CreatedAt  time.Time
+	LastUsedAt time.Time
+	ExpiresAt  time.Time
+	Active     bool
+}
+
+func (r KeyRow) Haystack() string {
+	return strings.ToLower(r.Name + " " + r.Prefix + " " + r.Status + " " + r.CreatedBy)
+}
+
+// UserRow is one dashboard account in the Settings table.
+type UserRow struct {
+	Username    string
+	Role        string
+	CreatedAt   time.Time
+	LastLoginAt time.Time
+	// Self marks the row belonging to the signed-in user, so the UI never offers
+	// "delete me".
+	Self bool
+	// Protected marks the last remaining admin, whose removal the store refuses.
+	// Showing that up front beats letting the user click and read an error.
+	Protected bool
+}
+
+func (r UserRow) Haystack() string {
+	return strings.ToLower(r.Username + " " + r.Role)
+}
 
 type SandboxRow struct {
 	ID        string
@@ -333,6 +370,26 @@ func stateDot(state string) string {
 		return "bg-red-500"
 	default:
 		return "bg-amber-500"
+	}
+}
+
+// roleBadge maps a user role to a templui badge variant string.
+func roleBadge(role string) string {
+	if role == "admin" {
+		return "default"
+	}
+	return "secondary"
+}
+
+// keyStatusBadge maps an API key status to a templui badge variant string.
+func keyStatusBadge(status string) string {
+	switch status {
+	case "active":
+		return "default"
+	case "revoked":
+		return "destructive"
+	default: // expired
+		return "secondary"
 	}
 }
 

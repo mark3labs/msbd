@@ -25,8 +25,9 @@ RUN apt-get update \
 
 COPY msbd /usr/local/bin/msbd
 
-# Persist the runtime (msb + libkrunfw) and OCI image cache across container
-# restarts. Operators should mount a named volume here.
+# Persist the runtime (msb + libkrunfw), the OCI image cache and msbd's own
+# state database (users, API keys, sessions) across container restarts.
+# Operators should mount a named volume here.
 VOLUME ["/root/.microsandbox"]
 
 ENV MSBD_LISTEN=":8099"

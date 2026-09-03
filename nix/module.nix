@@ -11,6 +11,11 @@
 #     };
 #   }
 #
+# Users and API keys can instead be managed on the host with
+#   msbd users add alice --data-dir /var/lib/msbd/state
+#   msbd keys create ci  --data-dir /var/lib/msbd/state
+# which keeps no secret in the Nix store.
+#
 # The host must have KVM enabled (virtualisation in the kernel + /dev/kvm).
 self:
 { config, lib, pkgs, ... }:
@@ -51,7 +56,33 @@ in
       example = "/run/secrets/msbd.env";
       description = ''
         Path to an EnvironmentFile (systemd format) that sets MSBD_API_KEY.
-        Strongly recommended: without it the server is UNAUTHENTICATED.
+
+        Optional since msbd gained a persisted key store: you can instead run
+        `msbd keys create <name> --data-dir <services.msbd.dataDir>` on the host
+        and keep no secret in the Nix store or config. With neither, the server
+        is UNAUTHENTICATED.
+      '';
+    };
+
+    dataDir = lib.mkOption {
+      type = lib.types.path;
+      default = "/var/lib/msbd/state";
+      description = ''
+        Directory holding msbd's SQLite database of dashboard users, API keys
+        and sessions (MSBD_DATA_DIR).
+
+        It lives under the service StateDirectory so it survives restarts and
+        redeploys. Manage its contents with `msbd users` / `msbd keys`, passing
+        the same --data-dir (or MSBD_DATA_DIR).
+      '';
+    };
+
+    sessionTtlSecs = lib.mkOption {
+      type = lib.types.int;
+      default = 0;
+      description = ''
+        Dashboard login lifetime in seconds; 0 uses the built-in default of 12h
+        (MSBD_SESSION_TTL_SECS).
       '';
     };
 
@@ -107,7 +138,11 @@ in
         MSBD_DEFAULT_IMAGE = cfg.defaultImage;
         MSBD_MAX_SANDBOXES = toString cfg.maxSandboxes;
         MSBD_CREATE_TIMEOUT_SECS = toString cfg.createTimeoutSecs;
+        MSBD_SESSION_TTL_SECS = toString cfg.sessionTtlSecs;
         MSBD_LOG_LEVEL = cfg.logLevel;
+        # Users, API keys and dashboard sessions. Kept under StateDirectory so
+        # it outlives redeploys; msbd creates it 0700 and the database 0600.
+        MSBD_DATA_DIR = cfg.dataDir;
         # EnsureInstalled + the OCI image cache live here; StateDirectory below
         # maps it to /var/lib/msbd.
         HOME = "/var/lib/msbd";

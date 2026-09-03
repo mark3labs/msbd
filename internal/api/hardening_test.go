@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/mark3labs/msbd/internal/core"
+	"github.com/mark3labs/msbd/internal/store"
 )
 
 func TestBearerToken(t *testing.T) {
@@ -30,15 +31,98 @@ func TestBearerToken(t *testing.T) {
 }
 
 func TestTokenOKMultipleKeys(t *testing.T) {
+	ctx := t.Context()
 	s := &Server{apiKeys: splitKeys("old , new ,")}
 	if len(s.apiKeys) != 2 {
 		t.Fatalf("splitKeys = %v", s.apiKeys)
 	}
-	if !s.tokenOK("old") || !s.tokenOK("new") {
+	if !s.tokenOK(ctx, "old") || !s.tokenOK(ctx, "new") {
 		t.Fatal("both rotation keys should be accepted")
 	}
-	if s.tokenOK("") || s.tokenOK("wrong") {
+	if s.tokenOK(ctx, "") || s.tokenOK(ctx, "wrong") {
 		t.Fatal("bad token accepted")
+	}
+}
+
+// TestStoreBackedKeysAuthenticate covers the persisted-key path: a key created
+// in the store must authenticate exactly like a static --api-key one, and
+// revoking it must stop it (once the verification cache is invalidated).
+func TestStoreBackedKeysAuthenticate(t *testing.T) {
+	ctx := t.Context()
+	st, err := store.Open(store.MemoryPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = st.Close() }()
+
+	s := &Server{}
+	s.SetStore(st)
+
+	// No keys yet: the API is open, matching the pre-store dev behaviour.
+	if s.authRequired(ctx) {
+		t.Error("an empty store must not switch the API to authenticated")
+	}
+
+	key, raw, err := st.CreateAPIKey(ctx, "ci", 0, "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.Keys().Invalidate()
+
+	if !s.authRequired(ctx) {
+		t.Error("creating a key must switch the API to authenticated")
+	}
+	if !s.tokenOK(ctx, raw) {
+		t.Error("store-backed key rejected")
+	}
+	if s.tokenOK(ctx, raw+"x") {
+		t.Error("tampered token accepted")
+	}
+
+	if _, err := st.RevokeAPIKey(ctx, key.Prefix); err != nil {
+		t.Fatal(err)
+	}
+	s.Keys().Invalidate()
+	if s.tokenOK(ctx, raw) {
+		t.Error("revoked key still authenticates")
+	}
+
+	// Revoking the LAST key must NOT reopen the server: that would turn a
+	// security action into a security hole. Auth stays on until every key row
+	// is explicitly deleted.
+	if !s.authRequired(ctx) {
+		t.Error("revoking the only key reopened the API")
+	}
+	if _, err := st.DeleteAPIKey(ctx, key.Prefix); err != nil {
+		t.Fatal(err)
+	}
+	s.Keys().Invalidate()
+	if s.authRequired(ctx) {
+		t.Error("deleting every key should return the API to open (dev) mode")
+	}
+}
+
+// TestStaticAndStoreKeysCoexist is the no-forced-migration guarantee: adopting
+// the store must not invalidate an existing MSBD_API_KEY deployment.
+func TestStaticAndStoreKeysCoexist(t *testing.T) {
+	ctx := t.Context()
+	st, err := store.Open(store.MemoryPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = st.Close() }()
+
+	s := &Server{apiKeys: splitKeys("legacy-env-key")}
+	s.SetStore(st)
+	_, raw, err := st.CreateAPIKey(ctx, "new", 0, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !s.tokenOK(ctx, "legacy-env-key") {
+		t.Error("static key stopped working once a store was attached")
+	}
+	if !s.tokenOK(ctx, raw) {
+		t.Error("store key rejected alongside a static key")
 	}
 }
 

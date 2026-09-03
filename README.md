@@ -21,6 +21,7 @@
 - **MicroVMs survive restarts.** Sandboxes are created detached; msbd reconnects them by name on boot.
 - **Native primitives.** Real exec sessions for async jobs, real file IO over the guest filesystem.
 - **Interactive terminals.** A real kernel-PTY shell over WebSocket — colors, line editing, window resize, and full-screen TUIs (vim, top) all work.
+- **Persisted credentials.** Rotatable API keys and dashboard accounts (admin/viewer) in a local database, managed from the CLI or the web UI — no restart to add or revoke one.
 
 ## Quickstart
 
@@ -173,23 +174,75 @@ All via environment variables (also settable as `--flag` — see `msbd serve --h
 | `MSBD_SHUTDOWN_TIMEOUT_SECS` | `60` | Graceful-drain deadline on SIGTERM/Ctrl-C. A drain overrun warns and exits 0 (no spurious restart failure). |
 | `MSBD_HOST_PATHS` | *(empty)* | Comma-separated allowlist of host path prefixes the host-transfer endpoints (`copy-from-host`, `copy-to-host`, snapshot `export`/`import`) may touch. **Empty = all host transfers denied (403).** Symlinks are resolved to block escapes. |
 | `MSBD_LOG_LEVEL` | `info` | Log verbosity: `debug`, `info`, `warn`, `error`. Invalid values fail fast. Output is colorized on a TTY, plain otherwise. |
+| `MSBD_DATA_DIR` | `~/.microsandbox/msbd` | Directory holding the SQLite database of dashboard users, API keys and sessions. Created `0700`, database `0600`. See [Users & API keys](#users--api-keys). |
+| `MSBD_SESSION_TTL_SECS` | `0` (12 h) | Dashboard login lifetime. |
 | `MSBD_DASHBOARD` | `true` | Serve the web dashboard at `/dashboard`. Set `false` to disable. |
-| `MSBD_DASHBOARD_USER` | *(empty)* | Dashboard HTTP Basic auth username. Setting user **or** pass turns auth on. |
-| `MSBD_DASHBOARD_PASS` | *(empty)* | Dashboard HTTP Basic auth password. **Both empty = dashboard is unauthenticated.** When an API key IS set but dashboard auth is not, the dashboard is **refused** (it would bypass the API token) unless `MSBD_DASHBOARD_ALLOW_INSECURE=true`. |
+| `MSBD_DASHBOARD_USER` | *(empty)* | **Legacy** single-account HTTP Basic auth username. Setting user **or** pass turns it on. Superseded once a stored account exists. |
+| `MSBD_DASHBOARD_PASS` | *(empty)* | Legacy Basic auth password. **Both empty and no stored users = dashboard is unauthenticated.** When an API key IS set but the dashboard has no auth, the dashboard is **refused** (it would bypass the API token) unless `MSBD_DASHBOARD_ALLOW_INSECURE=true`. |
 | `MSBD_DASHBOARD_ALLOW_INSECURE` | `false` | Override the safety refusal above and serve the dashboard without auth even when an API key is set (unsafe). |
 
 Request bodies are size-capped (1 MiB control-plane, 64 MiB file writes) and reject unknown JSON fields (a typo'd field is a 400, not a silent no-op). The server sets `IdleTimeout` and echoes an `X-Request-Id` on every response.
 
 Flags mirror every var (`--dashboard`, `--host-paths`, `--shutdown-timeout`, `--api-key-file`, …); flag › env › default.
 
+## Users & API keys
+
+msbd keeps a small SQLite database (pure-Go driver — no extra cgo) of **API keys**, **dashboard users** and **login sessions**. It lives at `$MSBD_DATA_DIR` (default `~/.microsandbox/msbd/msbd.db`), which is inside the directory every deployment path already persists: the Docker `VOLUME`, the compose named volume, the NixOS `StateDirectory`.
+
+Nothing about this is mandatory. `MSBD_API_KEY` and `MSBD_DASHBOARD_USER`/`_PASS` keep working exactly as before; stored credentials are accepted **in addition** to them.
+
+### API keys
+
+```bash
+msbd keys create ci-runner            # prints the token ONCE
+msbd keys create temp --expires 30d
+msbd keys list
+msbd keys revoke ci-runner            # by name, token prefix, or numeric id
+msbd keys rm 3
+```
+
+Only `sha256(token)` is stored, so the token cannot be recovered — losing it means minting a new one. Keys are accepted alongside `MSBD_API_KEY`, and creating the first one flips an otherwise-open server to authenticated **without a restart** (the daemon and the CLI share the same database file).
+
+Revoking is fail-safe: a revoked or expired key stops working within a few seconds, but the server stays *authenticated* — revoking your last key locks the API down rather than throwing it open. `msbd keys rm` (deleting every row) is the explicit way back to an unauthenticated dev server.
+
+### Dashboard users
+
+```bash
+msbd users add alice                  # prompts for a password, twice
+msbd users add ci --role viewer
+echo "$PW" | msbd users add bot --password-stdin
+msbd users list
+msbd users passwd alice               # also signs alice out everywhere
+msbd users role alice viewer
+msbd users rm alice
+```
+
+Creating the first user upgrades the dashboard from HTTP Basic (or no auth) to a **login page with server-side sessions** — again with no restart. Passwords are bcrypt-hashed; there is deliberately no `--password` flag, since it would leak the secret into the process list and shell history.
+
+Two roles: **admin** (everything, including managing users and keys) and **viewer** (read-only — every mutating endpoint is refused server-side, not merely hidden). Removing or demoting the last admin is refused so the dashboard can never become unreachable.
+
+### Maintenance
+
+```bash
+msbd db path        # where the database is
+msbd db migrate     # create/migrate explicitly (serve does it automatically)
+msbd db sweep       # drop expired sessions
+```
+
+Back it up by copying that one file. Every command takes `--data-dir` (or `MSBD_DATA_DIR`) — it must match what the daemon uses.
+
 ## Web dashboard
 
 A self-contained web UI lives at **`/dashboard`** that manages everything the REST API does — sandboxes (create, start/stop/delete, inspect, run commands, live logs & metrics, a file browser, and a real **kernel-PTY terminal**), volumes, images and snapshots.
 
 ```bash
-# Behind HTTP Basic auth:
-MSBD_DASHBOARD_USER=admin MSBD_DASHBOARD_PASS=s3cret msbd serve
+# Recommended: a real account with a login page and sessions.
+msbd users add admin
+msbd serve
 # → open http://localhost:8099/dashboard
+
+# Legacy single-account HTTP Basic auth (still supported):
+MSBD_DASHBOARD_USER=admin MSBD_DASHBOARD_PASS=s3cret msbd serve
 ```
 
 Every section is a **real, bookmarkable URL** — `/dashboard` (overview), `/dashboard/sandboxes`, `/dashboard/sandboxes/{id}`, `/dashboard/volumes`, `/dashboard/images`, `/dashboard/snapshots` — so refresh, browser back/forward and shared links all work. Datastar SSE is used for in-page updates only.
@@ -202,11 +255,14 @@ Every section is a **real, bookmarkable URL** — `/dashboard` (overview), `/das
 | **Run** | Commands execute as async **jobs**: output streams in as it is produced, long commands are **cancellable**, and the last 25 commands are offered as autocomplete. |
 | **Logs** | Timestamped and source-coloured, with source/tail filters, search, wrap and follow toggles, jump-to-bottom, and a plain-text download. |
 | **Files** | A real browser: breadcrumb navigation, view/edit/save, upload, download, new folder, delete, and a hidden-files toggle. Binary files get a read-only hex preview. |
+| **Settings → API keys / Users** | Create, revoke and delete REST API keys (the token is revealed exactly once), and manage dashboard accounts, passwords and roles. Admin-only. |
 | **Volumes / Images / Snapshots** | Searchable, sortable tables showing creation and last-used times. Images can be inspected (OCI config + layers), are flagged when a live sandbox uses them, and can seed a new sandbox in one click. Prune reports exactly what it reclaimed. |
 
 Other niceties: a **light/dark/system theme** toggle (persisted, no flash of the wrong palette), a **responsive** layout with a mobile nav drawer and horizontally scrollable tables, **styled confirmation dialogs** (never `window.confirm`), busy states on every mutating control so a double-click can't boot two sandboxes, sticky error toasts plus inline errors next to the control that failed, and keyboard/screen-reader support (skip link, `aria-label`s on icon-only controls, table captions, `aria-sort` on sorted columns).
 
-It is server-rendered with [templ](https://templ.guide) + [templui](https://templui.io) components, styled with Tailwind, and made reactive with [Datastar](https://data-star.dev) (SSE-driven DOM patching). Everything — the compiled CSS, the Datastar runtime, xterm.js and the component JavaScript — is **embedded in the binary** (`//go:embed`); there are no external assets to deploy. Auth is independent of `MSBD_API_KEY`: the API stays bearer-gated while the dashboard gets its own optional Basic auth. The terminal page never embeds the API key — it uses a short-lived, single-use ticket — and if you set an API key but no dashboard auth, msbd **refuses to mount the dashboard** (override with `MSBD_DASHBOARD_ALLOW_INSECURE=true`).
+It is server-rendered with [templ](https://templ.guide) + [templui](https://templui.io) components, styled with Tailwind, and made reactive with [Datastar](https://data-star.dev) (SSE-driven DOM patching). Everything — the compiled CSS, the Datastar runtime, xterm.js and the component JavaScript — is **embedded in the binary** (`//go:embed`); there are no external assets to deploy. Auth is independent of `MSBD_API_KEY`: the API stays bearer-gated while the dashboard has its own. It picks the strongest option available — a **login page with `HttpOnly`, `SameSite=Lax` session cookies** once you have created an account (`msbd users add`), the legacy single-account **HTTP Basic** if only `MSBD_DASHBOARD_USER`/`_PASS` are set, and open otherwise. The terminal page never embeds the API key — it uses a short-lived, single-use ticket.
+
+If the API requires a key but the dashboard would have no auth at all, msbd **locks the dashboard** — every route serves a short page telling you to run `msbd users add`, which takes effect on the next reload with no restart. Override with `MSBD_DASHBOARD_ALLOW_INSECURE=true`.
 
 
 ## REST API
@@ -215,7 +271,7 @@ It is server-rendered with [templ](https://templ.guide) + [templui](https://temp
 |---|---|
 | `GET /healthz` · `GET /readyz` | Liveness · readiness (runtime loaded + `/dev/kvm` accessible). |
 | `GET /docs` · `GET /openapi.yaml` | Swagger UI · raw OpenAPI spec (unauthenticated). |
-| `GET /dashboard` | Web management UI (optional Basic auth — see [Web dashboard](#web-dashboard)). |
+| `GET /dashboard` | Web management UI with its own auth — see [Web dashboard](#web-dashboard). |
 | `GET /v1/version` | Default image + runtime/SDK versions (diagnostics). |
 | `GET /metrics` | Prometheus text-exposition operational metrics (sandbox counts, jobs, terminals, request classes). |
 | `POST /v1/terminal-tickets` | Mint a short-lived single-use terminal ticket (browser WS auth without exposing the API key). |
@@ -250,10 +306,10 @@ Full schemas: see [`openapi.yaml`](./openapi.yaml).
 ## What it is, what it isn't
 
 ✅ A simple way to expose microsandbox over HTTP so any language can drive it.
-✅ A single-host, single-tenant device server. Auth your real users *upstream*.
+✅ A single-host device server with enough auth to be safe on its own: API keys, dashboard accounts and an admin/viewer split. Auth your real *end users* upstream.
 
 ❌ Not a multi-host scheduler. Capacity = the one host.
-❌ Not a multi-tenant platform with quotas, billing, RBAC. (Bring your own.)
+❌ Not a multi-tenant platform with quotas, billing or fine-grained RBAC. (Bring your own.)
 ❌ Not a re-implementation of microsandbox's own cloud backend.
 
 ## Development
@@ -269,6 +325,8 @@ MSBD_API_KEY=devkey ./bin/msbd
 # Explore the CLI (styled help, version, shell completions)
 ./bin/msbd --help
 ./bin/msbd serve --help
+./bin/msbd users --help
+./bin/msbd keys --help
 ./bin/msbd --version
 
 # Lint, format, test (or `task lint` / `task fmt` / `task test`)
@@ -286,6 +344,7 @@ Ctrl-C / SIGTERM trigger a graceful drain of in-flight requests.
 
 ```
 cmd/msbd/main.go              # entrypoint — EnsureInstalled, reconcile, serve
+cmd/msbd/admin.go             # `msbd users` / `msbd keys` / `msbd db` subcommands
 assets.go                     # //go:embed openapi.yaml (served at /docs)
 internal/api/router.go        # HTTP router + middleware (auth, recover, log)
 internal/api/handlers.go      # core lifecycle/exec/jobs/files handlers
@@ -305,9 +364,15 @@ internal/core/snapshot.go     # sandbox rootfs snapshots
 internal/core/registry.go     # live handle cache + workdir cache + reconcile
 internal/core/jobs.go         # async job registry (+ stdin/signal/cancel)
 internal/core/version.go      # SDK / runtime version helpers
-internal/dashboard/dashboard.go    # web UI: page + SSE routes, optional Basic auth (Mount on the api mux)
+internal/store/store.go       # SQLite state: open + embedded migrations (the only SQL)
+internal/store/users.go       # dashboard accounts (bcrypt) + roles
+internal/store/apikeys.go     # REST bearer tokens (sha256-hashed, shown once)
+internal/store/sessions.go    # dashboard login sessions
+internal/store/cache.go       # TTL cache in front of token verification
+internal/dashboard/dashboard.go    # web UI: page + SSE routes and their guards (Mount on the api mux)
+internal/dashboard/auth.go         # open / basic / session auth modes, guards, cookies
 internal/dashboard/handlers.go     # page handlers (one real URL per section) + shared SSE helpers
-internal/dashboard/handlers_*.go   # Datastar SSE handlers (overview, sandboxes, files, volumes, images, snapshots)
+internal/dashboard/handlers_*.go   # Datastar SSE handlers (overview, sandboxes, files, volumes, images, snapshots, settings)
 internal/dashboard/views/*.templ   # templ pages/fragments (templui components + Datastar attrs)
 internal/dashboard/components/      # vendored templui components (via `templui add`)
 internal/dashboard/assets/          # input.css + committed output.css, datastar/xterm, component JS (embedded)

@@ -5,6 +5,7 @@ package api
 
 import (
 	"bufio"
+	"context"
 	"crypto/rand"
 	"crypto/subtle"
 	"encoding/hex"
@@ -20,6 +21,7 @@ import (
 
 	"github.com/mark3labs/msbd/internal/core"
 	"github.com/mark3labs/msbd/internal/dashboard"
+	"github.com/mark3labs/msbd/internal/store"
 )
 
 // Body size limits. control-plane JSON is small; file-write endpoints carry
@@ -32,9 +34,10 @@ const (
 // Server holds dependencies for the HTTP handlers.
 type Server struct {
 	svc      *core.Service
-	apiKeys  []string     // accepted bearer tokens (comma-separated in config)
-	ready    func() error // readiness probe (FFI loaded + /dev/kvm openable)
-	openapi  []byte       // raw openapi.yaml served at /openapi.yaml + /docs
+	apiKeys  []string        // static bearer tokens from --api-key / MSBD_API_KEY
+	keys     *store.KeyCache // persisted bearer tokens (nil when no store)
+	ready    func() error    // readiness probe (FFI loaded + /dev/kvm openable)
+	openapi  []byte          // raw openapi.yaml served at /openapi.yaml + /docs
 	dash     *dashboard.Handler
 	maxBody  int64
 	maxFile  int64
@@ -64,8 +67,25 @@ func splitKeys(s string) []string {
 	return out
 }
 
-// authRequired reports whether any bearer token is configured.
-func (s *Server) authRequired() bool { return len(s.apiKeys) > 0 }
+// SetStore attaches the persisted auth store, enabling store-backed API keys
+// ALONGSIDE any static --api-key value. Static keys keep working untouched, so
+// adopting the store is opt-in and never breaks an existing deployment.
+func (s *Server) SetStore(st *store.Store) *Server {
+	s.keys = store.NewKeyCache(st)
+	return s
+}
+
+// Keys exposes the verification cache so callers can invalidate it after a key
+// is created or revoked in-process (the dashboard does this, so the change is
+// immediate rather than eventually-consistent).
+func (s *Server) Keys() *store.KeyCache { return s.keys }
+
+// authRequired reports whether requests must carry a bearer token: either a
+// static one is configured, or the store holds at least one key. Neither means
+// the API is open, which is the pre-existing dev-mode behaviour.
+func (s *Server) authRequired(ctx context.Context) bool {
+	return len(s.apiKeys) > 0 || s.keys.AuthConfigured(ctx)
+}
 
 // SetDashboard mounts the optional web dashboard under /dashboard.
 func (s *Server) SetDashboard(d *dashboard.Handler) *Server {
@@ -190,11 +210,11 @@ func (s *Server) Handler() http.Handler {
 // auth wraps a handler with constant-time bearer-token checking.
 func (s *Server) auth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if !s.authRequired() { // no key configured → open (dev only)
+		if !s.authRequired(r.Context()) { // no key configured → open (dev only)
 			next(w, r)
 			return
 		}
-		if s.tokenOK(bearerToken(r)) {
+		if s.tokenOK(r.Context(), bearerToken(r)) {
 			next(w, r)
 			return
 		}
@@ -209,7 +229,7 @@ func (s *Server) auth(next http.HandlerFunc) http.HandlerFunc {
 // key never enters the URL / proxy logs / page source.
 func (s *Server) authWS(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if !s.authRequired() { // no key configured → open (dev only)
+		if !s.authRequired(r.Context()) { // no key configured → open (dev only)
 			next(w, r)
 			return
 		}
@@ -223,7 +243,7 @@ func (s *Server) authWS(next http.HandlerFunc) http.HandlerFunc {
 		if tok == "" {
 			tok = r.URL.Query().Get("key")
 		}
-		if s.tokenOK(tok) {
+		if s.tokenOK(r.Context(), tok) {
 			next(w, r)
 			return
 		}
@@ -243,8 +263,14 @@ func bearerToken(r *http.Request) string {
 	return strings.TrimSpace(h[7:])
 }
 
-// tokenOK reports whether tok matches any configured key (constant time).
-func (s *Server) tokenOK(tok string) bool {
+// tokenOK reports whether tok matches a static configured key (constant time,
+// no early exit) or a live store-backed key.
+//
+// Static keys are checked first and without a database round trip, so the
+// single-key deployment stays exactly as fast as before the store existed. The
+// store lookup is memoised by KeyCache — including negative results, so a flood
+// of bogus tokens can't be used to hammer SQLite.
+func (s *Server) tokenOK(ctx context.Context, tok string) bool {
 	if tok == "" {
 		return false
 	}
@@ -254,7 +280,10 @@ func (s *Server) tokenOK(tok string) bool {
 			ok = true
 		}
 	}
-	return ok
+	if ok {
+		return true
+	}
+	return s.keys.Valid(ctx, tok)
 }
 
 func (s *Server) unauthorized(w http.ResponseWriter) {

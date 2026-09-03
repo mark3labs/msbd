@@ -76,6 +76,23 @@ func TestViewsRender(t *testing.T) {
 	render(t, "InlineError", InlineError("slot", "Boom", "it broke"))
 	render(t, "EmptyState", EmptyState("server", "Nothing", "here"))
 	render(t, "TableSkeleton", TableSkeleton(3))
+
+	keys := []KeyRow{{ID: "1", Name: "ci", Prefix: "msbd_abcd1234", Status: "active", Active: true, CreatedAt: now}}
+	users := []UserRow{{Username: "alice", Role: "admin", CreatedAt: now, Self: true, Protected: true}}
+	render(t, "KeysPage", KeysPage(keys, sort))
+	render(t, "KeysPageEmpty", KeysPage(nil, sort))
+	render(t, "KeyTableRevoked", KeyTable([]KeyRow{{ID: "2", Name: "old", Status: "revoked"}}, sort))
+	render(t, "UsersPage", UsersPage(users, sort))
+	render(t, "UsersPageEmpty", UsersPage(nil, sort))
+	render(t, "UserTableViewer", UserTable([]UserRow{{Username: "bob", Role: "viewer"}}, sort))
+	render(t, "CreateKeyDialog", CreateKeyDialog())
+	render(t, "NewKeyDialog", NewKeyDialog("ci", "msbd_secret"))
+	render(t, "CreateUserDialog", CreateUserDialog())
+	render(t, "SetPasswordDialog", SetPasswordDialog())
+	render(t, "ChangePasswordDialog", ChangePasswordDialog())
+	render(t, "LoginPage", LoginPage("/dashboard", "test"))
+	render(t, "LoginError", LoginError("incorrect username or password"))
+	render(t, "LockedPage", LockedPage("test"))
 }
 
 func crumbs() []Crumb {
@@ -132,6 +149,8 @@ func TestNoNativeConfirm(t *testing.T) {
 		"volumes":   VolumesPage([]VolumeRow{{Name: "v"}}, sort),
 		"images":    ImagesPage(m, []ImageRow{{Reference: "alpine"}}, sort),
 		"snapshots": SnapshotsPage([]SnapshotRow{{Digest: "sha256:a", Name: "s"}}, nil, sort),
+		"keys":      KeysPage([]KeyRow{{ID: "1", Name: "ci", Status: "active", Active: true}}, sort),
+		"users":     UsersPage([]UserRow{{Username: "bob", Role: "viewer"}}, sort),
 	}
 	for name, c := range pages {
 		var b strings.Builder
@@ -225,6 +244,13 @@ func TestMutatingActionsDisableRetry(t *testing.T) {
 		"create-snapshot": CreateSnapshotDialog(sbx, ""),
 		"files":           FilesPanel("sbx_1", "/", crumbs(), []FileRow{{Name: "a", Path: "/a"}}),
 		"run-block":       RunBlock(JobView{SandboxID: "sbx_1", JobID: "j1", Cmd: "ls"}),
+		"keys":            KeysPage([]KeyRow{{ID: "1", Name: "ci", Status: "active", Active: true}}, sort),
+		"users":           UsersPage([]UserRow{{Username: "bob", Role: "viewer"}}, sort),
+		"create-key":      CreateKeyDialog(),
+		"create-user":     CreateUserDialog(),
+		"set-password":    SetPasswordDialog(),
+		"change-password": ChangePasswordDialog(),
+		"login":           LoginPage("/dashboard", "test"),
 	}
 	for name, c := range pages {
 		var b strings.Builder

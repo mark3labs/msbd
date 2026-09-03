@@ -12,13 +12,31 @@ import (
 	"github.com/starfederation/datastar-go/datastar"
 
 	"github.com/mark3labs/msbd/internal/core"
+	"github.com/mark3labs/msbd/internal/store"
 )
 
+// newTestServer builds a dashboard with no state store: the legacy Basic-auth /
+// open behaviour, which most of these tests exercise.
 func newTestServer(cfg Config) *httptest.Server {
+	return newTestServerWithStore(cfg, nil)
+}
+
+func newTestServerWithStore(cfg Config, st *store.Store) *httptest.Server {
 	svc := core.NewService(core.Opts{DefaultImage: "microsandbox/python"})
 	mux := http.NewServeMux()
-	New(svc, cfg).Mount(mux)
+	New(svc, cfg, st).Mount(mux)
 	return httptest.NewServer(mux)
+}
+
+// newTestStore opens an in-memory store for the session-auth tests.
+func newTestStore(t *testing.T) *store.Store {
+	t.Helper()
+	st, err := store.Open(store.MemoryPath)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	return st
 }
 
 func TestIndexRenders(t *testing.T) {
@@ -181,7 +199,7 @@ func TestNewRoutesAreMounted(t *testing.T) {
 	}
 }
 
-func TestConfigAuthEnabled(t *testing.T) {
+func TestConfigBasicAuthEnabled(t *testing.T) {
 	cases := []struct {
 		cfg  Config
 		want bool
@@ -192,8 +210,8 @@ func TestConfigAuthEnabled(t *testing.T) {
 		{Config{User: "a", Pass: "b"}, true},
 	}
 	for _, c := range cases {
-		if got := c.cfg.AuthEnabled(); got != c.want {
-			t.Errorf("AuthEnabled(%+v) = %v, want %v", c.cfg, got, c.want)
+		if got := c.cfg.BasicAuthEnabled(); got != c.want {
+			t.Errorf("BasicAuthEnabled(%+v) = %v, want %v", c.cfg, got, c.want)
 		}
 	}
 }
@@ -420,7 +438,7 @@ func TestNotifyPullOutcome(t *testing.T) {
 		{"unchanged", img("sha256:aaa"), "sha256:aaa", true, "Already up to date"},
 	}
 
-	h := New(core.NewService(core.Opts{}), Config{})
+	h := New(core.NewService(core.Opts{}), Config{}, nil)
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			rec := httptest.NewRecorder()

@@ -1,0 +1,634 @@
+package views
+
+import (
+	"github.com/mark3labs/msbd/internal/dashboard/components/badge"
+	"github.com/mark3labs/msbd/internal/dashboard/components/button"
+	"github.com/mark3labs/msbd/internal/dashboard/components/card"
+	"github.com/mark3labs/msbd/internal/dashboard/components/dialog"
+	"github.com/mark3labs/msbd/internal/dashboard/components/icon"
+	"github.com/mark3labs/msbd/internal/dashboard/components/input"
+	"github.com/mark3labs/msbd/internal/dashboard/components/label"
+	"github.com/mark3labs/msbd/internal/dashboard/components/table"
+)
+
+// ---------------------------------------------------------------------------
+// API keys
+// ---------------------------------------------------------------------------
+
+// KeysPage is the Settings → API keys section.
+templ KeysPage(rows []KeyRow, s TableSort) {
+	<div data-signals="{q:''}">
+		@PageHeader("API keys") {
+			@SearchBox("Filter keys…")
+			@button.Button(button.Props{
+				Variant: button.VariantOutline,
+				Size:    button.SizeSm,
+				Attributes: templ.Attributes{
+					"data-on:click":  "@get('/dashboard/api/keys/table')",
+					"data-indicator": "keyrefresh",
+					"aria-label":     "Refresh API key list",
+				},
+			}) {
+				@Busy("keyrefresh")
+				@icon.RefreshCw(icon.Props{Class: "size-4"})
+				Refresh
+			}
+			@dialogOpenButton("create-key", "New key")
+		}
+		<p class="mb-4 max-w-3xl text-sm text-muted-foreground">
+			These tokens authenticate the REST API as
+			<code class="rounded bg-muted px-1 py-0.5 text-xs">Authorization: Bearer …</code>.
+			They are stored as SHA-256 hashes, so a token is shown exactly once — at creation.
+			Keys set with <code class="rounded bg-muted px-1 py-0.5 text-xs">--api-key</code> or
+			<code class="rounded bg-muted px-1 py-0.5 text-xs">MSBD_API_KEY</code> keep working
+			alongside these and are not listed here.
+		</p>
+		@card.Card(card.Props{Class: "overflow-hidden"}) {
+			@KeyTable(rows, s)
+		}
+		@CreateKeyDialog()
+		<div id="new-key-slot"></div>
+	</div>
+}
+
+// KeyTable is the refreshable fragment.
+templ KeyTable(rows []KeyRow, s TableSort) {
+	<div id="key-table">
+		if len(rows) == 0 {
+			@EmptyState("key-round", "No API keys", "Create a key to authenticate REST clients. The token is shown once and never stored in plain text.") {
+				@dialogOpenButton("create-key", "New key")
+			}
+		} else {
+			<div class="overflow-x-auto">
+				@table.Table() {
+					<caption class="sr-only">API keys, { itoa(len(rows)) } total</caption>
+					@table.Header() {
+						@table.Row() {
+							@table.Head() {
+								@SortHead("/dashboard/api/keys/table", "name", "Name", s)
+							}
+							@table.Head() {
+								Token
+							}
+							@table.Head() {
+								Status
+							}
+							@table.Head(table.HeadProps{Class: "hidden sm:table-cell"}) {
+								@SortHead("/dashboard/api/keys/table", "created", "Created", s)
+							}
+							@table.Head(table.HeadProps{Class: "hidden lg:table-cell"}) {
+								@SortHead("/dashboard/api/keys/table", "used", "Last used", s)
+							}
+							@table.Head(table.HeadProps{Class: "hidden lg:table-cell"}) {
+								Expires
+							}
+							@table.Head(table.HeadProps{Class: "text-right"}) {
+								Actions
+							}
+						}
+					}
+					@table.Body() {
+						for _, k := range rows {
+							@table.Row(table.RowProps{Attributes: templ.Attributes{
+								"data-show": textFilterExpr(k.Haystack()),
+							}}) {
+								@table.Cell(table.CellProps{Class: "font-medium"}) {
+									{ k.Name }
+									if k.CreatedBy != "" {
+										<span class="block text-xs font-normal text-muted-foreground">by { k.CreatedBy }</span>
+									}
+								}
+								@table.Cell(table.CellProps{Class: "font-mono text-xs whitespace-nowrap"}) {
+									{ k.Prefix }…
+								}
+								@table.Cell() {
+									@badge.Badge(badge.Props{Variant: keyStatusVariant(k.Status)}) {
+										{ k.Status }
+									}
+								}
+								@table.Cell(table.CellProps{Class: "hidden text-xs whitespace-nowrap sm:table-cell"}) {
+									@TimeAgo(k.CreatedAt)
+								}
+								@table.Cell(table.CellProps{Class: "hidden text-xs whitespace-nowrap lg:table-cell"}) {
+									@TimeAgo(k.LastUsedAt)
+								}
+								@table.Cell(table.CellProps{Class: "hidden text-xs whitespace-nowrap lg:table-cell"}) {
+									if k.ExpiresAt.IsZero() {
+										<span class="text-muted-foreground">never</span>
+									} else {
+										@TimeAgo(k.ExpiresAt)
+									}
+								}
+								@table.Cell(table.CellProps{Class: "text-right whitespace-nowrap"}) {
+									if k.Active {
+										@button.Button(button.Props{
+											Variant: button.VariantGhost,
+											Size:    button.SizeIcon,
+											Class:   "size-8",
+											Attributes: templ.Attributes{
+												"title":      "Revoke " + k.Name,
+												"aria-label": "Revoke key " + k.Name,
+												"data-on:click": confirmAction(
+													"Revoke API key?",
+													k.Name+" will stop working immediately. Clients using it get 401 on the next request.",
+													"Revoke",
+													dsPost("/dashboard/api/keys/"+pathSeg(k.ID)+"/revoke"),
+												),
+											},
+										}) {
+											@icon.Ban(icon.Props{Class: "size-4"})
+										}
+									}
+									@button.Button(button.Props{
+										Variant: button.VariantGhost,
+										Size:    button.SizeIcon,
+										Class:   "size-8 text-destructive",
+										Attributes: templ.Attributes{
+											"title":      "Delete " + k.Name,
+											"aria-label": "Delete key " + k.Name,
+											"data-on:click": confirmAction(
+												"Delete API key?",
+												k.Name+" will be erased along with its audit record. Revoke instead if you want to keep the history.",
+												"Delete",
+												dsDelete("/dashboard/api/keys/"+pathSeg(k.ID)),
+											),
+										},
+									}) {
+										@icon.Trash2(icon.Props{Class: "size-4"})
+									}
+								}
+							}
+						}
+						@table.Row(table.RowProps{Attributes: templ.Attributes{"data-show": noMatchTextExpr(keyHaystacks(rows))}}) {
+							@table.Cell(table.CellProps{Class: "text-muted-foreground", Attributes: templ.Attributes{"colspan": "7"}}) {
+								No keys match the current filter.
+							}
+						}
+					}
+				}
+			</div>
+		}
+	</div>
+}
+
+func keyHaystacks(rows []KeyRow) []string {
+	out := make([]string, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, r.Haystack())
+	}
+	return out
+}
+
+// CreateKeyDialog is the new-API-key modal.
+templ CreateKeyDialog() {
+	@dialog.Dialog(dialog.Props{ID: "create-key"}) {
+		@dialog.Content() {
+			<div data-signals="{keyname:'', keyexpires:''}">
+				@dialog.Header() {
+					@dialog.Title() {
+						New API key
+					}
+					@dialog.Description() {
+						The token is shown once, right after creation. Copy it then.
+					}
+				}
+				<div id="create-key-error"></div>
+				<form class="grid gap-4 py-4" data-on:submit={ dsPost("/dashboard/api/keys") } data-indicator="keybusy">
+					@field("keyname", "Name") {
+						@input.Input(input.Props{
+							ID:          "keyname",
+							Placeholder: "ci-runner",
+							Attributes:  templ.Attributes{"data-bind": "keyname", "required": "true"},
+						})
+						@hint("What this key is for. Shown in the list and in audit output.")
+					}
+					<div class="grid gap-1.5">
+						@label.Label(label.Props{For: "keyexpires"}) {
+							Expires
+						}
+						<select
+							id="keyexpires"
+							data-bind="keyexpires"
+							class="flex h-9 w-full rounded-md border bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:ring-2 focus-visible:ring-ring"
+						>
+							<option value="">Never</option>
+							<option value="7d">7 days</option>
+							<option value="30d">30 days</option>
+							<option value="90d">90 days</option>
+							<option value="365d">1 year</option>
+						</select>
+						@hint("An expiring key fails closed: clients get 401 once it lapses.")
+					</div>
+				</form>
+				@dialog.Footer() {
+					@dialog.Close() {
+						@button.Button(button.Props{Variant: button.VariantOutline}) {
+							Cancel
+						}
+					}
+					@button.Button(button.Props{
+						Attributes: templ.Attributes{
+							"data-on:click":  dsPost("/dashboard/api/keys"),
+							"data-indicator": "keybusy",
+							"data-attr":      "{disabled: $keybusy || !$keyname}",
+						},
+					}) {
+						@Busy("keybusy")
+						Create
+					}
+				}
+			</div>
+		}
+	}
+}
+
+// NewKeyDialog reveals a freshly minted token. It is patched in over SSE, so it
+// is a plain <dialog> driven with showModal()/close() rather than a templui
+// dialog root (which registers its trigger at page load).
+//
+// This is the ONLY time the token exists outside the client's hands: the store
+// keeps a SHA-256 hash, so closing this dialog without copying means minting a
+// new key.
+templ NewKeyDialog(name, token string) {
+	<div id="new-key-slot">
+		<dialog id="new-key" class="m-auto w-[min(32rem,92vw)] rounded-lg border bg-background p-0 text-foreground backdrop:bg-black/50">
+			<div class="grid gap-4 p-6">
+				<div class="grid gap-1">
+					<h2 class="text-lg font-semibold">API key created</h2>
+					<p class="text-sm text-muted-foreground">
+						Copy the token for <span class="font-medium text-foreground">{ name }</span> now —
+						it is stored only as a hash and cannot be shown again.
+					</p>
+				</div>
+				<div class="rounded-md border bg-muted/50 p-3">
+					@Copyable("new-key-token", token, "text-sm break-all")
+				</div>
+				<div class="flex items-center gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-600 dark:text-amber-400">
+					@icon.TriangleAlert(icon.Props{Class: "size-4 shrink-0"})
+					Treat this like a password. Anyone holding it has full control of every sandbox.
+				</div>
+				<div class="flex justify-end">
+					<button
+						type="button"
+						class="inline-flex h-9 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+						data-on:click={ closeNativeJS("new-key") }
+					>Done</button>
+				</div>
+			</div>
+		</dialog>
+	</div>
+}
+
+// ---------------------------------------------------------------------------
+// Users
+// ---------------------------------------------------------------------------
+
+// UsersPage is the Settings → Users section.
+templ UsersPage(rows []UserRow, s TableSort) {
+	<div data-signals="{q:''}">
+		@PageHeader("Users") {
+			@SearchBox("Filter users…")
+			@button.Button(button.Props{
+				Variant: button.VariantOutline,
+				Size:    button.SizeSm,
+				Attributes: templ.Attributes{
+					"data-on:click":  "@get('/dashboard/api/users/table')",
+					"data-indicator": "userrefresh",
+					"aria-label":     "Refresh user list",
+				},
+			}) {
+				@Busy("userrefresh")
+				@icon.RefreshCw(icon.Props{Class: "size-4"})
+				Refresh
+			}
+			@dialogOpenButton("create-user", "New user")
+		}
+		<p class="mb-4 max-w-3xl text-sm text-muted-foreground">
+			Dashboard accounts. <span class="font-medium text-foreground">Admins</span> can do
+			everything, including managing users and keys;
+			<span class="font-medium text-foreground">viewers</span> can look but not touch —
+			every mutating action is refused server-side.
+			Passwords are bcrypt-hashed; changing one signs that user out everywhere.
+		</p>
+		@card.Card(card.Props{Class: "overflow-hidden"}) {
+			@UserTable(rows, s)
+		}
+		@CreateUserDialog()
+		@SetPasswordDialog()
+	</div>
+}
+
+// UserTable is the refreshable fragment.
+templ UserTable(rows []UserRow, s TableSort) {
+	<div id="user-table">
+		if len(rows) == 0 {
+			@EmptyState("users", "No users", "Add an account to protect the dashboard with a login.") {
+				@dialogOpenButton("create-user", "New user")
+			}
+		} else {
+			<div class="overflow-x-auto">
+				@table.Table() {
+					<caption class="sr-only">Dashboard users, { itoa(len(rows)) } total</caption>
+					@table.Header() {
+						@table.Row() {
+							@table.Head() {
+								@SortHead("/dashboard/api/users/table", "username", "Username", s)
+							}
+							@table.Head() {
+								@SortHead("/dashboard/api/users/table", "role", "Role", s)
+							}
+							@table.Head(table.HeadProps{Class: "hidden sm:table-cell"}) {
+								@SortHead("/dashboard/api/users/table", "created", "Created", s)
+							}
+							@table.Head(table.HeadProps{Class: "hidden lg:table-cell"}) {
+								@SortHead("/dashboard/api/users/table", "login", "Last login", s)
+							}
+							@table.Head(table.HeadProps{Class: "text-right"}) {
+								Actions
+							}
+						}
+					}
+					@table.Body() {
+						for _, u := range rows {
+							@table.Row(table.RowProps{Attributes: templ.Attributes{
+								"data-show": textFilterExpr(u.Haystack()),
+							}}) {
+								@table.Cell(table.CellProps{Class: "font-medium"}) {
+									{ u.Username }
+									if u.Self {
+										<span class="ml-1.5 text-xs font-normal text-muted-foreground">(you)</span>
+									}
+								}
+								@table.Cell() {
+									@badge.Badge(badge.Props{Variant: roleVariant(u.Role)}) {
+										{ u.Role }
+									}
+								}
+								@table.Cell(table.CellProps{Class: "hidden text-xs whitespace-nowrap sm:table-cell"}) {
+									@TimeAgo(u.CreatedAt)
+								}
+								@table.Cell(table.CellProps{Class: "hidden text-xs whitespace-nowrap lg:table-cell"}) {
+									@TimeAgo(u.LastLoginAt)
+								}
+								@table.Cell(table.CellProps{Class: "text-right whitespace-nowrap"}) {
+									@button.Button(button.Props{
+										Variant: button.VariantGhost,
+										Size:    button.SizeIcon,
+										Class:   "size-8",
+										Attributes: templ.Attributes{
+											"title":         "Set password for " + u.Username,
+											"aria-label":    "Set password for " + u.Username,
+											"data-on:click": "$pwuser=" + jsExpr(u.Username) + ";$pwvalue='';" + openDialogJS("set-password"),
+										},
+									}) {
+										@icon.KeyRound(icon.Props{Class: "size-4"})
+									}
+									if !u.Protected {
+										@button.Button(button.Props{
+											Variant: button.VariantGhost,
+											Size:    button.SizeIcon,
+											Class:   "size-8",
+											Attributes: templ.Attributes{
+												"title":      roleToggleTitle(u.Role) + " " + u.Username,
+												"aria-label": roleToggleTitle(u.Role) + " " + u.Username,
+												"data-on:click": confirmAction(
+													roleToggleTitle(u.Role)+"?",
+													u.Username+" will become "+otherRole(u.Role)+".",
+													roleToggleTitle(u.Role),
+													dsPost("/dashboard/api/users/"+pathSeg(u.Username)+"/role?role="+queryVal(otherRole(u.Role))),
+												),
+											},
+										}) {
+											@icon.ShieldCheck(icon.Props{Class: "size-4"})
+										}
+									}
+									if !u.Self && !u.Protected {
+										@button.Button(button.Props{
+											Variant: button.VariantGhost,
+											Size:    button.SizeIcon,
+											Class:   "size-8 text-destructive",
+											Attributes: templ.Attributes{
+												"title":      "Delete " + u.Username,
+												"aria-label": "Delete user " + u.Username,
+												"data-on:click": confirmAction(
+													"Delete user?",
+													u.Username+" will be removed and signed out everywhere.",
+													"Delete",
+													dsDelete("/dashboard/api/users/"+pathSeg(u.Username)),
+												),
+											},
+										}) {
+											@icon.Trash2(icon.Props{Class: "size-4"})
+										}
+									}
+								}
+							}
+						}
+						@table.Row(table.RowProps{Attributes: templ.Attributes{"data-show": noMatchTextExpr(userHaystacks(rows))}}) {
+							@table.Cell(table.CellProps{Class: "text-muted-foreground", Attributes: templ.Attributes{"colspan": "5"}}) {
+								No users match the current filter.
+							}
+						}
+					}
+				}
+			</div>
+		}
+	</div>
+}
+
+func userHaystacks(rows []UserRow) []string {
+	out := make([]string, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, r.Haystack())
+	}
+	return out
+}
+
+// otherRole is the role a toggle would switch to.
+func otherRole(role string) string {
+	if role == "admin" {
+		return "viewer"
+	}
+	return "admin"
+}
+
+func roleToggleTitle(role string) string {
+	if role == "admin" {
+		return "Make viewer"
+	}
+	return "Make admin"
+}
+
+// CreateUserDialog is the new-account modal.
+templ CreateUserDialog() {
+	@dialog.Dialog(dialog.Props{ID: "create-user"}) {
+		@dialog.Content() {
+			<div data-signals="{newuser:'', newpass:'', newrole:'admin'}">
+				@dialog.Header() {
+					@dialog.Title() {
+						New user
+					}
+					@dialog.Description() {
+						Create a dashboard account. The password is hashed with bcrypt and never stored in plain text.
+					}
+				}
+				<div id="create-user-error"></div>
+				<form class="grid gap-4 py-4" data-on:submit={ dsPost("/dashboard/api/users") } data-indicator="userbusy">
+					@field("newuser", "Username") {
+						@input.Input(input.Props{
+							ID:          "newuser",
+							Placeholder: "alice",
+							Attributes:  templ.Attributes{"data-bind": "newuser", "required": "true", "autocomplete": "off"},
+						})
+						@hint("Letters, digits and . - _ @")
+					}
+					@field("newpass", "Password") {
+						@input.Input(input.Props{
+							ID:   "newpass",
+							Type: input.TypePassword,
+							Attributes: templ.Attributes{
+								"data-bind": "newpass", "required": "true", "autocomplete": "new-password", "minlength": "8",
+							},
+						})
+						@hint("At least 8 characters, at most 72 bytes.")
+					}
+					@selectField("newrole", "Role", "newrole", []string{"admin", "viewer"})
+				</form>
+				@dialog.Footer() {
+					@dialog.Close() {
+						@button.Button(button.Props{Variant: button.VariantOutline}) {
+							Cancel
+						}
+					}
+					@button.Button(button.Props{
+						Attributes: templ.Attributes{
+							"data-on:click":  dsPost("/dashboard/api/users"),
+							"data-indicator": "userbusy",
+							"data-attr":      "{disabled: $userbusy || !$newuser || !$newpass}",
+						},
+					}) {
+						@Busy("userbusy")
+						Create
+					}
+				}
+			</div>
+		}
+	}
+}
+
+// SetPasswordDialog is the admin's reset-someone-else's-password modal. The
+// target username arrives through the (text-only) $pwuser signal, set by the
+// row button.
+templ SetPasswordDialog() {
+	@dialog.Dialog(dialog.Props{ID: "set-password"}) {
+		@dialog.Content() {
+			<div data-signals="{pwuser:'', pwvalue:''}">
+				@dialog.Header() {
+					@dialog.Title() {
+						Set password
+					}
+					@dialog.Description() {
+						<span>Sets a new password for <span class="font-medium" data-text="$pwuser"></span> and signs them out everywhere.</span>
+					}
+				}
+				<div id="set-password-error"></div>
+				<form class="grid gap-4 py-4" data-on:submit={ dsPost("/dashboard/api/users/password") } data-indicator="pwbusy">
+					@field("pwvalue", "New password") {
+						@input.Input(input.Props{
+							ID:   "pwvalue",
+							Type: input.TypePassword,
+							Attributes: templ.Attributes{
+								"data-bind": "pwvalue", "required": "true", "autocomplete": "new-password", "minlength": "8",
+							},
+						})
+					}
+				</form>
+				@dialog.Footer() {
+					@dialog.Close() {
+						@button.Button(button.Props{Variant: button.VariantOutline}) {
+							Cancel
+						}
+					}
+					@button.Button(button.Props{
+						Attributes: templ.Attributes{
+							"data-on:click":  dsPost("/dashboard/api/users/password"),
+							"data-indicator": "pwbusy",
+							"data-attr":      "{disabled: $pwbusy || !$pwvalue}",
+						},
+					}) {
+						@Busy("pwbusy")
+						Set password
+					}
+				}
+			</div>
+		}
+	}
+}
+
+// ChangePasswordDialog is the self-service password change, available to every
+// signed-in account (including viewers) from the sidebar. It is rendered on
+// every page, so the control is always one click away.
+templ ChangePasswordDialog() {
+	@dialog.Dialog(dialog.Props{ID: "change-password"}) {
+		@dialog.Content() {
+			<div data-signals="{curpass:'', newpass1:'', newpass2:''}">
+				@dialog.Header() {
+					@dialog.Title() {
+						Change password
+					}
+					@dialog.Description() {
+						You will be signed out of your other sessions.
+					}
+				}
+				<div id="change-password-error"></div>
+				<form class="grid gap-4 py-4" data-on:submit={ dsPost("/dashboard/api/account/password") } data-indicator="cpbusy">
+					@field("curpass", "Current password") {
+						@input.Input(input.Props{
+							ID:         "curpass",
+							Type:       input.TypePassword,
+							Attributes: templ.Attributes{"data-bind": "curpass", "required": "true", "autocomplete": "current-password"},
+						})
+					}
+					@field("newpass1", "New password") {
+						@input.Input(input.Props{
+							ID:   "newpass1",
+							Type: input.TypePassword,
+							Attributes: templ.Attributes{
+								"data-bind": "newpass1", "required": "true", "autocomplete": "new-password", "minlength": "8",
+							},
+						})
+					}
+					@field("newpass2", "Confirm new password") {
+						@input.Input(input.Props{
+							ID:   "newpass2",
+							Type: input.TypePassword,
+							Attributes: templ.Attributes{
+								"data-bind": "newpass2", "required": "true", "autocomplete": "new-password", "minlength": "8",
+							},
+						})
+					}
+					<p class="text-xs text-destructive" data-show="$newpass1 && $newpass2 && $newpass1 !== $newpass2">
+						The new passwords do not match.
+					</p>
+				</form>
+				@dialog.Footer() {
+					@dialog.Close() {
+						@button.Button(button.Props{Variant: button.VariantOutline}) {
+							Cancel
+						}
+					}
+					@button.Button(button.Props{
+						Attributes: templ.Attributes{
+							"data-on:click":  dsPost("/dashboard/api/account/password"),
+							"data-indicator": "cpbusy",
+							"data-attr":      "{disabled: $cpbusy || !$curpass || !$newpass1 || $newpass1 !== $newpass2}",
+						},
+					}) {
+						@Busy("cpbusy")
+						Change password
+					}
+				}
+			</div>
+		}
+	}
+}

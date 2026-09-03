@@ -68,10 +68,12 @@
 
           src = lib.cleanSource ./.;
 
-          # Single direct dependency (the microsandbox SDK) plus the CLI/logging
-          # stack (cobra, fang, charmbracelet/log). If go.mod changes, run
-          # `nix build .#msbd` and replace this with the hash Nix reports.
-          vendorHash = "sha256-xidi4BuGc+oSXwDPM6bUlFYvaxZK2By8x1dpErtBriE=";
+          # The microsandbox SDK plus the CLI/logging stack (cobra, fang,
+          # charmbracelet/log), the dashboard (templ, datastar) and the state
+          # store (modernc.org/sqlite — pure Go, so still no extra C toolchain).
+          # If go.mod changes, run `nix build .#msbd` and replace this with the
+          # hash Nix reports.
+          vendorHash = "sha256-pv3NrB68DVVdFdwSJcCHfRUGVw3UdpiRuWMtIpbzqMo=";
 
           subPackages = [ "cmd/msbd" ];
 

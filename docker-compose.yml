@@ -15,13 +15,21 @@ services:
     # group_add:
     #   - kvm            # or the numeric GID from `ls -l /dev/kvm`
     environment:
-      MSBD_API_KEY: ${MSBD_API_KEY:?set MSBD_API_KEY}
+      # Optional now: `docker compose exec msbd msbd keys create ci` mints a
+      # persisted token instead, with no secret in the compose file or the
+      # host environment. Both kinds of key are accepted together.
+      MSBD_API_KEY: ${MSBD_API_KEY:-}
       MSBD_LISTEN: ":8099"
       MSBD_DEFAULT_IMAGE: "microsandbox/python"
       MSBD_MAX_SANDBOXES: "0"      # 0 = unlimited; set a host-safe ceiling
       MSBD_SHUTDOWN_TIMEOUT_SECS: "60"
-      # Dashboard is refused when an API key is set but no dashboard auth is
-      # configured (it would bypass the API token). Set BOTH to enable it:
+      # Users, API keys and dashboard sessions. Inside the persisted volume
+      # below, so they survive `docker compose down` and image upgrades.
+      MSBD_DATA_DIR: "/root/.microsandbox/msbd"
+      # The dashboard LOCKS itself when an API key is set but it has no auth of
+      # its own (it would bypass the API token). Give it a real login with:
+      #   docker compose exec msbd msbd users add admin
+      # — no restart needed. Or fall back to legacy single-account Basic auth:
       # MSBD_DASHBOARD_USER: admin
       # MSBD_DASHBOARD_PASS: ${MSBD_DASHBOARD_PASS}
       # Host-path transfers are DENIED unless you allowlist prefixes here:
@@ -32,7 +40,9 @@ services:
       # interfaces (only behind a trusted network / proxy).
       - "127.0.0.1:8099:8099"
     volumes:
-      - msbd-data:/root/.microsandbox   # persist runtime + image cache
+      # Persists the msb runtime, the OCI image cache AND (via MSBD_DATA_DIR
+      # above) the users/API-keys database.
+      - msbd-data:/root/.microsandbox
     # Give msbd time to drain long /run calls + live terminals on stop
     # (keep >= MSBD_SHUTDOWN_TIMEOUT_SECS).
     stop_grace_period: 70s

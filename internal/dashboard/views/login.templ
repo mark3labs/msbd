@@ -1,0 +1,185 @@
+package views
+
+import (
+	"github.com/mark3labs/msbd/internal/dashboard/components/button"
+	"github.com/mark3labs/msbd/internal/dashboard/components/card"
+	"github.com/mark3labs/msbd/internal/dashboard/components/icon"
+	"github.com/mark3labs/msbd/internal/dashboard/components/input"
+	"github.com/mark3labs/msbd/internal/dashboard/components/label"
+)
+
+// LoginPage is a STANDALONE document — the app shell would be misleading here
+// (its nav links all 403) and the visitor is by definition unauthenticated, so
+// it must not depend on anything the guards protect. Only the embedded CSS and
+// the Datastar runtime are loaded, both of which are served unauthenticated.
+templ LoginPage(next, version string) {
+	<!DOCTYPE html>
+	<html lang="en">
+		<head>
+			<meta charset="UTF-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+			<title>Sign in · msbd</title>
+			<link rel="icon" href="/dashboard/assets/favicon.svg" type="image/svg+xml"/>
+			<link rel="stylesheet" href="/dashboard/assets/css/output.css"/>
+			@themeBootScript()
+			<script type="module" src="/dashboard/assets/vendor/datastar.js"></script>
+		</head>
+		<body class="bg-background text-foreground antialiased">
+			<main class="flex min-h-screen items-center justify-center p-4">
+				<div class="w-full max-w-sm" data-signals={ loginSignals(next) }>
+					<div class="mb-6 flex items-center justify-center gap-2 text-lg font-semibold">
+						@icon.Box(icon.Props{Class: "size-6"})
+						msbd
+					</div>
+					@card.Card() {
+						@card.Header() {
+							@card.Title() {
+								Sign in
+							}
+							@card.Description() {
+								Enter your dashboard credentials to continue.
+							}
+						}
+						@card.Content() {
+							<div id="login-error" class="mb-3"></div>
+							<form
+								class="grid gap-4"
+								data-on:submit={ dsPost("/dashboard/login") }
+								data-indicator="loginbusy"
+							>
+								<div class="grid gap-1.5">
+									@label.Label(label.Props{For: "username"}) {
+										Username
+									}
+									@input.Input(input.Props{
+										ID: "username",
+										Attributes: templ.Attributes{
+											"data-bind":    "loginuser",
+											"required":     "true",
+											"autocomplete": "username",
+											"autofocus":    "true",
+											"name":         "username",
+										},
+									})
+								</div>
+								<div class="grid gap-1.5">
+									@label.Label(label.Props{For: "password"}) {
+										Password
+									}
+									@input.Input(input.Props{
+										ID:   "password",
+										Type: input.TypePassword,
+										Attributes: templ.Attributes{
+											"data-bind":    "loginpass",
+											"required":     "true",
+											"autocomplete": "current-password",
+											"name":         "password",
+										},
+									})
+								</div>
+								@button.Button(button.Props{
+									Type:  button.TypeSubmit,
+									Class: "w-full",
+									Attributes: templ.Attributes{
+										"data-indicator": "loginbusy",
+										"data-attr":      "{disabled: $loginbusy || !$loginuser || !$loginpass}",
+									},
+								}) {
+									@Busy("loginbusy")
+									Sign in
+								}
+							</form>
+						}
+					}
+					<p class="mt-4 text-center text-xs text-muted-foreground">
+						msbd { orDashS(version) }
+					</p>
+				</div>
+			</main>
+		</body>
+	</html>
+}
+
+// loginSignals seeds the form. `loginnext` carries the sanitised post-login
+// destination through the POST, so a deep link survives the sign-in detour.
+func loginSignals(next string) string {
+	return "{loginuser:'', loginpass:'', loginnext:" + jsExpr(next) + "}"
+}
+
+// LoginError is the inline failure banner patched into the login card. The
+// message is always the same regardless of which half of the credentials was
+// wrong, so the form can't be used to enumerate accounts.
+templ LoginError(msg string) {
+	<div id="login-error" class="mb-3">
+		<div class="rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+			{ msg }
+		</div>
+	</div>
+}
+
+// LockedPage is shown when the dashboard has NO authentication of its own while
+// the REST API requires a bearer token — serving it would hand every visitor
+// full sandbox control and bypass the token entirely.
+//
+// It is a standalone document (there is nobody to render a shell for) and it
+// tells the operator exactly how to fix it, because the alternative — a bare
+// 403 — reads as a bug.
+templ LockedPage(version string) {
+	<!DOCTYPE html>
+	<html lang="en">
+		<head>
+			<meta charset="UTF-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+			<title>Dashboard locked · msbd</title>
+			<link rel="icon" href="/dashboard/assets/favicon.svg" type="image/svg+xml"/>
+			<link rel="stylesheet" href="/dashboard/assets/css/output.css"/>
+			@themeBootScript()
+		</head>
+		<body class="bg-background text-foreground antialiased">
+			<main class="flex min-h-screen items-center justify-center p-4">
+				<div class="w-full max-w-lg">
+					<div class="mb-6 flex items-center justify-center gap-2 text-lg font-semibold">
+						@icon.Box(icon.Props{Class: "size-6"})
+						msbd
+					</div>
+					@card.Card() {
+						@card.Header() {
+							@card.Title() {
+								<span class="flex items-center gap-2">
+									@icon.Lock(icon.Props{Class: "size-5"})
+									Dashboard locked
+								</span>
+							}
+							@card.Description() {
+								The REST API requires an API key, but the dashboard has no
+								authentication of its own. Serving it would let anyone control
+								every sandbox without that key, so msbd refuses.
+							}
+						}
+						@card.Content() {
+							<p class="mb-2 text-sm font-medium">Create an account (recommended):</p>
+							<pre class="mb-4 overflow-x-auto rounded-md bg-muted p-3 text-xs">msbd users add admin</pre>
+							<p class="mb-3 text-sm text-muted-foreground">
+								No restart needed — just reload this page afterwards.
+							</p>
+							<p class="mb-2 text-sm font-medium">Or configure it at startup:</p>
+							<ul class="space-y-1.5 text-sm text-muted-foreground">
+								<li>
+									<code class="rounded bg-muted px-1 py-0.5 text-xs">MSBD_DASHBOARD_USER</code>
+									+
+									<code class="rounded bg-muted px-1 py-0.5 text-xs">MSBD_DASHBOARD_PASS</code>
+									— legacy single-account HTTP Basic auth.
+								</li>
+								<li>
+									<code class="rounded bg-muted px-1 py-0.5 text-xs">MSBD_DASHBOARD_ALLOW_INSECURE=true</code>
+									— serve it unauthenticated anyway (unsafe).
+								</li>
+							</ul>
+						}
+					}
+					<p class="mt-4 text-center text-xs text-muted-foreground">msbd { orDashS(version) }</p>
+				</div>
+			</main>
+		</body>
+	</html>
+}

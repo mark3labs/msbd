@@ -56,6 +56,31 @@ func TestDatastarExpressionInjection(t *testing.T) {
 			_ = LogsPanel([]LogLine{{Source: "stdout", Text: payload}}).Render(context.Background(), &b)
 			return b.String()
 		},
+		// Account and key names are operator-supplied, but they still reach the
+		// same confirm-dialog and row-action expressions as guest-controlled data.
+		"api-key-name": func() string {
+			var b strings.Builder
+			_ = KeysPage([]KeyRow{{ID: "1", Name: payload, Prefix: payload, Status: "active", Active: true}}, sort).Render(context.Background(), &b)
+			return b.String()
+		},
+		"username": func() string {
+			var b strings.Builder
+			_ = UsersPage([]UserRow{{Username: payload, Role: "viewer"}}, sort).Render(context.Background(), &b)
+			return b.String()
+		},
+		// The freshly-minted token is echoed straight back to the browser; a
+		// breakout there would be self-inflicted but is worth pinning.
+		"new-key-token": func() string {
+			var b strings.Builder
+			_ = NewKeyDialog(payload, payload).Render(context.Background(), &b)
+			return b.String()
+		},
+		// ?next= is attacker-influenceable via a crafted link.
+		"login-next": func() string {
+			var b strings.Builder
+			_ = LoginPage(payload, "v").Render(context.Background(), &b)
+			return b.String()
+		},
 	}
 
 	for name, fn := range cases {
@@ -80,5 +105,16 @@ func TestConfirmBodyIsDataNotCode(t *testing.T) {
 	}
 	if strings.Contains(out, "innerHTML") {
 		t.Error("confirm dialog must not assign innerHTML")
+	}
+}
+
+// TestSetPasswordTargetIsDataNotCode — the shared "set password" dialog names
+// its target through a text-only signal for the same reason the confirm dialog
+// does: a username must never become executable markup.
+func TestSetPasswordTargetIsDataNotCode(t *testing.T) {
+	var b strings.Builder
+	_ = SetPasswordDialog().Render(context.Background(), &b)
+	if !strings.Contains(b.String(), `data-text="$pwuser"`) {
+		t.Error("target username should be rendered via data-text, not interpolated markup")
 	}
 }

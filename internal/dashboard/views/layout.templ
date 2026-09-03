@@ -33,7 +33,24 @@ type Meta struct {
 	Images []string
 	// Volumes is the named-volume inventory, offered in the mount picker.
 	Volumes []string
+
+	// ---- identity ----
+	// Username is the signed-in account; empty when the dashboard runs open.
+	Username string
+	// Role is "admin" or "viewer".
+	Role string
+	// CanAdmin gates every mutating control in the UI. The server-side guards
+	// are the real enforcement; hiding buttons just stops a viewer being offered
+	// actions that would only 403.
+	CanAdmin bool
+	// ShowSettings gates the Settings nav (needs a state store AND admin).
+	ShowSettings bool
+	// CanSignOut is true in session mode, where signing out is meaningful.
+	CanSignOut bool
 }
+
+// SignedIn reports whether a named account is driving this request.
+func (m Meta) SignedIn() bool { return m.Username != "" }
 
 // Page is the full HTML document: it loads the compiled CSS, the vendored
 // Datastar runtime and the templui component scripts, then renders the app
@@ -87,6 +104,9 @@ templ Page(m Meta, body templ.Component) {
 			</div>
 			@Toaster()
 			@ConfirmDialog()
+			if m.SignedIn() {
+				@ChangePasswordDialog()
+			}
 		</body>
 	</html>
 }
@@ -165,8 +185,14 @@ templ sidebar(m Meta) {
 			@navItem(m, SectionVolumes, "/dashboard/volumes", "hard-drive", "Volumes")
 			@navItem(m, SectionImages, "/dashboard/images", "layers", "Images")
 			@navItem(m, SectionSnapshots, "/dashboard/snapshots", "camera", "Snapshots")
+			if m.ShowSettings {
+				<div class="mt-2 px-3 pb-1 pt-2 text-xs font-medium text-muted-foreground/70 uppercase tracking-wide">Settings</div>
+				@navItem(m, SectionKeys, "/dashboard/settings/keys", "key-round", "API keys")
+				@navItem(m, SectionUsers, "/dashboard/settings/users", "users", "Users")
+			}
 		</nav>
 		<div class="mt-auto space-y-2 border-t p-3 text-xs text-muted-foreground">
+			@accountBox(m)
 			@themeToggle()
 			<div class="truncate" title={ "runtime " + m.RuntimeVersion }>runtime: { m.RuntimeVersion }</div>
 			<div class="truncate" title={ "sdk " + m.SDKVersion }>sdk: { m.SDKVersion }</div>
@@ -228,6 +254,35 @@ func pageTitle(m Meta) string {
 		return "msbd"
 	}
 	return m.Title + " · msbd"
+}
+
+// accountBox is the signed-in identity block in the sidebar footer: who you
+// are, how to change your password, and how to sign out. It renders nothing in
+// open mode, where there is no account to speak of.
+templ accountBox(m Meta) {
+	if m.SignedIn() {
+		<div class="space-y-1.5 pb-1">
+			<div class="flex items-center gap-2">
+				@icon.CircleUser(icon.Props{Class: "size-4 shrink-0"})
+				<span class="truncate font-medium text-foreground" title={ m.Username }>{ m.Username }</span>
+				if !m.CanAdmin {
+					<span class="rounded bg-muted px-1.5 py-0.5 text-[10px] uppercase">read-only</span>
+				}
+			</div>
+			<div class="flex items-center gap-3">
+				<button
+					type="button"
+					class="hover:text-foreground"
+					data-on:click={ openDialogJS("change-password") }
+				>Change password</button>
+				if m.CanSignOut {
+					<form method="post" action="/dashboard/logout" class="contents">
+						<button type="submit" class="hover:text-foreground">Sign out</button>
+					</form>
+				}
+			</div>
+		</div>
+	}
 }
 
 // LoadingPanel is a neutral placeholder shown while a section loads.

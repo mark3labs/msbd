@@ -28,6 +28,7 @@ import (
 	"github.com/mark3labs/msbd/internal/api"
 	"github.com/mark3labs/msbd/internal/core"
 	"github.com/mark3labs/msbd/internal/dashboard"
+	"github.com/mark3labs/msbd/internal/store"
 
 	rootmsbd "github.com/mark3labs/msbd"
 
@@ -73,7 +74,10 @@ func main() {
 // with no subcommand, so `msbd` (and the Docker/systemd entrypoints) keep
 // booting the server exactly as before.
 func newRootCmd() *cobra.Command {
-	serve := newServeCmd()
+	// dataDir is shared by `serve` and the admin subcommands so that
+	// `msbd keys create` writes the very file a running `msbd serve` reads.
+	dataDir := envOr("MSBD_DATA_DIR", store.DefaultDir())
+	serve := newServeCmd(&dataDir)
 
 	root := &cobra.Command{
 		Use:   "msbd",
@@ -86,17 +90,31 @@ sandbox backend with no cgo on their side.
 
   • Interactive API docs   http://<listen>/docs
   • OpenAPI spec           http://<listen>/openapi.yaml
-  • Health · readiness     /healthz · /readyz`,
+  • Health · readiness     /healthz · /readyz
+
+Users and API keys persist in a local database; manage them with
+  msbd users … / msbd keys …
+or from the dashboard's Settings pages.`,
 		Version: version,
 		// fang renders styled usage/errors; let it own the output.
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		RunE:          serve.RunE,
 	}
+	// --data-dir is persistent so it applies to `serve` and to every admin
+	// subcommand from one definition; they must agree or the CLI would be
+	// administering a different database than the daemon.
+	root.PersistentFlags().StringVar(&dataDir, "data-dir", dataDir,
+		"Directory holding msbd's user/API-key database ($MSBD_DATA_DIR)")
 	// Mirror serve's flags onto the root so `msbd --listen ...` works without
 	// the explicit subcommand (shared flag values — parsed by whichever runs).
 	root.Flags().AddFlagSet(serve.Flags())
-	root.AddCommand(serve)
+	root.AddCommand(
+		serve,
+		newUsersCmd(&dataDir),
+		newKeysCmd(&dataDir),
+		newDBCmd(&dataDir),
+	)
 	return root
 }
 
@@ -107,6 +125,7 @@ type serveOptions struct {
 	listen            string
 	apiKey            string
 	apiKeyFile        string
+	dataDir           *string // shared with the admin subcommands via --data-dir
 	defaultImage      string
 	maxSandboxes      int
 	createTimeout     time.Duration
@@ -114,6 +133,7 @@ type serveOptions struct {
 	jobMaxBytes       int
 	jobTTL            time.Duration
 	shutdownTimeout   time.Duration
+	sessionTTL        time.Duration
 	hostPaths         []string
 	logLevel          string
 	dashboard         bool
@@ -122,8 +142,8 @@ type serveOptions struct {
 	dashboardInsecure bool
 }
 
-func newServeCmd() *cobra.Command {
-	o := &serveOptions{}
+func newServeCmd(dataDir *string) *cobra.Command {
+	o := &serveOptions{dataDir: dataDir}
 	cmd := &cobra.Command{
 		Use:   "serve",
 		Short: "Start the HTTP server",
@@ -166,6 +186,9 @@ interrupted (Ctrl-C / SIGTERM trigger a graceful drain).`,
 	f.DurationVar(&o.shutdownTimeout, "shutdown-timeout",
 		time.Duration(envInt("MSBD_SHUTDOWN_TIMEOUT_SECS", 60))*time.Second,
 		"Graceful-drain deadline on SIGTERM/Ctrl-C ($MSBD_SHUTDOWN_TIMEOUT_SECS)")
+	f.DurationVar(&o.sessionTTL, "session-ttl",
+		time.Duration(envInt("MSBD_SESSION_TTL_SECS", 0))*time.Second,
+		"Dashboard login lifetime; 0 = built-in default (12h) ($MSBD_SESSION_TTL_SECS)")
 	f.StringSliceVar(&o.hostPaths, "host-paths", envList("MSBD_HOST_PATHS"),
 		"Allowlisted host path prefixes for copy/export/import; empty = host transfers DENIED ($MSBD_HOST_PATHS, comma-separated)")
 	f.StringVar(&o.logLevel, "log-level", envOr("MSBD_LOG_LEVEL", "info"),
@@ -215,6 +238,9 @@ func runServe(ctx context.Context, o *serveOptions) error {
 	if o.shutdownTimeout <= 0 {
 		return fmt.Errorf("invalid --shutdown-timeout %s (must be > 0)", o.shutdownTimeout)
 	}
+	if o.sessionTTL < 0 {
+		return fmt.Errorf("invalid --session-ttl %s (must be >= 0)", o.sessionTTL)
+	}
 
 	// --api-key-file wins over --api-key so secrets can live in a file (Docker/
 	// K8s secrets) instead of the process environment.
@@ -226,8 +252,31 @@ func runServe(ctx context.Context, o *serveOptions) error {
 		o.apiKey = strings.TrimSpace(string(b))
 	}
 
-	if o.apiKey == "" {
-		log.Warn("api key is empty — server is UNAUTHENTICATED (dev only)")
+	// The persisted auth store (users, API keys, sessions). It is opened BEFORE
+	// anything expensive so a bad --data-dir fails in milliseconds rather than
+	// after a five-minute runtime download. Failing to open it is fatal: silently
+	// continuing would drop every stored API key and serve the API unauthenticated.
+	dbPath := store.DBPath(*o.dataDir)
+	st, err := store.Open(dbPath)
+	if err != nil {
+		return fmt.Errorf("open state store: %w", err)
+	}
+	defer func() { _ = st.Close() }()
+
+	storedKeys, _ := st.CountAPIKeys(ctx)
+	activeKeys, _ := st.CountActiveAPIKeys(ctx)
+	storedUsers, _ := st.CountUsers(ctx)
+	log.Info("state store ready", "path", dbPath,
+		"users", storedUsers, "api_keys", storedKeys, "api_keys_active", activeKeys)
+
+	switch {
+	case o.apiKey == "" && storedKeys == 0:
+		log.Warn("no API keys configured — server is UNAUTHENTICATED (dev only); create one with `msbd keys create <name>`")
+	case o.apiKey == "" && activeKeys == 0:
+		// Every stored key is revoked or expired. Auth stays ON (revoking a key
+		// must never reopen the server), so nothing can authenticate at all —
+		// which looks like a total outage unless we say so.
+		log.Warn("every stored API key is revoked or expired — all REST requests will be rejected; run `msbd keys create <name>`")
 	}
 	if len(o.hostPaths) == 0 {
 		log.Info("host-path transfers disabled (no --host-paths / MSBD_HOST_PATHS)")
@@ -241,7 +290,7 @@ func runServe(ctx context.Context, o *serveOptions) error {
 
 	// 1) Ensure the msb + libkrunfw runtime is present (downloads on first run).
 	ictx, cancel := context.WithTimeout(ctx, 5*time.Minute)
-	err := msb.EnsureInstalled(ictx)
+	err = msb.EnsureInstalled(ictx)
 	cancel()
 	if err != nil {
 		return fmt.Errorf("ensure runtime installed: %w", err)
@@ -272,29 +321,38 @@ func runServe(ctx context.Context, o *serveOptions) error {
 
 	// 3) Serve.
 	srv := api.NewServer(svc, o.apiKey, readinessProbe).
-		SetOpenAPI(rootmsbd.OpenAPISpec)
+		SetOpenAPI(rootmsbd.OpenAPISpec).
+		SetStore(st)
 	if o.dashboard {
 		dcfg := dashboard.Config{
-			Enabled: true,
-			User:    o.dashboardUser,
-			Pass:    o.dashboardPass,
-			Version: version,
+			Enabled:          true,
+			User:             o.dashboardUser,
+			Pass:             o.dashboardPass,
+			Version:          version,
+			SessionTTL:       o.sessionTTL,
+			APIKeyConfigured: o.apiKey != "",
+			AllowInsecure:    o.dashboardInsecure,
+			KeyCache:         srv.Keys(),
 		}
+		// The dashboard is always mounted; it picks its own auth mode per request
+		// and refuses to serve when it would have none while the API is protected.
+		// Deciding that here, once, at boot would mean `msbd users add` could not
+		// fix a locked dashboard without a restart.
+		srv.SetDashboard(dashboard.New(svc, dcfg, st))
 		switch {
-		case dcfg.AuthEnabled():
-			srv.SetDashboard(dashboard.New(svc, dcfg))
-			log.Info("dashboard enabled", "path", "/dashboard", "auth", "basic")
-		case o.apiKey == "":
+		case storedUsers > 0:
+			log.Info("dashboard enabled", "path", "/dashboard", "auth", "login", "users", storedUsers)
+		case dcfg.BasicAuthEnabled():
+			log.Info("dashboard enabled", "path", "/dashboard", "auth", "basic (legacy)")
+		case o.apiKey == "" && storedKeys == 0:
 			// Fully open deployment (no API key either) — dev mode.
-			srv.SetDashboard(dashboard.New(svc, dcfg))
-			log.Warn("dashboard enabled WITHOUT auth (no API key set — dev only)", "path", "/dashboard")
+			log.Warn("dashboard enabled WITHOUT auth (no API key set — dev only); create a login with `msbd users add <name>`", "path", "/dashboard")
 		case o.dashboardInsecure:
-			srv.SetDashboard(dashboard.New(svc, dcfg))
 			log.Warn("dashboard enabled WITHOUT auth while an API key IS set — --dashboard-allow-insecure overrides the safety refusal", "path", "/dashboard")
 		default:
-			// API key set but dashboard has no auth: refuse, since the dashboard
-			// grants full sandbox control and would bypass the API bearer token.
-			log.Error("dashboard NOT mounted: an API key is set but no dashboard auth is configured — set --dashboard-user/--dashboard-pass, or --dashboard-allow-insecure to override")
+			// An API key is set but the dashboard has none: it will serve a page
+			// explaining how to fix that and nothing else, until one is configured.
+			log.Warn("dashboard LOCKED: an API key is set but no dashboard auth is configured — run `msbd users add <name>` (takes effect immediately), set --dashboard-user/--dashboard-pass, or pass --dashboard-allow-insecure", "path", "/dashboard")
 		}
 	}
 	httpSrv := &http.Server{

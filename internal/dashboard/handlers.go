@@ -127,9 +127,12 @@ func (h *Handler) notFoundPage(w http.ResponseWriter, r *http.Request) {
 }
 
 // meta assembles the shell-level context, including the image/volume pickers
-// the create-sandbox dialog offers as autocomplete.
+// the create-sandbox dialog offers as autocomplete, and the identity fields the
+// shell uses to show the account box, the Settings nav and (for viewers) to
+// hide controls that would only 403.
 func (h *Handler) meta(ctx context.Context, sec views.Section, title string) views.Meta {
 	rt, _ := core.RuntimeVersion()
+	id := identityFromContext(ctx)
 	m := views.Meta{
 		Version:        orDash(h.cfg.Version),
 		DefaultImage:   h.svc.DefaultImage(),
@@ -137,6 +140,11 @@ func (h *Handler) meta(ctx context.Context, sec views.Section, title string) vie
 		SDKVersion:     core.SDKVersion(),
 		Section:        sec,
 		Title:          title,
+		Username:       id.Name,
+		Role:           id.Role,
+		CanAdmin:       id.IsAdmin(),
+		ShowSettings:   h.settingsEnabled() && id.IsAdmin(),
+		CanSignOut:     id.Mode == modeSession,
 	}
 	if imgs, err := h.svc.ListImages(ctx); err == nil {
 		for i := range imgs {
