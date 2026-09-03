@@ -57,7 +57,7 @@ Creating the first user switches the dashboard from HTTP Basic auth (or no auth)
 to a real login page with server-side sessions. Passwords are bcrypt-hashed and
 never stored, logged or printed.
 
-Users are also manageable from the dashboard itself at /dashboard/settings/users.`,
+Users are also manageable from the dashboard itself at /settings/users.`,
 		Args: cobra.NoArgs,
 	}
 	cmd.AddCommand(

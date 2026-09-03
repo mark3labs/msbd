@@ -38,7 +38,7 @@ type Opts struct {
 	DefaultImage  string
 	MaxSandboxes  int
 	CreateTimeout time.Duration
-	// PullTimeout bounds a standalone image pull (POST /v1/images/pull). Pulls
+	// PullTimeout bounds a standalone image pull (POST /api/v1/images/pull). Pulls
 	// boot a throwaway microVM and a cold fetch of a large image can outlast the
 	// create timeout, so it gets its own, larger budget.
 	PullTimeout time.Duration

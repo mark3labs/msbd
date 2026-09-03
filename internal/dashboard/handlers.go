@@ -22,13 +22,8 @@ import (
 // ---------------------------------------------------------------------------
 
 func (h *Handler) pageOverview(w http.ResponseWriter, r *http.Request) {
-	// /dashboard/{anything-else} must not silently render the overview.
-	if p := strings.TrimSuffix(r.URL.Path, "/"); p != "/dashboard" && p != "" {
-		if r.URL.Path != "/dashboard/" && r.URL.Path != "/dashboard" {
-			h.notFoundPage(w, r)
-			return
-		}
-	}
+	// Registered as "GET /{$}", so the mux already guarantees an exact "/".
+	// Anything else 404s through the mux rather than silently rendering here.
 	d := h.overviewData(r.Context())
 	h.render(w, r, views.SectionOverview, "Overview", "", views.OverviewPage(h.meta(r.Context(), views.SectionOverview, "Overview"), d))
 }
@@ -119,12 +114,13 @@ func (h *Handler) errorPage(w http.ResponseWriter, r *http.Request, m views.Meta
 	_ = views.Page(m, views.InlineError("page-error", title, cleanErr(err))).Render(r.Context(), w)
 }
 
-func (h *Handler) notFoundPage(w http.ResponseWriter, r *http.Request) {
-	m := h.meta(r.Context(), views.SectionOverview, "Not found")
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.WriteHeader(http.StatusNotFound)
-	_ = views.Page(m, views.InlineError("page-error", "Page not found", r.URL.Path)).Render(r.Context(), w)
-}
+// NOTE: there is deliberately no catch-all "/" route rendering a styled 404
+// page. Registering a bare "/" pattern on the mux makes EVERY unmatched
+// request match it, which destroys ServeMux's built-in 405 Method Not Allowed
+// for the REST API (e.g. `PUT /api/v1/sandboxes` would answer 404 "page not
+// found" instead of 405). Correct status codes on the machine-facing API are
+// worth more than a prettier 404 on a mistyped dashboard URL, so unmatched
+// paths fall through to the mux's own plain-text 404.
 
 // meta assembles the shell-level context, including the image/volume pickers
 // the create-sandbox dialog offers as autocomplete, and the identity fields the
@@ -183,7 +179,7 @@ func (h *Handler) handleTerminalPage(w http.ResponseWriter, r *http.Request) {
 	if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
 		scheme = "wss"
 	}
-	wsBase := scheme + "://" + r.Host + "/v1/sandboxes/" + id + "/terminal"
+	wsBase := scheme + "://" + r.Host + "/api/v1/sandboxes/" + id + "/terminal"
 	ticket, _ := h.svc.MintTerminalTicket(id)
 	embed := r.URL.Query().Get("embed") == "1"
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")

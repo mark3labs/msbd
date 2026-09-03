@@ -90,7 +90,7 @@ func (h *Handler) doLogout(w http.ResponseWriter, r *http.Request) {
 		_ = h.store.DeleteSession(r.Context(), c.Value)
 	}
 	h.clearSessionCookie(w, r)
-	http.Redirect(w, r, "/dashboard/login", http.StatusSeeOther)
+	http.Redirect(w, r, "/login", http.StatusSeeOther)
 }
 
 type changePasswordSignals struct {

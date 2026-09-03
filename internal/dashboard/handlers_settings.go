@@ -2,7 +2,7 @@ package dashboard
 
 // handlers_settings.go — the Settings section: REST API keys and dashboard
 // accounts. Same shape as every other section: a page handler renders the full
-// document, the /dashboard/api/* handlers patch the table fragment over SSE.
+// document, the /ui/* handlers patch the table fragment over SSE.
 
 import (
 	"context"

@@ -4,6 +4,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
@@ -43,7 +44,7 @@ func TestIndexRenders(t *testing.T) {
 	ts := newTestServer(Config{Enabled: true})
 	defer ts.Close()
 
-	resp, err := http.Get(ts.URL + "/dashboard")
+	resp, err := http.Get(ts.URL + "/")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -54,9 +55,9 @@ func TestIndexRenders(t *testing.T) {
 	body := readAll(t, resp)
 	for _, want := range []string{
 		"Overview · msbd",
-		"/dashboard/assets/css/output.css",
-		"/dashboard/assets/vendor/datastar.js",
-		`href="/dashboard/sandboxes"`,
+		"/assets/css/output.css",
+		"/assets/vendor/datastar.js",
+		`href="/sandboxes"`,
 		`aria-current="page"`,
 		"msbd-theme", // theme boot script
 	} {
@@ -73,11 +74,11 @@ func TestSectionPagesAreRealURLs(t *testing.T) {
 	defer ts.Close()
 
 	cases := map[string]string{
-		"/dashboard":           "Overview · msbd",
-		"/dashboard/sandboxes": "Sandboxes · msbd",
-		"/dashboard/volumes":   "Volumes · msbd",
-		"/dashboard/images":    "Images · msbd",
-		"/dashboard/snapshots": "Snapshots · msbd",
+		"/":          "Overview · msbd",
+		"/sandboxes": "Sandboxes · msbd",
+		"/volumes":   "Volumes · msbd",
+		"/images":    "Images · msbd",
+		"/snapshots": "Snapshots · msbd",
 	}
 	for path, wantTitle := range cases {
 		resp, err := http.Get(ts.URL + path)
@@ -104,15 +105,15 @@ func TestStaticAssets(t *testing.T) {
 	defer ts.Close()
 
 	for _, path := range []string{
-		"/dashboard/assets/css/output.css",
-		"/dashboard/assets/favicon.svg",
-		"/dashboard/assets/vendor/datastar.js",
-		"/dashboard/assets/vendor/xterm.js",
-		"/dashboard/assets/js/metric-chart.js",
-		"/dashboard/assets/js/dialog.min.js",
-		"/dashboard/assets/js/tabs.min.js",
-		"/dashboard/assets/js/progress.min.js",
-		"/dashboard/assets/js/copybutton.min.js",
+		"/assets/css/output.css",
+		"/assets/favicon.svg",
+		"/assets/vendor/datastar.js",
+		"/assets/vendor/xterm.js",
+		"/assets/js/metric-chart.js",
+		"/assets/js/dialog.min.js",
+		"/assets/js/tabs.min.js",
+		"/assets/js/progress.min.js",
+		"/assets/js/copybutton.min.js",
 	} {
 		resp, err := http.Get(ts.URL + path)
 		if err != nil {
@@ -130,7 +131,7 @@ func TestBasicAuth(t *testing.T) {
 	defer ts.Close()
 
 	// No credentials → 401.
-	resp, err := http.Get(ts.URL + "/dashboard")
+	resp, err := http.Get(ts.URL + "/")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -143,7 +144,7 @@ func TestBasicAuth(t *testing.T) {
 	}
 
 	// Correct credentials → 200.
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/dashboard", nil)
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/", nil)
 	req.SetBasicAuth("admin", "secret")
 	resp2, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -155,7 +156,7 @@ func TestBasicAuth(t *testing.T) {
 	}
 
 	// Wrong password → 401.
-	req3, _ := http.NewRequest(http.MethodGet, ts.URL+"/dashboard", nil)
+	req3, _ := http.NewRequest(http.MethodGet, ts.URL+"/", nil)
 	req3.SetBasicAuth("admin", "nope")
 	resp3, err := http.DefaultClient.Do(req3)
 	if err != nil {
@@ -175,17 +176,17 @@ func TestNewRoutesAreMounted(t *testing.T) {
 	// A mounted route must not 404. (Most will fail at the SDK layer here,
 	// which surfaces as a 200 SSE stream carrying an error toast.)
 	for _, tc := range []struct{ method, path string }{
-		{http.MethodGet, "/dashboard/api/overview"},
-		{http.MethodGet, "/dashboard/api/sandboxes/table"},
-		{http.MethodGet, "/dashboard/api/volumes/table"},
-		{http.MethodGet, "/dashboard/api/images/table"},
-		{http.MethodGet, "/dashboard/api/snapshots/table"},
-		{http.MethodGet, "/dashboard/api/images/inspect?ref=alpine"},
-		{http.MethodPost, "/dashboard/api/sandboxes/x/jobs/y/cancel"},
-		{http.MethodPost, "/dashboard/api/sandboxes/x/files"},
-		{http.MethodGet, "/dashboard/api/sandboxes/x/files/view?path=/etc"},
-		{http.MethodPost, "/dashboard/api/sandboxes/x/files/mkdir"},
-		{http.MethodPost, "/dashboard/api/snapshots/x/verify"},
+		{http.MethodGet, "/ui/overview"},
+		{http.MethodGet, "/ui/sandboxes/table"},
+		{http.MethodGet, "/ui/volumes/table"},
+		{http.MethodGet, "/ui/images/table"},
+		{http.MethodGet, "/ui/snapshots/table"},
+		{http.MethodGet, "/ui/images/inspect?ref=alpine"},
+		{http.MethodPost, "/ui/sandboxes/x/jobs/y/cancel"},
+		{http.MethodPost, "/ui/sandboxes/x/files"},
+		{http.MethodGet, "/ui/sandboxes/x/files/view?path=/etc"},
+		{http.MethodPost, "/ui/sandboxes/x/files/mkdir"},
+		{http.MethodPost, "/ui/snapshots/x/verify"},
 	} {
 		req, _ := http.NewRequest(tc.method, ts.URL+tc.path, nil)
 		resp, err := http.DefaultClient.Do(req)
@@ -316,7 +317,7 @@ func TestUnknownSandboxIs404(t *testing.T) {
 	ts := newTestServer(Config{Enabled: true})
 	defer ts.Close()
 
-	resp, err := http.Get(ts.URL + "/dashboard/sandboxes/sbx_does_not_exist")
+	resp, err := http.Get(ts.URL + "/sandboxes/sbx_does_not_exist")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -328,7 +329,7 @@ func TestUnknownSandboxIs404(t *testing.T) {
 	if !strings.Contains(body, "not available") {
 		t.Error("error page should explain what went wrong")
 	}
-	if !strings.Contains(body, `href="/dashboard/sandboxes"`) {
+	if !strings.Contains(body, `href="/sandboxes"`) {
 		t.Error("error page should keep the nav so the user isn't stranded")
 	}
 }
@@ -339,7 +340,7 @@ func TestImagePruneRouteIsMounted(t *testing.T) {
 	ts := newTestServer(Config{Enabled: true})
 	defer ts.Close()
 
-	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/dashboard/api/images/prune", nil)
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/ui/images/prune", nil)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatal(err)
@@ -356,7 +357,7 @@ func TestImagePullAcceptsRowAction(t *testing.T) {
 	ts := newTestServer(Config{Enabled: true})
 	defer ts.Close()
 
-	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/dashboard/api/images/pull?ref=alpine%3A3&force=1", nil)
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/ui/images/pull?ref=alpine%3A3&force=1", nil)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatal(err)
@@ -378,7 +379,7 @@ func TestImagePullRequiresReference(t *testing.T) {
 	ts := newTestServer(Config{Enabled: true})
 	defer ts.Close()
 
-	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/dashboard/api/images/pull", nil)
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/ui/images/pull", nil)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatal(err)
@@ -476,16 +477,16 @@ func TestConcurrentRendersAreRaceFree(t *testing.T) {
 	defer ts.Close()
 
 	paths := []string{
-		"/dashboard",
-		"/dashboard/sandboxes",
-		"/dashboard/volumes",
-		"/dashboard/images",
-		"/dashboard/snapshots",
-		"/dashboard/api/overview",
-		"/dashboard/api/sandboxes/table",
-		"/dashboard/api/volumes/table",
-		"/dashboard/api/images/table",
-		"/dashboard/api/snapshots/table",
+		"/",
+		"/sandboxes",
+		"/volumes",
+		"/images",
+		"/snapshots",
+		"/ui/overview",
+		"/ui/sandboxes/table",
+		"/ui/volumes/table",
+		"/ui/images/table",
+		"/ui/snapshots/table",
 	}
 
 	var wg sync.WaitGroup
@@ -511,4 +512,117 @@ func TestConcurrentRendersAreRaceFree(t *testing.T) {
 		}(g)
 	}
 	wg.Wait()
+}
+
+// TestDashboardNeverShadowsTheAPI is the structural guard for the shared mux.
+// The dashboard owns the root of the URL space, so it is one careless
+// mux.HandleFunc away from swallowing a REST route. ServeMux.Handler reports
+// which pattern (if any) a request matches, so mounting the dashboard ALONE
+// and asking it about API paths proves the dashboard claims none of them.
+//
+// Two invariants: nothing under /api/ (that prefix is the versioned REST API),
+// and no bare "/" catch-all — a catch-all matches every unmatched request and
+// would flatten ServeMux's 405 Method Not Allowed into a 404 API-wide.
+func TestDashboardNeverShadowsTheAPI(t *testing.T) {
+	mux := http.NewServeMux()
+	New(nil, Config{Enabled: true}, newTestStore(t)).Mount(mux)
+
+	// Every shape the api package registers, plus the unversioned ops routes.
+	foreign := [][2]string{
+		{http.MethodGet, "/api/v1/version"},
+		{http.MethodPost, "/api/v1/sandboxes"},
+		{http.MethodGet, "/api/v1/sandboxes"},
+		{http.MethodGet, "/api/v1/sandboxes/sbx_1"},
+		{http.MethodPut, "/api/v1/sandboxes"}, // wrong method: must still not match
+		{http.MethodPost, "/api/v1/sandboxes/sbx_1/exec"},
+		{http.MethodGet, "/api/v1/sandboxes/sbx_1/terminal"},
+		{http.MethodGet, "/api/v1/volumes"},
+		{http.MethodGet, "/api/v1/images"},
+		{http.MethodGet, "/api/v1/snapshots"},
+		{http.MethodGet, "/healthz"},
+		{http.MethodGet, "/readyz"},
+		{http.MethodGet, "/metrics"},
+		{http.MethodGet, "/docs"},
+		{http.MethodGet, "/openapi.yaml"},
+		// A path the dashboard has no page for must stay unclaimed, or a
+		// mistyped API route would render HTML instead of 404ing.
+		{http.MethodGet, "/definitely/not/a/route"},
+	}
+	for _, f := range foreign {
+		method, path := f[0], f[1]
+		_, pattern := mux.Handler(httptest.NewRequest(method, path, nil))
+		if pattern != "" {
+			t.Errorf("dashboard claims %s %s via pattern %q — it must not shadow the REST API",
+				method, path, pattern)
+		}
+	}
+
+	// Sanity: the recogniser works, i.e. the dashboard's own pages DO match.
+	for _, path := range []string{"/", "/sandboxes", "/settings/keys", "/ui/overview"} {
+		if _, pattern := mux.Handler(httptest.NewRequest(http.MethodGet, path, nil)); pattern == "" {
+			t.Errorf("dashboard route %s is not registered", path)
+		}
+	}
+}
+
+// assetRefRe finds every local asset URL a rendered page pulls in: the
+// stylesheet, the Datastar runtime, and the per-component templui scripts
+// (whose base path lives in the vendored utils/templui.go and is regenerated
+// from .templui.json).
+var assetRefRe = regexp.MustCompile(`(?:src|href)="(/assets/[^"?]+)`)
+
+// TestRenderedAssetURLsResolve walks the asset URLs the shell actually emits
+// and fetches each one. Moving the dashboard to the root moved /dashboard/assets
+// to /assets, and a stale base path is invisible in the browser — a 404 on a
+// <script> tag reports nothing, the component is just silently inert.
+func TestRenderedAssetURLsResolve(t *testing.T) {
+	ts := newTestServer(Config{Enabled: true})
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL + "/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := readAll(t, resp)
+	_ = resp.Body.Close()
+
+	seen := map[string]bool{}
+	for _, m := range assetRefRe.FindAllStringSubmatch(body, -1) {
+		seen[m[1]] = true
+	}
+	// The page must reference the stylesheet, the Datastar runtime AND at
+	// least one templui component script, or this test proves nothing.
+	for _, want := range []string{"/assets/css/output.css", "/assets/vendor/datastar.js"} {
+		if !seen[want] {
+			t.Errorf("rendered page does not reference %s", want)
+		}
+	}
+	// templui components ship as *.min.js under componentScriptBasePath. Match
+	// on ".min.js" specifically: layout.templ also hardcodes /assets/js/
+	// metric-chart.js, so a plain "/assets/js/" prefix count would stay
+	// non-zero even with a stale component base path.
+	componentJS := 0
+	for u := range seen {
+		if strings.HasPrefix(u, "/assets/js/") && strings.HasSuffix(u, ".min.js") {
+			componentJS++
+		}
+	}
+	if componentJS == 0 {
+		t.Error("rendered page references no /assets/js/*.min.js templui script — " +
+			"check componentScriptBasePath in internal/dashboard/utils/templui.go " +
+			"and jsPublicPath in .templui.json")
+	}
+
+	for u := range seen {
+		r, err := http.Get(ts.URL + u)
+		if err != nil {
+			t.Errorf("GET %s: %v", u, err)
+			continue
+		}
+		_, _ = io.Copy(io.Discard, r.Body)
+		_ = r.Body.Close()
+		if r.StatusCode != http.StatusOK {
+			t.Errorf("GET %s = %d, want 200 (asset referenced but not served)", u, r.StatusCode)
+		}
+	}
 }

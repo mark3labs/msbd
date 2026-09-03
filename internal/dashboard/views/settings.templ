@@ -24,7 +24,7 @@ templ KeysPage(rows []KeyRow, s TableSort) {
 				Variant: button.VariantOutline,
 				Size:    button.SizeSm,
 				Attributes: templ.Attributes{
-					"data-on:click":  "@get('/dashboard/api/keys/table')",
+					"data-on:click":  "@get('/ui/keys/table')",
 					"data-indicator": "keyrefresh",
 					"aria-label":     "Refresh API key list",
 				},
@@ -65,7 +65,7 @@ templ KeyTable(rows []KeyRow, s TableSort) {
 					@table.Header() {
 						@table.Row() {
 							@table.Head() {
-								@SortHead("/dashboard/api/keys/table", "name", "Name", s)
+								@SortHead("/ui/keys/table", "name", "Name", s)
 							}
 							@table.Head() {
 								Token
@@ -74,10 +74,10 @@ templ KeyTable(rows []KeyRow, s TableSort) {
 								Status
 							}
 							@table.Head(table.HeadProps{Class: "hidden sm:table-cell"}) {
-								@SortHead("/dashboard/api/keys/table", "created", "Created", s)
+								@SortHead("/ui/keys/table", "created", "Created", s)
 							}
 							@table.Head(table.HeadProps{Class: "hidden lg:table-cell"}) {
-								@SortHead("/dashboard/api/keys/table", "used", "Last used", s)
+								@SortHead("/ui/keys/table", "used", "Last used", s)
 							}
 							@table.Head(table.HeadProps{Class: "hidden lg:table-cell"}) {
 								Expires
@@ -132,7 +132,7 @@ templ KeyTable(rows []KeyRow, s TableSort) {
 													"Revoke API key?",
 													k.Name+" will stop working immediately. Clients using it get 401 on the next request.",
 													"Revoke",
-													dsPost("/dashboard/api/keys/"+pathSeg(k.ID)+"/revoke"),
+													dsPost("/ui/keys/"+pathSeg(k.ID)+"/revoke"),
 												),
 											},
 										}) {
@@ -150,7 +150,7 @@ templ KeyTable(rows []KeyRow, s TableSort) {
 												"Delete API key?",
 												k.Name+" will be erased along with its audit record. Revoke instead if you want to keep the history.",
 												"Delete",
-												dsDelete("/dashboard/api/keys/"+pathSeg(k.ID)),
+												dsDelete("/ui/keys/"+pathSeg(k.ID)),
 											),
 										},
 									}) {
@@ -193,7 +193,7 @@ templ CreateKeyDialog() {
 					}
 				}
 				<div id="create-key-error"></div>
-				<form class="grid gap-4 py-4" data-on:submit={ dsPost("/dashboard/api/keys") } data-indicator="keybusy">
+				<form class="grid gap-4 py-4" data-on:submit={ dsPost("/ui/keys") } data-indicator="keybusy">
 					@field("keyname", "Name") {
 						@input.Input(input.Props{
 							ID:          "keyname",
@@ -228,7 +228,7 @@ templ CreateKeyDialog() {
 					}
 					@button.Button(button.Props{
 						Attributes: templ.Attributes{
-							"data-on:click":  dsPost("/dashboard/api/keys"),
+							"data-on:click":  dsPost("/ui/keys"),
 							"data-indicator": "keybusy",
 							"data-attr":      "{disabled: $keybusy || !$keyname}",
 						},
@@ -292,7 +292,7 @@ templ UsersPage(rows []UserRow, s TableSort) {
 				Variant: button.VariantOutline,
 				Size:    button.SizeSm,
 				Attributes: templ.Attributes{
-					"data-on:click":  "@get('/dashboard/api/users/table')",
+					"data-on:click":  "@get('/ui/users/table')",
 					"data-indicator": "userrefresh",
 					"aria-label":     "Refresh user list",
 				},
@@ -332,16 +332,16 @@ templ UserTable(rows []UserRow, s TableSort) {
 					@table.Header() {
 						@table.Row() {
 							@table.Head() {
-								@SortHead("/dashboard/api/users/table", "username", "Username", s)
+								@SortHead("/ui/users/table", "username", "Username", s)
 							}
 							@table.Head() {
-								@SortHead("/dashboard/api/users/table", "role", "Role", s)
+								@SortHead("/ui/users/table", "role", "Role", s)
 							}
 							@table.Head(table.HeadProps{Class: "hidden sm:table-cell"}) {
-								@SortHead("/dashboard/api/users/table", "created", "Created", s)
+								@SortHead("/ui/users/table", "created", "Created", s)
 							}
 							@table.Head(table.HeadProps{Class: "hidden lg:table-cell"}) {
-								@SortHead("/dashboard/api/users/table", "login", "Last login", s)
+								@SortHead("/ui/users/table", "login", "Last login", s)
 							}
 							@table.Head(table.HeadProps{Class: "text-right"}) {
 								Actions
@@ -395,7 +395,7 @@ templ UserTable(rows []UserRow, s TableSort) {
 													roleToggleTitle(u.Role)+"?",
 													u.Username+" will become "+otherRole(u.Role)+".",
 													roleToggleTitle(u.Role),
-													dsPost("/dashboard/api/users/"+pathSeg(u.Username)+"/role?role="+queryVal(otherRole(u.Role))),
+													dsPost("/ui/users/"+pathSeg(u.Username)+"/role?role="+queryVal(otherRole(u.Role))),
 												),
 											},
 										}) {
@@ -414,7 +414,7 @@ templ UserTable(rows []UserRow, s TableSort) {
 													"Delete user?",
 													u.Username+" will be removed and signed out everywhere.",
 													"Delete",
-													dsDelete("/dashboard/api/users/"+pathSeg(u.Username)),
+													dsDelete("/ui/users/"+pathSeg(u.Username)),
 												),
 											},
 										}) {
@@ -473,7 +473,7 @@ templ CreateUserDialog() {
 					}
 				}
 				<div id="create-user-error"></div>
-				<form class="grid gap-4 py-4" data-on:submit={ dsPost("/dashboard/api/users") } data-indicator="userbusy">
+				<form class="grid gap-4 py-4" data-on:submit={ dsPost("/ui/users") } data-indicator="userbusy">
 					@field("newuser", "Username") {
 						@input.Input(input.Props{
 							ID:          "newuser",
@@ -502,7 +502,7 @@ templ CreateUserDialog() {
 					}
 					@button.Button(button.Props{
 						Attributes: templ.Attributes{
-							"data-on:click":  dsPost("/dashboard/api/users"),
+							"data-on:click":  dsPost("/ui/users"),
 							"data-indicator": "userbusy",
 							"data-attr":      "{disabled: $userbusy || !$newuser || !$newpass}",
 						},
@@ -532,7 +532,7 @@ templ SetPasswordDialog() {
 					}
 				}
 				<div id="set-password-error"></div>
-				<form class="grid gap-4 py-4" data-on:submit={ dsPost("/dashboard/api/users/password") } data-indicator="pwbusy">
+				<form class="grid gap-4 py-4" data-on:submit={ dsPost("/ui/users/password") } data-indicator="pwbusy">
 					@field("pwvalue", "New password") {
 						@input.Input(input.Props{
 							ID:   "pwvalue",
@@ -551,7 +551,7 @@ templ SetPasswordDialog() {
 					}
 					@button.Button(button.Props{
 						Attributes: templ.Attributes{
-							"data-on:click":  dsPost("/dashboard/api/users/password"),
+							"data-on:click":  dsPost("/ui/users/password"),
 							"data-indicator": "pwbusy",
 							"data-attr":      "{disabled: $pwbusy || !$pwvalue}",
 						},
@@ -581,7 +581,7 @@ templ ChangePasswordDialog() {
 					}
 				}
 				<div id="change-password-error"></div>
-				<form class="grid gap-4 py-4" data-on:submit={ dsPost("/dashboard/api/account/password") } data-indicator="cpbusy">
+				<form class="grid gap-4 py-4" data-on:submit={ dsPost("/ui/account/password") } data-indicator="cpbusy">
 					@field("curpass", "Current password") {
 						@input.Input(input.Props{
 							ID:         "curpass",
@@ -619,7 +619,7 @@ templ ChangePasswordDialog() {
 					}
 					@button.Button(button.Props{
 						Attributes: templ.Attributes{
-							"data-on:click":  dsPost("/dashboard/api/account/password"),
+							"data-on:click":  dsPost("/ui/account/password"),
 							"data-indicator": "cpbusy",
 							"data-attr":      "{disabled: $cpbusy || !$curpass || !$newpass1 || $newpass1 !== $newpass2}",
 						},

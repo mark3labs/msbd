@@ -81,8 +81,16 @@ var ScriptURL = func(path string) string {
 }
 
 // componentScriptBasePath is the base public path for component JavaScript files.
-// In the import workflow this stays "/templui/js". The CLI rewrites it to the user's local jsPublicPath.
-var componentScriptBasePath = "/dashboard/assets/js"
+// In the import workflow this stays "/templui/js". The CLI rewrites it to the
+// user's local jsPublicPath (see .templui.json).
+//
+// NOTE (msbd): this MUST match where Handler.Mount serves the embedded asset FS.
+// The dashboard lives at the root of the URL space, so assets are at /assets/*,
+// not /dashboard/assets/*. A `templui add <name>` run regenerates this file from
+// .templui.json — that file is kept in sync, but verify after any upgrade:
+// getting it wrong yields a silently unstyled/inert component (a 404 on a
+// <script> tag is not an error the page reports).
+var componentScriptBasePath = "/assets/js"
 
 // UseUnminifiedScripts switches component script loading to the unminified files.
 // Leave this false in normal use and set it to true during app startup for debugging.

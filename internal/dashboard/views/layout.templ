@@ -65,11 +65,11 @@ templ Page(m Meta, body templ.Component) {
 			<meta charset="UTF-8"/>
 			<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 			<title>{ pageTitle(m) }</title>
-			<link rel="icon" href="/dashboard/assets/favicon.svg" type="image/svg+xml"/>
-			<link rel="stylesheet" href="/dashboard/assets/css/output.css"/>
+			<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml"/>
+			<link rel="stylesheet" href="/assets/css/output.css"/>
 			@themeBootScript()
-			<script type="module" src="/dashboard/assets/vendor/datastar.js"></script>
-			<script src="/dashboard/assets/js/metric-chart.js"></script>
+			<script type="module" src="/assets/vendor/datastar.js"></script>
+			<script src="/assets/js/metric-chart.js"></script>
 			@checkbox.Script()
 			@copybutton.Script()
 			@dialog.Script()
@@ -165,7 +165,7 @@ templ sidebar(m Meta) {
 		aria-label="Main navigation"
 	>
 		<div class="flex h-14 items-center gap-2 border-b px-4">
-			<a href="/dashboard" class="flex items-center gap-2 font-semibold">
+			<a href="/" class="flex items-center gap-2 font-semibold">
 				@icon.Box(icon.Props{Class: "size-5"})
 				msbd
 			</a>
@@ -180,15 +180,15 @@ templ sidebar(m Meta) {
 			</button>
 		</div>
 		<nav class="flex flex-col gap-1 p-2">
-			@navItem(m, SectionOverview, "/dashboard", "layout-dashboard", "Overview")
-			@navItem(m, SectionSandboxes, "/dashboard/sandboxes", "server", "Sandboxes")
-			@navItem(m, SectionVolumes, "/dashboard/volumes", "hard-drive", "Volumes")
-			@navItem(m, SectionImages, "/dashboard/images", "layers", "Images")
-			@navItem(m, SectionSnapshots, "/dashboard/snapshots", "camera", "Snapshots")
+			@navItem(m, SectionOverview, "/", "layout-dashboard", "Overview")
+			@navItem(m, SectionSandboxes, "/sandboxes", "server", "Sandboxes")
+			@navItem(m, SectionVolumes, "/volumes", "hard-drive", "Volumes")
+			@navItem(m, SectionImages, "/images", "layers", "Images")
+			@navItem(m, SectionSnapshots, "/snapshots", "camera", "Snapshots")
 			if m.ShowSettings {
 				<div class="mt-2 px-3 pb-1 pt-2 text-xs font-medium text-muted-foreground/70 uppercase tracking-wide">Settings</div>
-				@navItem(m, SectionKeys, "/dashboard/settings/keys", "key-round", "API keys")
-				@navItem(m, SectionUsers, "/dashboard/settings/users", "users", "Users")
+				@navItem(m, SectionKeys, "/settings/keys", "key-round", "API keys")
+				@navItem(m, SectionUsers, "/settings/users", "users", "Users")
 			}
 		</nav>
 		<div class="mt-auto space-y-2 border-t p-3 text-xs text-muted-foreground">
@@ -276,7 +276,7 @@ templ accountBox(m Meta) {
 					data-on:click={ openDialogJS("change-password") }
 				>Change password</button>
 				if m.CanSignOut {
-					<form method="post" action="/dashboard/logout" class="contents">
+					<form method="post" action="/logout" class="contents">
 						<button type="submit" class="hover:text-foreground">Sign out</button>
 					</form>
 				}

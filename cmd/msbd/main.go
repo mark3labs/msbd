@@ -88,6 +88,8 @@ func newRootCmd() *cobra.Command {
 Run it on a host with /dev/kvm; clients then treat microsandbox as a remote
 sandbox backend with no cgo on their side.
 
+  • Web dashboard          http://<listen>/
+  • REST API               http://<listen>/api/v1/…
   • Interactive API docs   http://<listen>/docs
   • OpenAPI spec           http://<listen>/openapi.yaml
   • Health · readiness     /healthz · /readyz
@@ -177,7 +179,7 @@ interrupted (Ctrl-C / SIGTERM trigger a graceful drain).`,
 		"Sandbox boot deadline, covers cold OCI pulls ($MSBD_CREATE_TIMEOUT_SECS)")
 	f.DurationVar(&o.pullTimeout, "pull-timeout",
 		time.Duration(envInt("MSBD_PULL_TIMEOUT_SECS", 900))*time.Second,
-		"Standalone image-pull deadline (POST /v1/images/pull); larger than create ($MSBD_PULL_TIMEOUT_SECS)")
+		"Standalone image-pull deadline (POST /api/v1/images/pull); larger than create ($MSBD_PULL_TIMEOUT_SECS)")
 	f.IntVar(&o.jobMaxBytes, "job-max-bytes", envInt("MSBD_JOB_MAX_BYTES", 0),
 		"Per-stream cap on async job stdout/stderr ring buffers; 0 = built-in default (1 MiB) ($MSBD_JOB_MAX_BYTES)")
 	f.DurationVar(&o.jobTTL, "job-ttl",
@@ -194,7 +196,7 @@ interrupted (Ctrl-C / SIGTERM trigger a graceful drain).`,
 	f.StringVar(&o.logLevel, "log-level", envOr("MSBD_LOG_LEVEL", "info"),
 		"Log verbosity: debug, info, warn, error ($MSBD_LOG_LEVEL)")
 	f.BoolVar(&o.dashboard, "dashboard", envBool("MSBD_DASHBOARD", true),
-		"Serve the web dashboard at /dashboard ($MSBD_DASHBOARD)")
+		"Serve the web dashboard at / ($MSBD_DASHBOARD)")
 	f.StringVar(&o.dashboardUser, "dashboard-user", os.Getenv("MSBD_DASHBOARD_USER"),
 		"Dashboard HTTP Basic auth username; with --dashboard-pass enables auth ($MSBD_DASHBOARD_USER)")
 	f.StringVar(&o.dashboardPass, "dashboard-pass", os.Getenv("MSBD_DASHBOARD_PASS"),
@@ -341,18 +343,18 @@ func runServe(ctx context.Context, o *serveOptions) error {
 		srv.SetDashboard(dashboard.New(svc, dcfg, st))
 		switch {
 		case storedUsers > 0:
-			log.Info("dashboard enabled", "path", "/dashboard", "auth", "login", "users", storedUsers)
+			log.Info("dashboard enabled", "path", "/", "auth", "login", "users", storedUsers)
 		case dcfg.BasicAuthEnabled():
-			log.Info("dashboard enabled", "path", "/dashboard", "auth", "basic (legacy)")
+			log.Info("dashboard enabled", "path", "/", "auth", "basic (legacy)")
 		case o.apiKey == "" && storedKeys == 0:
 			// Fully open deployment (no API key either) — dev mode.
-			log.Warn("dashboard enabled WITHOUT auth (no API key set — dev only); create a login with `msbd users add <name>`", "path", "/dashboard")
+			log.Warn("dashboard enabled WITHOUT auth (no API key set — dev only); create a login with `msbd users add <name>`", "path", "/")
 		case o.dashboardInsecure:
-			log.Warn("dashboard enabled WITHOUT auth while an API key IS set — --dashboard-allow-insecure overrides the safety refusal", "path", "/dashboard")
+			log.Warn("dashboard enabled WITHOUT auth while an API key IS set — --dashboard-allow-insecure overrides the safety refusal", "path", "/")
 		default:
 			// An API key is set but the dashboard has none: it will serve a page
 			// explaining how to fix that and nothing else, until one is configured.
-			log.Warn("dashboard LOCKED: an API key is set but no dashboard auth is configured — run `msbd users add <name>` (takes effect immediately), set --dashboard-user/--dashboard-pass, or pass --dashboard-allow-insecure", "path", "/dashboard")
+			log.Warn("dashboard LOCKED: an API key is set but no dashboard auth is configured — run `msbd users add <name>` (takes effect immediately), set --dashboard-user/--dashboard-pass, or pass --dashboard-allow-insecure", "path", "/")
 		}
 	}
 	httpSrv := &http.Server{

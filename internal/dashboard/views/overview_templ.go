@@ -88,7 +88,7 @@ func OverviewPage(m Meta, d OverviewData) templ.Component {
 			templ_7745c5c3_Err = button.Button(button.Props{
 				Variant:    button.VariantOutline,
 				Size:       button.SizeSm,
-				Attributes: templ.Attributes{"data-on:click": "@get('/dashboard/api/overview')", "data-indicator": "ovbusy"},
+				Attributes: templ.Attributes{"data-on:click": "@get('/ui/overview')", "data-indicator": "ovbusy"},
 			}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var3), templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
@@ -107,7 +107,7 @@ func OverviewPage(m Meta, d OverviewData) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "<div data-on-interval.10s=\"@get('/dashboard/api/overview')\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "<div data-on-interval.10s=\"@get('/ui/overview')\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -554,7 +554,7 @@ func OverviewBody(d OverviewData) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 30, " <a href=\"/dashboard/sandboxes\" class=\"text-sm text-muted-foreground hover:text-foreground\">View all →</a>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 30, " <a href=\"/sandboxes\" class=\"text-sm text-muted-foreground hover:text-foreground\">View all →</a>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -636,9 +636,9 @@ func OverviewBody(d OverviewData) templ.Component {
 							return templ_7745c5c3_Err
 						}
 						var templ_7745c5c3_Var26 templ.SafeURL
-						templ_7745c5c3_Var26, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL("/dashboard/sandboxes/" + pathSeg(r.ID)))
+						templ_7745c5c3_Var26, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL("/sandboxes/" + pathSeg(r.ID)))
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/dashboard/views/overview.templ`, Line: 129, Col: 70}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/dashboard/views/overview.templ`, Line: 129, Col: 60}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var26))
 						if templ_7745c5c3_Err != nil {

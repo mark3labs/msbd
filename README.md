@@ -46,7 +46,7 @@ curl -fsS localhost:8099/readyz   # → ready
 
 ```bash
 curl -s -H "Authorization: Bearer devkey" \
-     -X POST localhost:8099/v1/sandboxes \
+     -X POST localhost:8099/api/v1/sandboxes \
      -d '{"image":"alpine:3.19","resources":{"memory_mb":512,"cpu":1}}'
 ```
 
@@ -66,7 +66,7 @@ curl -s -H "Authorization: Bearer devkey" \
 ```bash
 ID=sbx_1ea598fdaabd2a46
 curl -s -H "Authorization: Bearer devkey" \
-     -X POST localhost:8099/v1/sandboxes/$ID/exec \
+     -X POST localhost:8099/api/v1/sandboxes/$ID/exec \
      -d '{"cmd":"uname -a && whoami"}'
 ```
 
@@ -81,7 +81,7 @@ curl -s -H "Authorization: Bearer devkey" \
 ### 4. Clean up
 
 ```bash
-curl -s -H "Authorization: Bearer devkey" -X DELETE localhost:8099/v1/sandboxes/$ID
+curl -s -H "Authorization: Bearer devkey" -X DELETE localhost:8099/api/v1/sandboxes/$ID
 ```
 
 > Browse the full API interactively at **`http://localhost:8099/docs`** (Swagger UI), or fetch the raw spec from `/openapi.yaml`. Both are unauthenticated.
@@ -168,7 +168,7 @@ All via environment variables (also settable as `--flag` — see `msbd serve --h
 | `MSBD_DEFAULT_IMAGE` | `microsandbox/python` | OCI image used when create omits `image`. |
 | `MSBD_MAX_SANDBOXES` | `0` (unlimited) | Hard cap on concurrent sandboxes; rejects new creates above this with 507 `capacity`. Admission is serialized (no overshoot). |
 | `MSBD_CREATE_TIMEOUT_SECS` | `300` | Boot deadline (covers cold OCI pulls). |
-| `MSBD_PULL_TIMEOUT_SECS` | `900` | Deadline for a standalone image pull (`POST /v1/images/pull`); larger than create since a cold pull of a big image can outlast a boot. |
+| `MSBD_PULL_TIMEOUT_SECS` | `900` | Deadline for a standalone image pull (`POST /api/v1/images/pull`); larger than create since a cold pull of a big image can outlast a boot. |
 | `MSBD_JOB_MAX_BYTES` | `0` (1 MiB) | Per-stream cap on an async job's stdout/stderr ring buffer. `0` uses the built-in 1 MiB default; older output is dropped once the cap is hit. |
 | `MSBD_JOB_TTL_SECS` | `0` (15 min) | How long a finished job's output is retained before the janitor evicts it. `0` uses the built-in 15-minute default. |
 | `MSBD_SHUTDOWN_TIMEOUT_SECS` | `60` | Graceful-drain deadline on SIGTERM/Ctrl-C. A drain overrun warns and exits 0 (no spurious restart failure). |
@@ -176,7 +176,7 @@ All via environment variables (also settable as `--flag` — see `msbd serve --h
 | `MSBD_LOG_LEVEL` | `info` | Log verbosity: `debug`, `info`, `warn`, `error`. Invalid values fail fast. Output is colorized on a TTY, plain otherwise. |
 | `MSBD_DATA_DIR` | `~/.microsandbox/msbd` | Directory holding the SQLite database of dashboard users, API keys and sessions. Created `0700`, database `0600`. See [Users & API keys](#users--api-keys). |
 | `MSBD_SESSION_TTL_SECS` | `0` (12 h) | Dashboard login lifetime. |
-| `MSBD_DASHBOARD` | `true` | Serve the web dashboard at `/dashboard`. Set `false` to disable. |
+| `MSBD_DASHBOARD` | `true` | Serve the web dashboard at `/`. Set `false` to disable. |
 | `MSBD_DASHBOARD_USER` | *(empty)* | **Legacy** single-account HTTP Basic auth username. Setting user **or** pass turns it on. Superseded once a stored account exists. |
 | `MSBD_DASHBOARD_PASS` | *(empty)* | Legacy Basic auth password. **Both empty and no stored users = dashboard is unauthenticated.** When an API key IS set but the dashboard has no auth, the dashboard is **refused** (it would bypass the API token) unless `MSBD_DASHBOARD_ALLOW_INSECURE=true`. |
 | `MSBD_DASHBOARD_ALLOW_INSECURE` | `false` | Override the safety refusal above and serve the dashboard without auth even when an API key is set (unsafe). |
@@ -233,19 +233,19 @@ Back it up by copying that one file. Every command takes `--data-dir` (or `MSBD_
 
 ## Web dashboard
 
-A self-contained web UI lives at **`/dashboard`** that manages everything the REST API does — sandboxes (create, start/stop/delete, inspect, run commands, live logs & metrics, a file browser, and a real **kernel-PTY terminal**), volumes, images and snapshots.
+A self-contained web UI lives at the **root (`/`)** and manages everything the REST API does — sandboxes (create, start/stop/delete, inspect, run commands, live logs & metrics, a file browser, and a real **kernel-PTY terminal**), volumes, images and snapshots. The REST API is namespaced under `/api/v1`, so the two never collide.
 
 ```bash
 # Recommended: a real account with a login page and sessions.
 msbd users add admin
 msbd serve
-# → open http://localhost:8099/dashboard
+# → open http://localhost:8099/
 
 # Legacy single-account HTTP Basic auth (still supported):
 MSBD_DASHBOARD_USER=admin MSBD_DASHBOARD_PASS=s3cret msbd serve
 ```
 
-Every section is a **real, bookmarkable URL** — `/dashboard` (overview), `/dashboard/sandboxes`, `/dashboard/sandboxes/{id}`, `/dashboard/volumes`, `/dashboard/images`, `/dashboard/snapshots` — so refresh, browser back/forward and shared links all work. Datastar SSE is used for in-page updates only.
+Every section is a **real, bookmarkable URL** — `/` (overview), `/sandboxes`, `/sandboxes/{id}`, `/volumes`, `/images`, `/snapshots`, `/settings/keys`, `/settings/users` — so refresh, browser back/forward and shared links all work. Datastar SSE is used for in-page updates only, over a separate `/ui/*` endpoint namespace.
 
 | Page | What you get |
 |---|---|
@@ -271,27 +271,27 @@ If the API requires a key but the dashboard would have no auth at all, msbd **lo
 |---|---|
 | `GET /healthz` · `GET /readyz` | Liveness · readiness (runtime loaded + `/dev/kvm` accessible). |
 | `GET /docs` · `GET /openapi.yaml` | Swagger UI · raw OpenAPI spec (unauthenticated). |
-| `GET /dashboard` | Web management UI with its own auth — see [Web dashboard](#web-dashboard). |
-| `GET /v1/version` | Default image + runtime/SDK versions (diagnostics). |
+| `GET /` | Web management UI with its own auth — see [Web dashboard](#web-dashboard). |
+| `GET /api/v1/version` | Default image + runtime/SDK versions (diagnostics). |
 | `GET /metrics` | Prometheus text-exposition operational metrics (sandbox counts, jobs, terminals, request classes). |
-| `POST /v1/terminal-tickets` | Mint a short-lived single-use terminal ticket (browser WS auth without exposing the API key). |
-| `POST /v1/sandboxes` · `GET /v1/sandboxes` · `GET/DELETE /v1/sandboxes/{id}` | Lifecycle. Create accepts `user`, `hostname`, `network_policy`, `ports`, `secrets`, `mounts`. |
-| `GET /v1/sandboxes/{id}/inspect` | Sandbox metadata + raw SDK config blob. |
-| `POST /v1/sandboxes/{id}/stop` · `.../start` | Pause / ensure-running. |
-| `POST /v1/sandboxes/{id}/exec` · `.../run` | Synchronous exec — `exec` is short, `run` is long-safe and ensures-running. |
-| `GET /v1/sandboxes/{id}/terminal` | Interactive **kernel-PTY** terminal over **WebSocket** (binary stdin/stdout; text control frames for resize/signal). Colors, line editing, resize, vim/top all work. Auth via header, `?key=`, or a single-use `?ticket=` (see `POST /v1/terminal-tickets`). |
-| `POST /v1/sandboxes/{id}/jobs` · `GET /v1/sandboxes/{id}/jobs/{job}` | Async (background) jobs. Output is a **bounded ring buffer** (1 MiB/stream); poll reports `truncated` + `stdout_bytes`/`stderr_bytes`, and finished jobs are evicted after a TTL. |
-| `POST /v1/sandboxes/{id}/jobs/{job}/stdin` · `.../signal` | Write to a job's stdin (launch with `stdin:true`) · send a signal (≤0 = kill). |
-| `POST /v1/sandboxes/{id}/files/read` · `.../files/write` | Native file IO, base64-encoded. |
-| `POST /v1/sandboxes/{id}/files/{list,stat,exists,mkdir,remove,copy,rename}` | Extended filesystem operations. |
-| `POST /v1/sandboxes/{id}/files/{copy-from-host,copy-to-host}` | Copy between an **allowlisted** host path (`MSBD_HOST_PATHS`) and the sandbox. Denied (403) when the allowlist is empty or the path escapes it. |
-| `GET /v1/metrics` · `GET /v1/sandboxes/{id}/metrics` | Point-in-time per-sandbox resource metrics (all / one). For scrapeable ops telemetry use `GET /metrics`. |
-| `GET /v1/sandboxes/{id}/logs` | Read persisted stdout/stderr/system logs (`?tail=`, `?sources=`). |
-| `POST/GET /v1/volumes` · `GET/DELETE /v1/volumes/{name}` | Named persistent volumes. |
-| `POST /v1/volumes/{name}/files/{read,write,mkdir,remove,exists}` | Volume file IO. |
-| `GET /v1/images` · `GET /v1/images/inspect` · `POST /v1/images/pull` · `DELETE /v1/images` · `POST /v1/images/prune` | Cached OCI image inventory. `pull` fetches an image into the cache (long-running; boots a throwaway microVM). |
-| `POST/GET /v1/snapshots` · `GET/DELETE /v1/snapshots/{name}` · `.../verify` | Sandbox rootfs snapshots. |
-| `POST /v1/snapshots/{export,import,reindex}` | Export/import snapshot archives · rebuild the index. |
+| `POST /api/v1/terminal-tickets` | Mint a short-lived single-use terminal ticket (browser WS auth without exposing the API key). |
+| `POST /api/v1/sandboxes` · `GET /api/v1/sandboxes` · `GET/DELETE /api/v1/sandboxes/{id}` | Lifecycle. Create accepts `user`, `hostname`, `network_policy`, `ports`, `secrets`, `mounts`. |
+| `GET /api/v1/sandboxes/{id}/inspect` | Sandbox metadata + raw SDK config blob. |
+| `POST /api/v1/sandboxes/{id}/stop` · `.../start` | Pause / ensure-running. |
+| `POST /api/v1/sandboxes/{id}/exec` · `.../run` | Synchronous exec — `exec` is short, `run` is long-safe and ensures-running. |
+| `GET /api/v1/sandboxes/{id}/terminal` | Interactive **kernel-PTY** terminal over **WebSocket** (binary stdin/stdout; text control frames for resize/signal). Colors, line editing, resize, vim/top all work. Auth via header, `?key=`, or a single-use `?ticket=` (see `POST /api/v1/terminal-tickets`). |
+| `POST /api/v1/sandboxes/{id}/jobs` · `GET /api/v1/sandboxes/{id}/jobs/{job}` | Async (background) jobs. Output is a **bounded ring buffer** (1 MiB/stream); poll reports `truncated` + `stdout_bytes`/`stderr_bytes`, and finished jobs are evicted after a TTL. |
+| `POST /api/v1/sandboxes/{id}/jobs/{job}/stdin` · `.../signal` | Write to a job's stdin (launch with `stdin:true`) · send a signal (≤0 = kill). |
+| `POST /api/v1/sandboxes/{id}/files/read` · `.../files/write` | Native file IO, base64-encoded. |
+| `POST /api/v1/sandboxes/{id}/files/{list,stat,exists,mkdir,remove,copy,rename}` | Extended filesystem operations. |
+| `POST /api/v1/sandboxes/{id}/files/{copy-from-host,copy-to-host}` | Copy between an **allowlisted** host path (`MSBD_HOST_PATHS`) and the sandbox. Denied (403) when the allowlist is empty or the path escapes it. |
+| `GET /api/v1/metrics` · `GET /api/v1/sandboxes/{id}/metrics` | Point-in-time per-sandbox resource metrics (all / one). For scrapeable ops telemetry use `GET /metrics`. |
+| `GET /api/v1/sandboxes/{id}/logs` | Read persisted stdout/stderr/system logs (`?tail=`, `?sources=`). |
+| `POST/GET /api/v1/volumes` · `GET/DELETE /api/v1/volumes/{name}` | Named persistent volumes. |
+| `POST /api/v1/volumes/{name}/files/{read,write,mkdir,remove,exists}` | Volume file IO. |
+| `GET /api/v1/images` · `GET /api/v1/images/inspect` · `POST /api/v1/images/pull` · `DELETE /api/v1/images` · `POST /api/v1/images/prune` | Cached OCI image inventory. `pull` fetches an image into the cache (long-running; boots a throwaway microVM). |
+| `POST/GET /api/v1/snapshots` · `GET/DELETE /api/v1/snapshots/{name}` · `.../verify` | Sandbox rootfs snapshots. |
+| `POST /api/v1/snapshots/{export,import,reindex}` | Export/import snapshot archives · rebuild the index. |
 
 Full schemas: see [`openapi.yaml`](./openapi.yaml).
 

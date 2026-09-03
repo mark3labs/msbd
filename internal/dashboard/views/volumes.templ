@@ -17,7 +17,7 @@ templ VolumesPage(rows []VolumeRow, s TableSort) {
 				Variant: button.VariantOutline,
 				Size:    button.SizeSm,
 				Attributes: templ.Attributes{
-					"data-on:click":  "@get('/dashboard/api/volumes/table')",
+					"data-on:click":  "@get('/ui/volumes/table')",
 					"data-indicator": "volrefresh",
 					"aria-label":     "Refresh volume list",
 				},
@@ -49,7 +49,7 @@ templ VolumeTable(rows []VolumeRow, s TableSort) {
 					@table.Header() {
 						@table.Row() {
 							@table.Head() {
-								@SortHead("/dashboard/api/volumes/table", "name", "Name", s)
+								@SortHead("/ui/volumes/table", "name", "Name", s)
 							}
 							@table.Head() {
 								Kind
@@ -58,10 +58,10 @@ templ VolumeTable(rows []VolumeRow, s TableSort) {
 								Path
 							}
 							@table.Head() {
-								@SortHead("/dashboard/api/volumes/table", "used", "Used", s)
+								@SortHead("/ui/volumes/table", "used", "Used", s)
 							}
 							@table.Head(table.HeadProps{Class: "hidden sm:table-cell"}) {
-								@SortHead("/dashboard/api/volumes/table", "created", "Created", s)
+								@SortHead("/ui/volumes/table", "created", "Created", s)
 							}
 							@table.Head(table.HeadProps{Class: "text-right"}) {
 								Actions
@@ -105,7 +105,7 @@ templ VolumeTable(rows []VolumeRow, s TableSort) {
 												"Delete volume?",
 												v.Name+" and everything stored in it will be removed. This cannot be undone.",
 												"Delete",
-												dsDelete("/dashboard/api/volumes/"+pathSeg(v.Name)),
+												dsDelete("/ui/volumes/"+pathSeg(v.Name)),
 											),
 										},
 									}) {

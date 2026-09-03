@@ -16,7 +16,7 @@ templ OverviewPage(m Meta, d OverviewData) {
 			@button.Button(button.Props{
 				Variant:    button.VariantOutline,
 				Size:       button.SizeSm,
-				Attributes: templ.Attributes{"data-on:click": "@get('/dashboard/api/overview')", "data-indicator": "ovbusy"},
+				Attributes: templ.Attributes{"data-on:click": "@get('/ui/overview')", "data-indicator": "ovbusy"},
 			}) {
 				@Busy("ovbusy")
 				@icon.RefreshCw(icon.Props{Class: "size-4"})
@@ -24,7 +24,7 @@ templ OverviewPage(m Meta, d OverviewData) {
 			}
 			@dialogOpenButton("create-sandbox", "New sandbox")
 		}
-		<div data-on-interval.10s="@get('/dashboard/api/overview')">
+		<div data-on-interval.10s="@get('/ui/overview')">
 			@OverviewBody(d)
 		</div>
 		@CreateSandboxDialog(m)
@@ -113,7 +113,7 @@ templ OverviewBody(d OverviewData) {
 				@card.Title() {
 					Recent sandboxes
 				}
-				<a href="/dashboard/sandboxes" class="text-sm text-muted-foreground hover:text-foreground">View all →</a>
+				<a href="/sandboxes" class="text-sm text-muted-foreground hover:text-foreground">View all →</a>
 			}
 			@card.Content() {
 				if len(d.Recent) == 0 {
@@ -126,7 +126,7 @@ templ OverviewBody(d OverviewData) {
 							<li class="flex items-center gap-3 py-2">
 								<span class={ "size-2 shrink-0 rounded-full", stateDot(r.State) } aria-hidden="true"></span>
 								<a
-									href={ templ.SafeURL("/dashboard/sandboxes/" + pathSeg(r.ID)) }
+									href={ templ.SafeURL("/sandboxes/" + pathSeg(r.ID)) }
 									class="font-mono text-xs hover:underline"
 								>{ r.ID }</a>
 								<span class="hidden flex-1 truncate text-xs text-muted-foreground sm:block">{ r.Image }</span>

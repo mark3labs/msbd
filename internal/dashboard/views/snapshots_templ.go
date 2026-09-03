@@ -95,7 +95,7 @@ func SnapshotsPage(rows []SnapshotRow, sandboxes []SandboxRow, s TableSort) temp
 				Variant: button.VariantOutline,
 				Size:    button.SizeSm,
 				Attributes: templ.Attributes{
-					"data-on:click":  "@get('/dashboard/api/snapshots/table')",
+					"data-on:click":  "@get('/ui/snapshots/table')",
 					"data-indicator": "snaprefresh",
 					"aria-label":     "Refresh snapshot list",
 				},
@@ -270,7 +270,7 @@ func SnapshotTable(rows []SnapshotRow, s TableSort) templ.Component {
 								}()
 							}
 							ctx = templ.InitializeContext(ctx)
-							templ_7745c5c3_Err = SortHead("/dashboard/api/snapshots/table", "name", "Name", s).Render(ctx, templ_7745c5c3_Buffer)
+							templ_7745c5c3_Err = SortHead("/ui/snapshots/table", "name", "Name", s).Render(ctx, templ_7745c5c3_Buffer)
 							if templ_7745c5c3_Err != nil {
 								return templ_7745c5c3_Err
 							}
@@ -374,7 +374,7 @@ func SnapshotTable(rows []SnapshotRow, s TableSort) templ.Component {
 								}()
 							}
 							ctx = templ.InitializeContext(ctx)
-							templ_7745c5c3_Err = SortHead("/dashboard/api/snapshots/table", "size", "Size", s).Render(ctx, templ_7745c5c3_Buffer)
+							templ_7745c5c3_Err = SortHead("/ui/snapshots/table", "size", "Size", s).Render(ctx, templ_7745c5c3_Buffer)
 							if templ_7745c5c3_Err != nil {
 								return templ_7745c5c3_Err
 							}
@@ -400,7 +400,7 @@ func SnapshotTable(rows []SnapshotRow, s TableSort) templ.Component {
 								}()
 							}
 							ctx = templ.InitializeContext(ctx)
-							templ_7745c5c3_Err = SortHead("/dashboard/api/snapshots/table", "created", "Created", s).Render(ctx, templ_7745c5c3_Buffer)
+							templ_7745c5c3_Err = SortHead("/ui/snapshots/table", "created", "Created", s).Render(ctx, templ_7745c5c3_Buffer)
 							if templ_7745c5c3_Err != nil {
 								return templ_7745c5c3_Err
 							}
@@ -717,7 +717,7 @@ func SnapshotTable(rows []SnapshotRow, s TableSort) templ.Component {
 									return templ_7745c5c3_Err
 								}
 								templ_7745c5c3_Err = iconButton("Verify integrity of "+sn.Name, "shield-check",
-									dsPost("/dashboard/api/snapshots/"+pathSeg(sn.Digest)+"/verify")).Render(ctx, templ_7745c5c3_Buffer)
+									dsPost("/ui/snapshots/"+pathSeg(sn.Digest)+"/verify")).Render(ctx, templ_7745c5c3_Buffer)
 								if templ_7745c5c3_Err != nil {
 									return templ_7745c5c3_Err
 								}
@@ -750,7 +750,7 @@ func SnapshotTable(rows []SnapshotRow, s TableSort) templ.Component {
 											"Delete snapshot?",
 											sn.Name+" ("+ShortDigest(sn.Digest)+") will be removed. This cannot be undone.",
 											"Delete",
-											dsDelete("/dashboard/api/snapshots/"+pathSeg(sn.Digest)),
+											dsDelete("/ui/snapshots/"+pathSeg(sn.Digest)),
 										),
 									},
 								}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var34), templ_7745c5c3_Buffer)

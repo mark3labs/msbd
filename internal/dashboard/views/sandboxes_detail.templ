@@ -19,7 +19,7 @@ templ SandboxDetailPage(d SandboxDetail, sandboxes []SandboxRow) {
 			<div class="min-w-0">
 				<div class="flex items-center gap-2">
 					<a
-						href="/dashboard/sandboxes"
+						href="/sandboxes"
 						class="inline-flex size-8 items-center justify-center rounded-md hover:bg-accent"
 						aria-label="Back to sandboxes"
 					>
@@ -95,7 +95,7 @@ templ detailActions(d SandboxDetail) {
 			Variant: button.VariantOutline,
 			Size:    button.SizeSm,
 			Attributes: templ.Attributes{
-				"data-on:click":  dsPost("/dashboard/api/sandboxes/"+pathSeg(d.ID)+"/start"),
+				"data-on:click":  dsPost("/ui/sandboxes/"+pathSeg(d.ID)+"/start"),
 				"data-indicator": "startbusy",
 				"data-show":      "$sbxstate !== 'running'",
 			},
@@ -108,7 +108,7 @@ templ detailActions(d SandboxDetail) {
 			Variant: button.VariantOutline,
 			Size:    button.SizeSm,
 			Attributes: templ.Attributes{
-				"data-on:click":  dsPost("/dashboard/api/sandboxes/"+pathSeg(d.ID)+"/stop"),
+				"data-on:click":  dsPost("/ui/sandboxes/"+pathSeg(d.ID)+"/stop"),
 				"data-indicator": "stopbusy",
 				"data-show":      "$sbxstate === 'running'",
 			},
@@ -128,7 +128,7 @@ templ detailActions(d SandboxDetail) {
 		@button.Button(button.Props{
 			Variant: button.VariantOutline,
 			Size:    button.SizeSm,
-			Href:    "/dashboard/terminal/" + pathSeg(d.ID),
+			Href:    "/terminal/" + pathSeg(d.ID),
 			Target:  "_blank",
 			Attributes: templ.Attributes{
 				"rel":   "noopener",
@@ -147,7 +147,7 @@ templ detailActions(d SandboxDetail) {
 					"Delete sandbox?",
 					d.ID+" will be stopped and removed. This cannot be undone.",
 					"Delete",
-					dsDelete("/dashboard/api/sandboxes/"+pathSeg(d.ID)+"?back=1"),
+					dsDelete("/ui/sandboxes/"+pathSeg(d.ID)+"?back=1"),
 				),
 			},
 		}) {
@@ -257,7 +257,7 @@ templ MetricsPanel(id string) {
 	<div
 		id="metrics-panel"
 		data-signals="{mcpu:0, mmemused:0, mmemlimit:0, mdiskr:0, mdiskw:0, mnetrx:0, mnettx:0, mtick:0, mok:false, merr:''}"
-		data-init={ "@get(" + jsExpr("/dashboard/api/sandboxes/"+pathSeg(id)+"/metrics") + ")" }
+		data-init={ "@get(" + jsExpr("/ui/sandboxes/"+pathSeg(id)+"/metrics") + ")" }
 		class="space-y-3"
 	>
 		<div
@@ -301,7 +301,7 @@ templ runTab(d SandboxDetail) {
 		@card.Content() {
 			<form
 				class="flex flex-col gap-2 sm:flex-row sm:items-center"
-				data-on:submit={ dsPost("/dashboard/api/sandboxes/"+pathSeg(d.ID)+"/run") }
+				data-on:submit={ dsPost("/ui/sandboxes/"+pathSeg(d.ID)+"/run") }
 				data-indicator="runbusy"
 			>
 				<div class="flex-1">
@@ -403,7 +403,7 @@ templ RunBlock(j JobView) {
 					Size:    button.SizeSm,
 					Class:   "h-7 text-destructive",
 					Attributes: templ.Attributes{
-						"data-on:click": dsPost("/dashboard/api/sandboxes/"+pathSeg(j.SandboxID)+"/jobs/"+pathSeg(j.JobID)+"/cancel"),
+						"data-on:click": dsPost("/ui/sandboxes/"+pathSeg(j.SandboxID)+"/jobs/"+pathSeg(j.JobID)+"/cancel"),
 						"aria-label":    "Cancel this command",
 					},
 				}) {
@@ -509,7 +509,7 @@ templ logsTab(d SandboxDetail) {
 					Variant: button.VariantOutline,
 					Size:    button.SizeSm,
 					Class:   "h-8",
-					Href:    "/dashboard/api/sandboxes/" + pathSeg(d.ID) + "/logs/download",
+					Href:    "/ui/sandboxes/" + pathSeg(d.ID) + "/logs/download",
 					Attributes: templ.Attributes{
 						"download":   "",
 						"aria-label": "Download logs",
@@ -534,7 +534,7 @@ templ logsTab(d SandboxDetail) {
 }
 
 func logsFetch(id string) string {
-	return "@get(" + jsExpr("/dashboard/api/sandboxes/"+pathSeg(id)+"/logs") + ")"
+	return "@get(" + jsExpr("/ui/sandboxes/"+pathSeg(id)+"/logs") + ")"
 }
 
 // LogsPanel renders persisted log lines with timestamps, per-source colouring
@@ -647,7 +647,7 @@ templ filesTab(d SandboxDetail) {
 }
 
 func filesFetch(id string) string {
-	return dsPost("/dashboard/api/sandboxes/"+pathSeg(id)+"/files")
+	return dsPost("/ui/sandboxes/"+pathSeg(id)+"/files")
 }
 
 // uploadScript posts the chosen files to the guest at the current directory.
@@ -655,7 +655,7 @@ func uploadScript(id string) string {
 	return "(async (input) => {" +
 		"for (const f of input.files) {" +
 		"const fd = new FormData(); fd.append('file', f); fd.append('dir', $filepath);" +
-		"await fetch(" + jsExpr("/dashboard/api/sandboxes/"+pathSeg(id)+"/files/upload") + ", {method:'POST', body: fd});" +
+		"await fetch(" + jsExpr("/ui/sandboxes/"+pathSeg(id)+"/files/upload") + ", {method:'POST', body: fd});" +
 		"} input.value='';" +
 		"})(evt.target); setTimeout(() => " + filesFetch(id) + ", 300)"
 }
@@ -785,7 +785,7 @@ templ FilesPanel(id, dir string, crumbs []Crumb, rows []FileRow) {
 							<button
 								type="button"
 								class="min-w-0 flex-1 truncate text-left font-mono text-xs hover:underline"
-								data-on:click={ "$filename=" + jsExpr(f.Path) + ";@get(" + jsExpr("/dashboard/api/sandboxes/"+pathSeg(id)+"/files/view?path="+queryVal(f.Path)) + ")" }
+								data-on:click={ "$filename=" + jsExpr(f.Path) + ";@get(" + jsExpr("/ui/sandboxes/"+pathSeg(id)+"/files/view?path="+queryVal(f.Path)) + ")" }
 							>{ f.Name }</button>
 						}
 						<span class="hidden font-mono text-xs text-muted-foreground sm:inline">{ f.Mode }</span>
@@ -794,7 +794,7 @@ templ FilesPanel(id, dir string, crumbs []Crumb, rows []FileRow) {
 							if !f.IsDir {
 								<a
 									class="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
-									href={ templ.SafeURL("/dashboard/api/sandboxes/" + pathSeg(id) + "/files/download?path=" + queryVal(f.Path)) }
+									href={ templ.SafeURL("/ui/sandboxes/" + pathSeg(id) + "/files/download?path=" + queryVal(f.Path)) }
 									download
 									title={ "Download " + f.Name }
 									aria-label={ "Download " + f.Name }
@@ -811,7 +811,7 @@ templ FilesPanel(id, dir string, crumbs []Crumb, rows []FileRow) {
                                     "Delete "+fileKind(f)+"?",
                                     f.Path+" will be removed from the sandbox.",
                                     "Delete",
-                                    dsDelete("/dashboard/api/sandboxes/"+pathSeg(id)+"/files?path="+queryVal(f.Path)),
+                                    dsDelete("/ui/sandboxes/"+pathSeg(id)+"/files?path="+queryVal(f.Path)),
                                 ) }
 							>
 								@icon.Trash2(icon.Props{Class: "size-3.5"})
@@ -863,7 +863,7 @@ templ FileViewContent(id, path, content string, editable bool, note string) {
 					<button
 						type="button"
 						class="inline-flex h-9 items-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-						data-on:click={ dsPost("/dashboard/api/sandboxes/"+pathSeg(id)+"/files/save") }
+						data-on:click={ dsPost("/ui/sandboxes/"+pathSeg(id)+"/files/save") }
 						data-indicator="savebusy"
 					>
 						@Busy("savebusy")
@@ -906,7 +906,7 @@ templ NewFolderDialog(id string) {
 			<button
 				type="button"
 				class="inline-flex h-9 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-				data-on:click={ dsPost("/dashboard/api/sandboxes/"+pathSeg(id)+"/files/mkdir") }
+				data-on:click={ dsPost("/ui/sandboxes/"+pathSeg(id)+"/files/mkdir") }
 			>Create</button>
 		</div>
 	</dialog>
@@ -925,7 +925,7 @@ templ terminalTab(d SandboxDetail) {
 			@button.Button(button.Props{
 				Variant: button.VariantOutline,
 				Size:    button.SizeSm,
-				Href:    "/dashboard/terminal/" + pathSeg(d.ID),
+				Href:    "/terminal/" + pathSeg(d.ID),
 				Target:  "_blank",
 				Attributes: templ.Attributes{
 					"rel": "noopener",
@@ -937,7 +937,7 @@ templ terminalTab(d SandboxDetail) {
 		}
 		@card.Content() {
 			<iframe
-				src={ templ.SafeURL("/dashboard/terminal/" + pathSeg(d.ID) + "?embed=1") }
+				src={ templ.SafeURL("/terminal/" + pathSeg(d.ID) + "?embed=1") }
 				class="h-[28rem] w-full rounded border bg-black"
 				title={ "Terminal for " + d.ID }
 			></iframe>

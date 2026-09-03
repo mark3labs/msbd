@@ -97,7 +97,7 @@ func SandboxesPage(m Meta, rows []SandboxRow, s TableSort) templ.Component {
 				Variant: button.VariantOutline,
 				Size:    button.SizeSm,
 				Attributes: templ.Attributes{
-					"data-on:click":  "@get('/dashboard/api/sandboxes/table')",
+					"data-on:click":  "@get('/ui/sandboxes/table')",
 					"data-indicator": "sbxrefresh",
 					"aria-label":     "Refresh sandbox list",
 				},
@@ -206,7 +206,7 @@ func SandboxTable(rows []SandboxRow, s TableSort) templ.Component {
 			templ_7745c5c3_Var5 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "<div id=\"sbx-table\" data-on-interval.5s=\"$live && document.visibilityState==='visible' && @get('/dashboard/api/sandboxes/table')\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "<div id=\"sbx-table\" data-on-interval.5s=\"$live && document.visibilityState==='visible' && @get('/ui/sandboxes/table')\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -303,7 +303,7 @@ func SandboxTable(rows []SandboxRow, s TableSort) templ.Component {
 								}()
 							}
 							ctx = templ.InitializeContext(ctx)
-							templ_7745c5c3_Err = SortHead("/dashboard/api/sandboxes/table", "id", "ID", s).Render(ctx, templ_7745c5c3_Buffer)
+							templ_7745c5c3_Err = SortHead("/ui/sandboxes/table", "id", "ID", s).Render(ctx, templ_7745c5c3_Buffer)
 							if templ_7745c5c3_Err != nil {
 								return templ_7745c5c3_Err
 							}
@@ -329,7 +329,7 @@ func SandboxTable(rows []SandboxRow, s TableSort) templ.Component {
 								}()
 							}
 							ctx = templ.InitializeContext(ctx)
-							templ_7745c5c3_Err = SortHead("/dashboard/api/sandboxes/table", "image", "Image", s).Render(ctx, templ_7745c5c3_Buffer)
+							templ_7745c5c3_Err = SortHead("/ui/sandboxes/table", "image", "Image", s).Render(ctx, templ_7745c5c3_Buffer)
 							if templ_7745c5c3_Err != nil {
 								return templ_7745c5c3_Err
 							}
@@ -355,7 +355,7 @@ func SandboxTable(rows []SandboxRow, s TableSort) templ.Component {
 								}()
 							}
 							ctx = templ.InitializeContext(ctx)
-							templ_7745c5c3_Err = SortHead("/dashboard/api/sandboxes/table", "state", "State", s).Render(ctx, templ_7745c5c3_Buffer)
+							templ_7745c5c3_Err = SortHead("/ui/sandboxes/table", "state", "State", s).Render(ctx, templ_7745c5c3_Buffer)
 							if templ_7745c5c3_Err != nil {
 								return templ_7745c5c3_Err
 							}
@@ -407,7 +407,7 @@ func SandboxTable(rows []SandboxRow, s TableSort) templ.Component {
 								}()
 							}
 							ctx = templ.InitializeContext(ctx)
-							templ_7745c5c3_Err = SortHead("/dashboard/api/sandboxes/table", "uptime", "Uptime", s).Render(ctx, templ_7745c5c3_Buffer)
+							templ_7745c5c3_Err = SortHead("/ui/sandboxes/table", "uptime", "Uptime", s).Render(ctx, templ_7745c5c3_Buffer)
 							if templ_7745c5c3_Err != nil {
 								return templ_7745c5c3_Err
 							}
@@ -501,9 +501,9 @@ func SandboxTable(rows []SandboxRow, s TableSort) templ.Component {
 									return templ_7745c5c3_Err
 								}
 								var templ_7745c5c3_Var20 templ.SafeURL
-								templ_7745c5c3_Var20, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL("/dashboard/sandboxes/" + pathSeg(r.ID)))
+								templ_7745c5c3_Var20, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL("/sandboxes/" + pathSeg(r.ID)))
 								if templ_7745c5c3_Err != nil {
-									return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/dashboard/views/sandboxes.templ`, Line: 96, Col: 71}
+									return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/dashboard/views/sandboxes.templ`, Line: 96, Col: 61}
 								}
 								_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var20))
 								if templ_7745c5c3_Err != nil {
@@ -995,12 +995,12 @@ func rowActions(r SandboxRow) templ.Component {
 			return templ_7745c5c3_Err
 		}
 		if r.State == "running" {
-			templ_7745c5c3_Err = iconButton("Stop "+r.ID, "circle-stop", dsPost("/dashboard/api/sandboxes/"+pathSeg(r.ID)+"/stop")).Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = iconButton("Stop "+r.ID, "circle-stop", dsPost("/ui/sandboxes/"+pathSeg(r.ID)+"/stop")).Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		} else {
-			templ_7745c5c3_Err = iconButton("Start "+r.ID, "circle-play", dsPost("/dashboard/api/sandboxes/"+pathSeg(r.ID)+"/start")).Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = iconButton("Start "+r.ID, "circle-play", dsPost("/ui/sandboxes/"+pathSeg(r.ID)+"/start")).Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -1026,7 +1026,7 @@ func rowActions(r SandboxRow) templ.Component {
 		templ_7745c5c3_Err = button.Button(button.Props{
 			Variant: button.VariantGhost,
 			Size:    button.SizeIcon,
-			Href:    "/dashboard/terminal/" + pathSeg(r.ID),
+			Href:    "/terminal/" + pathSeg(r.ID),
 			Target:  "_blank",
 			Class:   "size-8",
 			Attributes: templ.Attributes{
@@ -1071,7 +1071,7 @@ func rowActions(r SandboxRow) templ.Component {
 					"Delete sandbox?",
 					r.ID+" will be stopped and removed. This cannot be undone.",
 					"Delete",
-					dsDelete("/dashboard/api/sandboxes/"+pathSeg(r.ID)),
+					dsDelete("/ui/sandboxes/"+pathSeg(r.ID)),
 				),
 			},
 		}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var46), templ_7745c5c3_Buffer)

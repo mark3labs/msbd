@@ -14,10 +14,10 @@ templ TerminalPage(id, wsBase, ticket string, embed bool) {
 			<meta charset="UTF-8"/>
 			<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 			<title>{ id } — terminal</title>
-			<link rel="icon" href="/dashboard/assets/favicon.svg" type="image/svg+xml"/>
-			<link rel="stylesheet" href="/dashboard/assets/vendor/xterm.css"/>
-			<script src="/dashboard/assets/vendor/xterm.js"></script>
-			<script src="/dashboard/assets/vendor/addon-fit.js"></script>
+			<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml"/>
+			<link rel="stylesheet" href="/assets/vendor/xterm.css"/>
+			<script src="/assets/vendor/xterm.js"></script>
+			<script src="/assets/vendor/addon-fit.js"></script>
 			<style>
 				html,
 				body {
@@ -119,7 +119,7 @@ templ TerminalPage(id, wsBase, ticket string, embed bool) {
 				<button id="btn-smaller" type="button" title="Decrease font size" aria-label="Decrease font size">A−</button>
 				<button id="btn-bigger" type="button" title="Increase font size" aria-label="Increase font size">A+</button>
 				<button id="btn-clear" type="button" title="Clear the screen">Clear</button>
-				<a href="/dashboard" style="color:#8ab4ff;text-decoration:none">← dashboard</a>
+				<a href="/" style="color:#8ab4ff;text-decoration:none">← dashboard</a>
 			</div>
 			<div
 				id="term"
@@ -169,7 +169,7 @@ templ TerminalPage(id, wsBase, ticket string, embed bool) {
 					// A ticket is single-use, so once consumed we must fetch a
 					// fresh one to reconnect. Seeded with the server-minted ticket.
 					let ticket = el.dataset.ticket;
-					const BACK_TO = "/dashboard";
+					const BACK_TO = "/";
 
 					function setStatus(text, cls) {
 						status.textContent = text;
@@ -187,7 +187,7 @@ templ TerminalPage(id, wsBase, ticket string, embed bool) {
 					async function freshTicket() {
 						try {
 							const res = await fetch(
-								"/dashboard/api/sandboxes/" +
+								"/ui/sandboxes/" +
 									encodeURIComponent(el.dataset.id) +
 									"/terminal-ticket",
 								{ method: "POST" },
@@ -348,7 +348,7 @@ templ TerminalNotFound(id string) {
 		<body>
 			<div style="text-align:center">
 				<p>Sandbox <b>{ id }</b> was not found.</p>
-				<p><a href="/dashboard/sandboxes">← Back to dashboard</a></p>
+				<p><a href="/sandboxes">← Back to dashboard</a></p>
 			</div>
 		</body>
 	</html>

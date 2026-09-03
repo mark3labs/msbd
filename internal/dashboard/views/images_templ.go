@@ -99,7 +99,7 @@ func ImagesPage(m Meta, rows []ImageRow, s TableSort) templ.Component {
 				Variant: button.VariantOutline,
 				Size:    button.SizeSm,
 				Attributes: templ.Attributes{
-					"data-on:click":  "@get('/dashboard/api/images/table')",
+					"data-on:click":  "@get('/ui/images/table')",
 					"data-indicator": "imgrefresh",
 					"aria-label":     "Refresh image list",
 				},
@@ -142,7 +142,7 @@ func ImagesPage(m Meta, rows []ImageRow, s TableSort) templ.Component {
 						"Prune unused images?",
 						"Removes every cached image, manifest and layer that no sandbox or snapshot references. Images still in use are kept. This cannot be undone, but anything removed can be pulled again.",
 						"Prune",
-						dsPost("/dashboard/api/images/prune"),
+						dsPost("/ui/images/prune"),
 					),
 				},
 			}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var4), templ_7745c5c3_Buffer)
@@ -350,7 +350,7 @@ func ImageTable(rows []ImageRow, s TableSort) templ.Component {
 								}()
 							}
 							ctx = templ.InitializeContext(ctx)
-							templ_7745c5c3_Err = SortHead("/dashboard/api/images/table", "reference", "Reference", s).Render(ctx, templ_7745c5c3_Buffer)
+							templ_7745c5c3_Err = SortHead("/ui/images/table", "reference", "Reference", s).Render(ctx, templ_7745c5c3_Buffer)
 							if templ_7745c5c3_Err != nil {
 								return templ_7745c5c3_Err
 							}
@@ -428,7 +428,7 @@ func ImageTable(rows []ImageRow, s TableSort) templ.Component {
 								}()
 							}
 							ctx = templ.InitializeContext(ctx)
-							templ_7745c5c3_Err = SortHead("/dashboard/api/images/table", "size", "Size", s).Render(ctx, templ_7745c5c3_Buffer)
+							templ_7745c5c3_Err = SortHead("/ui/images/table", "size", "Size", s).Render(ctx, templ_7745c5c3_Buffer)
 							if templ_7745c5c3_Err != nil {
 								return templ_7745c5c3_Err
 							}
@@ -454,7 +454,7 @@ func ImageTable(rows []ImageRow, s TableSort) templ.Component {
 								}()
 							}
 							ctx = templ.InitializeContext(ctx)
-							templ_7745c5c3_Err = SortHead("/dashboard/api/images/table", "used", "Last used", s).Render(ctx, templ_7745c5c3_Buffer)
+							templ_7745c5c3_Err = SortHead("/ui/images/table", "used", "Last used", s).Render(ctx, templ_7745c5c3_Buffer)
 							if templ_7745c5c3_Err != nil {
 								return templ_7745c5c3_Err
 							}
@@ -766,12 +766,12 @@ func ImageTable(rows []ImageRow, s TableSort) templ.Component {
 									return templ_7745c5c3_Err
 								}
 								templ_7745c5c3_Err = iconButton("Inspect "+im.Reference, "info",
-									dsGet("/dashboard/api/images/inspect?ref="+queryVal(im.Reference))).Render(ctx, templ_7745c5c3_Buffer)
+									dsGet("/ui/images/inspect?ref="+queryVal(im.Reference))).Render(ctx, templ_7745c5c3_Buffer)
 								if templ_7745c5c3_Err != nil {
 									return templ_7745c5c3_Err
 								}
 								templ_7745c5c3_Err = iconButton("Re-pull "+im.Reference+" (fetch the latest copy)", "refresh-cw",
-									dsPost("/dashboard/api/images/pull?ref="+queryVal(im.Reference)+"&force=1")).Render(ctx, templ_7745c5c3_Buffer)
+									dsPost("/ui/images/pull?ref="+queryVal(im.Reference)+"&force=1")).Render(ctx, templ_7745c5c3_Buffer)
 								if templ_7745c5c3_Err != nil {
 									return templ_7745c5c3_Err
 								}
@@ -809,7 +809,7 @@ func ImageTable(rows []ImageRow, s TableSort) templ.Component {
 											"Remove image?",
 											removeImageBody(im),
 											"Remove",
-											dsDelete("/dashboard/api/images?ref="+queryVal(im.Reference)),
+											dsDelete("/ui/images?ref="+queryVal(im.Reference)),
 										),
 									},
 								}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var35), templ_7745c5c3_Buffer)

@@ -2,7 +2,7 @@ package api
 
 // terminal.go — interactive terminal over WebSocket.
 //
-// GET /v1/sandboxes/{id}/terminal upgrades to a WebSocket that bridges a
+// GET /api/v1/sandboxes/{id}/terminal upgrades to a WebSocket that bridges a
 // browser/CLI terminal emulator to a shell running inside the guest. The wire
 // protocol is deliberately small:
 //

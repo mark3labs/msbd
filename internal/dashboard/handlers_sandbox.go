@@ -80,7 +80,7 @@ func (h *Handler) sandboxDelete(w http.ResponseWriter, r *http.Request) {
 	notify(sse, toast.VariantSuccess, "Deleted", id)
 	// Deleting from the detail page would leave the user on a dead URL.
 	if r.URL.Query().Get("back") == "1" {
-		_ = sse.Redirect("/dashboard/sandboxes")
+		_ = sse.Redirect("/sandboxes")
 		return
 	}
 	h.refreshTable(r, sse)

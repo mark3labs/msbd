@@ -18,7 +18,7 @@ templ SandboxesPage(m Meta, rows []SandboxRow, s TableSort) {
 				Variant: button.VariantOutline,
 				Size:    button.SizeSm,
 				Attributes: templ.Attributes{
-					"data-on:click":  "@get('/dashboard/api/sandboxes/table')",
+					"data-on:click":  "@get('/ui/sandboxes/table')",
 					"data-indicator": "sbxrefresh",
 					"aria-label":     "Refresh sandbox list",
 				},
@@ -54,7 +54,7 @@ templ SandboxesPage(m Meta, rows []SandboxRow, s TableSort) {
 templ SandboxTable(rows []SandboxRow, s TableSort) {
 	<div
 		id="sbx-table"
-		data-on-interval.5s="$live && document.visibilityState==='visible' && @get('/dashboard/api/sandboxes/table')"
+		data-on-interval.5s="$live && document.visibilityState==='visible' && @get('/ui/sandboxes/table')"
 	>
 		if len(rows) == 0 {
 			@EmptyState("server", "No sandboxes yet", "Boot a microVM from an OCI image to get started.") {
@@ -67,19 +67,19 @@ templ SandboxTable(rows []SandboxRow, s TableSort) {
 					@table.Header() {
 						@table.Row() {
 							@table.Head() {
-								@SortHead("/dashboard/api/sandboxes/table", "id", "ID", s)
+								@SortHead("/ui/sandboxes/table", "id", "ID", s)
 							}
 							@table.Head() {
-								@SortHead("/dashboard/api/sandboxes/table", "image", "Image", s)
+								@SortHead("/ui/sandboxes/table", "image", "Image", s)
 							}
 							@table.Head() {
-								@SortHead("/dashboard/api/sandboxes/table", "state", "State", s)
+								@SortHead("/ui/sandboxes/table", "state", "State", s)
 							}
 							@table.Head(table.HeadProps{Class: "hidden md:table-cell"}) {
 								Workdir
 							}
 							@table.Head() {
-								@SortHead("/dashboard/api/sandboxes/table", "uptime", "Uptime", s)
+								@SortHead("/ui/sandboxes/table", "uptime", "Uptime", s)
 							}
 							@table.Head(table.HeadProps{Class: "text-right"}) {
 								Actions
@@ -93,7 +93,7 @@ templ SandboxTable(rows []SandboxRow, s TableSort) {
 							}}) {
 								@table.Cell() {
 									<a
-										href={ templ.SafeURL("/dashboard/sandboxes/" + pathSeg(r.ID)) }
+										href={ templ.SafeURL("/sandboxes/" + pathSeg(r.ID)) }
 										class="font-mono text-xs hover:underline"
 										title={ "Open " + r.ID }
 									>
@@ -176,14 +176,14 @@ func noMatchExpr(rows []SandboxRow) string {
 templ rowActions(r SandboxRow) {
 	<div class="flex items-center justify-end gap-1">
 		if r.State == "running" {
-			@iconButton("Stop "+r.ID, "circle-stop", dsPost("/dashboard/api/sandboxes/"+pathSeg(r.ID)+"/stop"))
+			@iconButton("Stop "+r.ID, "circle-stop", dsPost("/ui/sandboxes/"+pathSeg(r.ID)+"/stop"))
 		} else {
-			@iconButton("Start "+r.ID, "circle-play", dsPost("/dashboard/api/sandboxes/"+pathSeg(r.ID)+"/start"))
+			@iconButton("Start "+r.ID, "circle-play", dsPost("/ui/sandboxes/"+pathSeg(r.ID)+"/start"))
 		}
 		@button.Button(button.Props{
 			Variant: button.VariantGhost,
 			Size:    button.SizeIcon,
-			Href:    "/dashboard/terminal/" + pathSeg(r.ID),
+			Href:    "/terminal/" + pathSeg(r.ID),
 			Target:  "_blank",
 			Class:   "size-8",
 			Attributes: templ.Attributes{
@@ -206,7 +206,7 @@ templ rowActions(r SandboxRow) {
 					"Delete sandbox?",
 					r.ID+" will be stopped and removed. This cannot be undone.",
 					"Delete",
-					dsDelete("/dashboard/api/sandboxes/"+pathSeg(r.ID)),
+					dsDelete("/ui/sandboxes/"+pathSeg(r.ID)),
 				),
 			},
 		}) {

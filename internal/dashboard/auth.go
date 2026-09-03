@@ -31,8 +31,11 @@ import (
 )
 
 // sessionCookie is the cookie carrying the dashboard session id. It is scoped
-// to /dashboard so it is never sent to the REST API, which authenticates with
-// bearer tokens and must not be reachable with an ambient browser credential.
+// to "/" because the dashboard now owns the root of the URL space, so it IS
+// sent to /api/v1/* as well. That is harmless by construction: the REST API
+// authenticates from the Authorization header only and never reads a cookie,
+// so this cookie is not an ambient credential for it. SameSite=Lax plus the
+// crossOrigin check below cover the dashboard's own cookie-authed mutations.
 const sessionCookie = "msbd_session"
 
 // userCountTTL bounds how stale the "are there any accounts?" answer can be.
@@ -205,13 +208,29 @@ func (h *Handler) guardPage(next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 		if h.mode(r.Context()) == modeSession {
-			http.Redirect(w, r, "/dashboard/login?next="+url.QueryEscape(r.URL.RequestURI()),
+			http.Redirect(w, r, "/login?next="+url.QueryEscape(r.URL.RequestURI()),
 				http.StatusSeeOther)
 			return
 		}
 		h.challengeBasic(w)
 	}
 }
+
+// crossOrigin is the CSRF defence for the dashboard's cookie-authenticated
+// mutations, delegated to the standard library (Go 1.25+).
+//
+// It supersedes a hand-rolled Origin-vs-Host comparison that missed a real
+// case: a cross-site request that omits the Origin header but carries
+// Sec-Fetch-Site: cross-site was ALLOWED by the old check and is rejected by
+// this one. The stdlib checks Sec-Fetch-Site first (every browser since 2023),
+// falls back to Origin-vs-Host for older ones, and allows requests carrying
+// neither — i.e. curl and other non-browser clients keep working, which the
+// dashboard endpoints are scripted with.
+//
+// It is deliberately NOT applied to the REST API: bearer tokens are not
+// ambient browser credentials, so /api/v1 has no CSRF exposure, and gating it
+// here would break legitimate cross-origin API clients.
+var crossOrigin = http.NewCrossOriginProtection()
 
 // guardAPI protects an SSE fragment or action endpoint. Failure is a status
 // code, never a redirect: Datastar would follow a 303 and patch the login page
@@ -227,18 +246,41 @@ func (h *Handler) guardAPI(next http.HandlerFunc) http.HandlerFunc {
 			if h.mode(r.Context()) == modeSession {
 				// Tell the browser to leave the stale page rather than sit on a
 				// dashboard whose every update silently 401s.
-				w.Header().Set("X-Msbd-Login", "/dashboard/login")
+				w.Header().Set("X-Msbd-Login", "/login")
 				http.Error(w, "session expired", http.StatusUnauthorized)
 				return
 			}
 			h.challengeBasic(w)
 			return
 		}
-		if !h.sameOrigin(r) {
+		if err := crossOrigin.Check(r); err != nil {
 			http.Error(w, "cross-origin request refused", http.StatusForbidden)
 			return
 		}
 		next(w, withIdentity(r, id))
+	}
+}
+
+// guardForm protects the UNAUTHENTICATED form endpoints — sign-in and
+// sign-out. They take no guard (there is no session to check yet, or the point
+// is to destroy it), so without this they were the one pair of state-changing
+// routes with no CSRF defence at all.
+//
+// The exposures are real if narrow: login-CSRF silently signs a victim into an
+// ATTACKER's account, so subsequent work happens under credentials the attacker
+// can read; logout-CSRF is drive-by denial of service. Neither is caught by
+// SameSite=Lax on the session cookie, because a login POST carries no cookie
+// and a logout POST is happy to fail closed.
+//
+// Same check as guardAPI, so a scripted sign-in (no browser headers) keeps
+// working; only a real cross-site browser request is refused.
+func (h *Handler) guardForm(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if err := crossOrigin.Check(r); err != nil {
+			http.Error(w, "cross-origin request refused", http.StatusForbidden)
+			return
+		}
+		next(w, r)
 	}
 }
 
@@ -270,26 +312,6 @@ func (h *Handler) challengeBasic(w http.ResponseWriter) {
 	http.Error(w, "unauthorized", http.StatusUnauthorized)
 }
 
-// sameOrigin is belt-and-braces CSRF defence for cookie-authenticated mutations.
-// SameSite=Lax already blocks cross-site POSTs in every current browser; this
-// also rejects a request whose Origin was set by something else. A request with
-// no Origin header (curl, same-origin GET) is allowed through — requiring one
-// would break scripted use of the dashboard endpoints.
-func (h *Handler) sameOrigin(r *http.Request) bool {
-	if r.Method == http.MethodGet || r.Method == http.MethodHead {
-		return true
-	}
-	o := r.Header.Get("Origin")
-	if o == "" {
-		return true
-	}
-	u, err := url.Parse(o)
-	if err != nil {
-		return false
-	}
-	return strings.EqualFold(u.Host, r.Host)
-}
-
 // ---------------------------------------------------------------------------
 // session cookies
 // ---------------------------------------------------------------------------
@@ -299,7 +321,7 @@ func (h *Handler) setSessionCookie(w http.ResponseWriter, r *http.Request, sess 
 	http.SetCookie(w, &http.Cookie{
 		Name:     sessionCookie,
 		Value:    sess.ID,
-		Path:     "/dashboard",
+		Path:     "/",
 		Expires:  sess.ExpiresAt,
 		MaxAge:   int(time.Until(sess.ExpiresAt).Seconds()),
 		HttpOnly: true,
@@ -313,7 +335,7 @@ func (h *Handler) clearSessionCookie(w http.ResponseWriter, r *http.Request) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     sessionCookie,
 		Value:    "",
-		Path:     "/dashboard",
+		Path:     "/",
 		MaxAge:   -1,
 		HttpOnly: true,
 		Secure:   isHTTPS(r),
@@ -333,9 +355,11 @@ func isHTTPS(r *http.Request) bool {
 }
 
 // safeNext sanitises the ?next= redirect target so the login form can't be used
-// as an open redirect. Only absolute paths inside /dashboard are honoured.
+// as an open redirect. Only same-origin absolute paths are honoured; the
+// dashboard spans the whole root now, so there is no single prefix to pin to
+// and the check is "is this a local path?" rather than "is it under /dashboard?".
 func safeNext(raw string) string {
-	const fallback = "/dashboard"
+	const fallback = "/"
 	if raw == "" {
 		return fallback
 	}
@@ -348,11 +372,13 @@ func safeNext(raw string) string {
 	if err != nil || u.Host != "" || u.Scheme != "" {
 		return fallback
 	}
-	if u.Path != "/dashboard" && !strings.HasPrefix(u.Path, "/dashboard/") {
+	// Never bounce straight back to the login page.
+	if u.Path == "/login" || strings.HasPrefix(u.Path, "/login/") {
 		return fallback
 	}
-	// Never bounce straight back to the login page.
-	if strings.HasPrefix(u.Path, "/dashboard/login") {
+	// The REST API answers JSON with a bearer token; landing a freshly
+	// signed-in browser there would be a dead end, not a page.
+	if u.Path == "/api" || strings.HasPrefix(u.Path, "/api/") {
 		return fallback
 	}
 	return u.RequestURI()

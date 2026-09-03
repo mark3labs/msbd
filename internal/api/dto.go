@@ -15,7 +15,7 @@ type ResourcesDTO struct {
 	DiskGB   int     `json:"disk_gb"`
 }
 
-// CreateRequest is the body for POST /v1/sandboxes.
+// CreateRequest is the body for POST /api/v1/sandboxes.
 type CreateRequest struct {
 	Image         string            `json:"image"`
 	Resources     ResourcesDTO      `json:"resources"`

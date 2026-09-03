@@ -96,7 +96,7 @@ func VolumesPage(rows []VolumeRow, s TableSort) templ.Component {
 				Variant: button.VariantOutline,
 				Size:    button.SizeSm,
 				Attributes: templ.Attributes{
-					"data-on:click":  "@get('/dashboard/api/volumes/table')",
+					"data-on:click":  "@get('/ui/volumes/table')",
 					"data-indicator": "volrefresh",
 					"aria-label":     "Refresh volume list",
 				},
@@ -271,7 +271,7 @@ func VolumeTable(rows []VolumeRow, s TableSort) templ.Component {
 								}()
 							}
 							ctx = templ.InitializeContext(ctx)
-							templ_7745c5c3_Err = SortHead("/dashboard/api/volumes/table", "name", "Name", s).Render(ctx, templ_7745c5c3_Buffer)
+							templ_7745c5c3_Err = SortHead("/ui/volumes/table", "name", "Name", s).Render(ctx, templ_7745c5c3_Buffer)
 							if templ_7745c5c3_Err != nil {
 								return templ_7745c5c3_Err
 							}
@@ -349,7 +349,7 @@ func VolumeTable(rows []VolumeRow, s TableSort) templ.Component {
 								}()
 							}
 							ctx = templ.InitializeContext(ctx)
-							templ_7745c5c3_Err = SortHead("/dashboard/api/volumes/table", "used", "Used", s).Render(ctx, templ_7745c5c3_Buffer)
+							templ_7745c5c3_Err = SortHead("/ui/volumes/table", "used", "Used", s).Render(ctx, templ_7745c5c3_Buffer)
 							if templ_7745c5c3_Err != nil {
 								return templ_7745c5c3_Err
 							}
@@ -375,7 +375,7 @@ func VolumeTable(rows []VolumeRow, s TableSort) templ.Component {
 								}()
 							}
 							ctx = templ.InitializeContext(ctx)
-							templ_7745c5c3_Err = SortHead("/dashboard/api/volumes/table", "created", "Created", s).Render(ctx, templ_7745c5c3_Buffer)
+							templ_7745c5c3_Err = SortHead("/ui/volumes/table", "created", "Created", s).Render(ctx, templ_7745c5c3_Buffer)
 							if templ_7745c5c3_Err != nil {
 								return templ_7745c5c3_Err
 							}
@@ -705,7 +705,7 @@ func VolumeTable(rows []VolumeRow, s TableSort) templ.Component {
 											"Delete volume?",
 											v.Name+" and everything stored in it will be removed. This cannot be undone.",
 											"Delete",
-											dsDelete("/dashboard/api/volumes/"+pathSeg(v.Name)),
+											dsDelete("/ui/volumes/"+pathSeg(v.Name)),
 										),
 									},
 								}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var32), templ_7745c5c3_Buffer)

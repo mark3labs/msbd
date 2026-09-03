@@ -100,7 +100,7 @@ func Page(m Meta, body templ.Component) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "</title><link rel=\"icon\" href=\"/dashboard/assets/favicon.svg\" type=\"image/svg+xml\"><link rel=\"stylesheet\" href=\"/dashboard/assets/css/output.css\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "</title><link rel=\"icon\" href=\"/assets/favicon.svg\" type=\"image/svg+xml\"><link rel=\"stylesheet\" href=\"/assets/css/output.css\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -108,7 +108,7 @@ func Page(m Meta, body templ.Component) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "<script type=\"module\" src=\"/dashboard/assets/vendor/datastar.js\"></script><script src=\"/dashboard/assets/js/metric-chart.js\"></script>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "<script type=\"module\" src=\"/assets/vendor/datastar.js\"></script><script src=\"/assets/js/metric-chart.js\"></script>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -331,7 +331,7 @@ func sidebar(m Meta) templ.Component {
 			templ_7745c5c3_Var6 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, "<aside class=\"fixed inset-y-0 left-0 z-40 flex w-60 shrink-0 flex-col border-r bg-sidebar text-sidebar-foreground transition-transform md:static md:translate-x-0\" data-class=\"{'-translate-x-full': !$navopen, 'translate-x-0': $navopen}\" aria-label=\"Main navigation\"><div class=\"flex h-14 items-center gap-2 border-b px-4\"><a href=\"/dashboard\" class=\"flex items-center gap-2 font-semibold\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, "<aside class=\"fixed inset-y-0 left-0 z-40 flex w-60 shrink-0 flex-col border-r bg-sidebar text-sidebar-foreground transition-transform md:static md:translate-x-0\" data-class=\"{'-translate-x-full': !$navopen, 'translate-x-0': $navopen}\" aria-label=\"Main navigation\"><div class=\"flex h-14 items-center gap-2 border-b px-4\"><a href=\"/\" class=\"flex items-center gap-2 font-semibold\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -377,23 +377,23 @@ func sidebar(m Meta) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = navItem(m, SectionOverview, "/dashboard", "layout-dashboard", "Overview").Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = navItem(m, SectionOverview, "/", "layout-dashboard", "Overview").Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = navItem(m, SectionSandboxes, "/dashboard/sandboxes", "server", "Sandboxes").Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = navItem(m, SectionSandboxes, "/sandboxes", "server", "Sandboxes").Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = navItem(m, SectionVolumes, "/dashboard/volumes", "hard-drive", "Volumes").Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = navItem(m, SectionVolumes, "/volumes", "hard-drive", "Volumes").Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = navItem(m, SectionImages, "/dashboard/images", "layers", "Images").Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = navItem(m, SectionImages, "/images", "layers", "Images").Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = navItem(m, SectionSnapshots, "/dashboard/snapshots", "camera", "Snapshots").Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = navItem(m, SectionSnapshots, "/snapshots", "camera", "Snapshots").Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -402,7 +402,7 @@ func sidebar(m Meta) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = navItem(m, SectionKeys, "/dashboard/settings/keys", "key-round", "API keys").Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = navItem(m, SectionKeys, "/settings/keys", "key-round", "API keys").Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -410,7 +410,7 @@ func sidebar(m Meta) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = navItem(m, SectionUsers, "/dashboard/settings/users", "users", "Users").Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = navItem(m, SectionUsers, "/settings/users", "users", "Users").Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -815,7 +815,7 @@ func accountBox(m Meta) templ.Component {
 				return templ_7745c5c3_Err
 			}
 			if m.CanSignOut {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 47, "<form method=\"post\" action=\"/dashboard/logout\" class=\"contents\"><button type=\"submit\" class=\"hover:text-foreground\">Sign out</button></form>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 47, "<form method=\"post\" action=\"/logout\" class=\"contents\"><button type=\"submit\" class=\"hover:text-foreground\">Sign out</button></form>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}

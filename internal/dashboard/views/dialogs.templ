@@ -139,7 +139,7 @@ templ CreateSandboxDialog(m Meta) {
 				<div id="create-sandbox-error"></div>
 				<form
 					class="grid max-h-[65vh] gap-4 overflow-y-auto py-4 pr-1"
-					data-on:submit="@post('/dashboard/api/sandboxes', {retry:'never'})"
+					data-on:submit="@post('/ui/sandboxes', {retry:'never'})"
 					data-indicator="sbxbusy"
 				>
 					@field("sbximage", "Image") {
@@ -216,7 +216,7 @@ templ CreateSandboxDialog(m Meta) {
 					}
 					@button.Button(button.Props{
 						Attributes: templ.Attributes{
-							"data-on:click":  "@post('/dashboard/api/sandboxes', {retry:'never'})",
+							"data-on:click":  "@post('/ui/sandboxes', {retry:'never'})",
 							"data-indicator": "sbxbusy",
 							"data-attr":     "{disabled: $sbxbusy || !$sbximage}",
 						},
@@ -254,7 +254,7 @@ templ CreateVolumeDialog() {
 					}
 				}
 				<div id="create-volume-error"></div>
-				<form class="grid gap-4 py-4" data-on:submit="@post('/dashboard/api/volumes', {retry:'never'})" data-indicator="volbusy">
+				<form class="grid gap-4 py-4" data-on:submit="@post('/ui/volumes', {retry:'never'})" data-indicator="volbusy">
 					@field("volname", "Name") {
 						@input.Input(input.Props{ID: "volname", Placeholder: "my-data", Attributes: templ.Attributes{"data-bind": "volname", "required": "true"}})
 					}
@@ -280,7 +280,7 @@ templ CreateVolumeDialog() {
 					}
 					@button.Button(button.Props{
 						Attributes: templ.Attributes{
-							"data-on:click":  "@post('/dashboard/api/volumes', {retry:'never'})",
+							"data-on:click":  "@post('/ui/volumes', {retry:'never'})",
 							"data-indicator": "volbusy",
 							"data-attr":     "{disabled: $volbusy || !$volname}",
 						},
@@ -309,7 +309,7 @@ templ PullImageDialog(m Meta) {
 					}
 				}
 				<div id="pull-image-error"></div>
-				<form class="grid gap-4 py-4" data-on:submit="@post('/dashboard/api/images/pull', {retry:'never'})" data-indicator="pullbusy">
+				<form class="grid gap-4 py-4" data-on:submit="@post('/ui/images/pull', {retry:'never'})" data-indicator="pullbusy">
 					@field("imgref", "Reference") {
 						@input.Input(input.Props{
 							ID:          "imgref",
@@ -354,7 +354,7 @@ templ PullImageDialog(m Meta) {
 					}
 					@button.Button(button.Props{
 						Attributes: templ.Attributes{
-							"data-on:click":  "@post('/dashboard/api/images/pull', {retry:'never'})",
+							"data-on:click":  "@post('/ui/images/pull', {retry:'never'})",
 							"data-indicator": "pullbusy",
 							"data-attr":      "{disabled: $pullbusy || !$imgref}",
 						},
@@ -415,7 +415,7 @@ templ CreateSnapshotDialog(sandboxes []SandboxRow, preselect string) {
 					}
 				}
 				<div id="create-snapshot-error"></div>
-				<form class="grid gap-4 py-4" data-on:submit="@post('/dashboard/api/snapshots', {retry:'never'})" data-indicator="snapbusy">
+				<form class="grid gap-4 py-4" data-on:submit="@post('/ui/snapshots', {retry:'never'})" data-indicator="snapbusy">
 					<div class="grid gap-1.5">
 						@label.Label(label.Props{For: "snapsource"}) {
 							Source sandbox
@@ -452,7 +452,7 @@ templ CreateSnapshotDialog(sandboxes []SandboxRow, preselect string) {
 					}
 					@button.Button(button.Props{
 						Attributes: templ.Attributes{
-							"data-on:click":  "@post('/dashboard/api/snapshots', {retry:'never'})",
+							"data-on:click":  "@post('/ui/snapshots', {retry:'never'})",
 							"data-indicator": "snapbusy",
 							"data-attr":     "{disabled: $snapbusy || !$snapsource}",
 						},

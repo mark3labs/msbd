@@ -10,9 +10,12 @@ package dashboard
 // package speaks only to core.Service and store.Store — it never imports the
 // microsandbox SDK, preserving the cgo isolation boundary the api package keeps.
 //
-// Routing model: every section is a REAL page at its own URL (bookmarkable,
-// refreshable, back/forward-able). The /dashboard/api/* endpoints are the SSE
-// fragment/action surface used for in-page updates only.
+// Routing model: the dashboard owns the ROOT of the URL space — every section
+// is a REAL page at its own top-level URL (bookmarkable, refreshable,
+// back/forward-able): / /sandboxes /volumes /images /snapshots /settings/*.
+// The /ui/* endpoints are the SSE fragment/action surface used for in-page
+// updates only; they sit outside /api, which is reserved entirely for the
+// versioned REST API (/api/v1/*).
 
 import (
 	"io/fs"
@@ -104,104 +107,111 @@ func (h *Handler) settingsEnabled() bool { return h.store != nil }
 
 // Mount registers every dashboard route on the provided mux.
 //
-// Three guards are in play and the choice matters:
+// Four guards are in play and the choice matters:
 //   - guardPage      full documents; unauthenticated → redirect to the login form
 //   - guardAPI       SSE reads; unauthenticated → 401 (never a redirect, which
 //     Datastar would happily patch into the page)
 //   - guardWrite     guardAPI + admin role; viewers get 403
+//   - guardForm      the unauthenticated login/logout POSTs: no session to
+//     check, but still cross-origin checked (they change state)
 func (h *Handler) Mount(mux *http.ServeMux) {
 	// Static assets are deliberately UNAUTHENTICATED: the login page needs its
 	// stylesheet before anyone has signed in, and these are embedded, immutable
 	// CSS/JS with no information in them.
 	sub, _ := fs.Sub(assetFS, "assets")
-	assets := http.StripPrefix("/dashboard/assets/", http.FileServer(http.FS(sub)))
-	mux.Handle("GET /dashboard/assets/", assets)
+	assets := http.StripPrefix("/assets/", http.FileServerFS(sub))
+	mux.Handle("GET /assets/", assets)
 
 	// ---- Authentication (unauthenticated by necessity) ----
-	mux.HandleFunc("GET /dashboard/login", h.pageLogin)
-	mux.HandleFunc("POST /dashboard/login", h.doLogin)
-	mux.HandleFunc("POST /dashboard/logout", h.doLogout)
+	// The two POSTs still get guardForm: no session to check, but they DO change
+	// state, so they need the cross-origin check or they'd be the only
+	// unprotected mutations on the server.
+	mux.HandleFunc("GET /login", h.pageLogin)
+	mux.HandleFunc("POST /login", h.guardForm(h.doLogin))
+	mux.HandleFunc("POST /logout", h.guardForm(h.doLogout))
 
 	// ---- Pages (full documents, one per section) ----
-	mux.HandleFunc("GET /dashboard", h.guardPage(h.pageOverview))
-	mux.HandleFunc("GET /dashboard/", h.guardPage(h.pageOverview))
-	mux.HandleFunc("GET /dashboard/sandboxes", h.guardPage(h.pageSandboxes))
-	mux.HandleFunc("GET /dashboard/sandboxes/{id}", h.guardPage(h.pageSandboxDetail))
-	mux.HandleFunc("GET /dashboard/volumes", h.guardPage(h.pageVolumes))
-	mux.HandleFunc("GET /dashboard/images", h.guardPage(h.pageImages))
-	mux.HandleFunc("GET /dashboard/snapshots", h.guardPage(h.pageSnapshots))
+	// "/{$}" is an EXACT match for "/": a bare "/" pattern would turn the
+	// dashboard into a catch-all that renders the overview for every unknown
+	// path, swallowing the 404 a mistyped API route should produce.
+	mux.HandleFunc("GET /{$}", h.guardPage(h.pageOverview))
+	mux.HandleFunc("GET /sandboxes", h.guardPage(h.pageSandboxes))
+	mux.HandleFunc("GET /sandboxes/{id}", h.guardPage(h.pageSandboxDetail))
+	mux.HandleFunc("GET /volumes", h.guardPage(h.pageVolumes))
+	mux.HandleFunc("GET /images", h.guardPage(h.pageImages))
+	mux.HandleFunc("GET /snapshots", h.guardPage(h.pageSnapshots))
 
 	// Terminal (standalone page; connects to the existing WS terminal endpoint).
 	// A terminal is a root shell, so it is a write action, not a read.
-	mux.HandleFunc("GET /dashboard/terminal/{id}", h.guardPage(h.handleTerminalPage))
-	mux.HandleFunc("POST /dashboard/api/sandboxes/{id}/terminal-ticket", h.guardWrite(h.terminalTicket))
+	mux.HandleFunc("GET /terminal/{id}", h.guardPage(h.handleTerminalPage))
+	mux.HandleFunc("POST /ui/sandboxes/{id}/terminal-ticket", h.guardWrite(h.terminalTicket))
 
 	// ---- Datastar API (SSE fragments + actions) ----
 	// Overview.
-	mux.HandleFunc("GET /dashboard/api/overview", h.guardAPI(h.overviewFragment))
+	mux.HandleFunc("GET /ui/overview", h.guardAPI(h.overviewFragment))
 
 	// Sandboxes.
-	mux.HandleFunc("GET /dashboard/api/sandboxes/table", h.guardAPI(h.sandboxTable))
-	mux.HandleFunc("POST /dashboard/api/sandboxes", h.guardWrite(h.sandboxCreate))
-	mux.HandleFunc("POST /dashboard/api/sandboxes/{id}/start", h.guardWrite(h.sandboxStart))
-	mux.HandleFunc("POST /dashboard/api/sandboxes/{id}/stop", h.guardWrite(h.sandboxStop))
-	mux.HandleFunc("DELETE /dashboard/api/sandboxes/{id}", h.guardWrite(h.sandboxDelete))
-	mux.HandleFunc("POST /dashboard/api/sandboxes/{id}/run", h.guardWrite(h.sandboxRun))
-	mux.HandleFunc("POST /dashboard/api/sandboxes/{id}/jobs/{job}/cancel", h.guardWrite(h.sandboxJobCancel))
-	mux.HandleFunc("GET /dashboard/api/sandboxes/{id}/logs", h.guardAPI(h.sandboxLogs))
-	mux.HandleFunc("GET /dashboard/api/sandboxes/{id}/logs/download", h.guardAPI(h.sandboxLogsDownload))
-	mux.HandleFunc("GET /dashboard/api/sandboxes/{id}/metrics", h.guardAPI(h.sandboxMetricsStream))
+	mux.HandleFunc("GET /ui/sandboxes/table", h.guardAPI(h.sandboxTable))
+	mux.HandleFunc("POST /ui/sandboxes", h.guardWrite(h.sandboxCreate))
+	mux.HandleFunc("POST /ui/sandboxes/{id}/start", h.guardWrite(h.sandboxStart))
+	mux.HandleFunc("POST /ui/sandboxes/{id}/stop", h.guardWrite(h.sandboxStop))
+	mux.HandleFunc("DELETE /ui/sandboxes/{id}", h.guardWrite(h.sandboxDelete))
+	mux.HandleFunc("POST /ui/sandboxes/{id}/run", h.guardWrite(h.sandboxRun))
+	mux.HandleFunc("POST /ui/sandboxes/{id}/jobs/{job}/cancel", h.guardWrite(h.sandboxJobCancel))
+	mux.HandleFunc("GET /ui/sandboxes/{id}/logs", h.guardAPI(h.sandboxLogs))
+	mux.HandleFunc("GET /ui/sandboxes/{id}/logs/download", h.guardAPI(h.sandboxLogsDownload))
+	mux.HandleFunc("GET /ui/sandboxes/{id}/metrics", h.guardAPI(h.sandboxMetricsStream))
 
 	// Sandbox files. Listing/viewing/downloading are reads even though the
 	// browser sends the directory as a POST body.
-	mux.HandleFunc("POST /dashboard/api/sandboxes/{id}/files", h.guardAPI(h.filesList))
-	mux.HandleFunc("GET /dashboard/api/sandboxes/{id}/files/view", h.guardAPI(h.filesView))
-	mux.HandleFunc("POST /dashboard/api/sandboxes/{id}/files/save", h.guardWrite(h.filesSave))
-	mux.HandleFunc("GET /dashboard/api/sandboxes/{id}/files/download", h.guardAPI(h.filesDownload))
-	mux.HandleFunc("POST /dashboard/api/sandboxes/{id}/files/upload", h.guardWrite(h.filesUpload))
-	mux.HandleFunc("POST /dashboard/api/sandboxes/{id}/files/mkdir", h.guardWrite(h.filesMkdir))
-	mux.HandleFunc("DELETE /dashboard/api/sandboxes/{id}/files", h.guardWrite(h.filesRemove))
+	mux.HandleFunc("POST /ui/sandboxes/{id}/files", h.guardAPI(h.filesList))
+	mux.HandleFunc("GET /ui/sandboxes/{id}/files/view", h.guardAPI(h.filesView))
+	mux.HandleFunc("POST /ui/sandboxes/{id}/files/save", h.guardWrite(h.filesSave))
+	mux.HandleFunc("GET /ui/sandboxes/{id}/files/download", h.guardAPI(h.filesDownload))
+	mux.HandleFunc("POST /ui/sandboxes/{id}/files/upload", h.guardWrite(h.filesUpload))
+	mux.HandleFunc("POST /ui/sandboxes/{id}/files/mkdir", h.guardWrite(h.filesMkdir))
+	mux.HandleFunc("DELETE /ui/sandboxes/{id}/files", h.guardWrite(h.filesRemove))
 
 	// Volumes.
-	mux.HandleFunc("GET /dashboard/api/volumes/table", h.guardAPI(h.volumeTable))
-	mux.HandleFunc("POST /dashboard/api/volumes", h.guardWrite(h.volumeCreate))
-	mux.HandleFunc("DELETE /dashboard/api/volumes/{name}", h.guardWrite(h.volumeDelete))
+	mux.HandleFunc("GET /ui/volumes/table", h.guardAPI(h.volumeTable))
+	mux.HandleFunc("POST /ui/volumes", h.guardWrite(h.volumeCreate))
+	mux.HandleFunc("DELETE /ui/volumes/{name}", h.guardWrite(h.volumeDelete))
 
 	// Images.
-	mux.HandleFunc("GET /dashboard/api/images/table", h.guardAPI(h.imageTable))
-	mux.HandleFunc("GET /dashboard/api/images/inspect", h.guardAPI(h.imageInspect))
-	mux.HandleFunc("POST /dashboard/api/images/pull", h.guardWrite(h.imagePull))
-	mux.HandleFunc("DELETE /dashboard/api/images", h.guardWrite(h.imageRemove))
-	mux.HandleFunc("POST /dashboard/api/images/prune", h.guardWrite(h.imagePrune))
+	mux.HandleFunc("GET /ui/images/table", h.guardAPI(h.imageTable))
+	mux.HandleFunc("GET /ui/images/inspect", h.guardAPI(h.imageInspect))
+	mux.HandleFunc("POST /ui/images/pull", h.guardWrite(h.imagePull))
+	mux.HandleFunc("DELETE /ui/images", h.guardWrite(h.imageRemove))
+	mux.HandleFunc("POST /ui/images/prune", h.guardWrite(h.imagePrune))
 
 	// Snapshots.
-	mux.HandleFunc("GET /dashboard/api/snapshots/table", h.guardAPI(h.snapshotTable))
-	mux.HandleFunc("POST /dashboard/api/snapshots", h.guardWrite(h.snapshotCreate))
-	mux.HandleFunc("POST /dashboard/api/snapshots/{name}/verify", h.guardWrite(h.snapshotVerify))
-	mux.HandleFunc("DELETE /dashboard/api/snapshots/{name}", h.guardWrite(h.snapshotDelete))
+	mux.HandleFunc("GET /ui/snapshots/table", h.guardAPI(h.snapshotTable))
+	mux.HandleFunc("POST /ui/snapshots", h.guardWrite(h.snapshotCreate))
+	mux.HandleFunc("POST /ui/snapshots/{name}/verify", h.guardWrite(h.snapshotVerify))
+	mux.HandleFunc("DELETE /ui/snapshots/{name}", h.guardWrite(h.snapshotDelete))
 
 	// ---- Settings: accounts and API keys (admin only) ----
 	if !h.settingsEnabled() {
 		return
 	}
-	mux.HandleFunc("GET /dashboard/settings/keys", h.guardAdminPage(h.pageKeys))
-	mux.HandleFunc("GET /dashboard/settings/users", h.guardAdminPage(h.pageUsers))
+	mux.HandleFunc("GET /settings/keys", h.guardAdminPage(h.pageKeys))
+	mux.HandleFunc("GET /settings/users", h.guardAdminPage(h.pageUsers))
 
-	mux.HandleFunc("GET /dashboard/api/keys/table", h.guardWrite(h.keyTable))
-	mux.HandleFunc("POST /dashboard/api/keys", h.guardWrite(h.keyCreate))
-	mux.HandleFunc("POST /dashboard/api/keys/{id}/revoke", h.guardWrite(h.keyRevoke))
-	mux.HandleFunc("DELETE /dashboard/api/keys/{id}", h.guardWrite(h.keyDelete))
+	mux.HandleFunc("GET /ui/keys/table", h.guardWrite(h.keyTable))
+	mux.HandleFunc("POST /ui/keys", h.guardWrite(h.keyCreate))
+	mux.HandleFunc("POST /ui/keys/{id}/revoke", h.guardWrite(h.keyRevoke))
+	mux.HandleFunc("DELETE /ui/keys/{id}", h.guardWrite(h.keyDelete))
 
-	mux.HandleFunc("GET /dashboard/api/users/table", h.guardWrite(h.userTable))
-	mux.HandleFunc("POST /dashboard/api/users", h.guardWrite(h.userCreate))
+	mux.HandleFunc("GET /ui/users/table", h.guardWrite(h.userTable))
+	mux.HandleFunc("POST /ui/users", h.guardWrite(h.userCreate))
 	// The target user travels in the signals, not the path: one dialog is shared
 	// by every row.
-	mux.HandleFunc("POST /dashboard/api/users/password", h.guardWrite(h.userPassword))
-	mux.HandleFunc("POST /dashboard/api/users/{name}/role", h.guardWrite(h.userRole))
-	mux.HandleFunc("DELETE /dashboard/api/users/{name}", h.guardWrite(h.userDelete))
+	mux.HandleFunc("POST /ui/users/password", h.guardWrite(h.userPassword))
+	mux.HandleFunc("POST /ui/users/{name}/role", h.guardWrite(h.userRole))
+	mux.HandleFunc("DELETE /ui/users/{name}", h.guardWrite(h.userDelete))
 
 	// Self-service: any signed-in account, including a viewer, may change its
 	// OWN password. Gating this on admin would leave viewers unable to rotate a
 	// credential they were handed.
-	mux.HandleFunc("POST /dashboard/api/account/password", h.guardAPI(h.accountPassword))
+	mux.HandleFunc("POST /ui/account/password", h.guardAPI(h.accountPassword))
 }

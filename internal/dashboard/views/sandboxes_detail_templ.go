@@ -55,7 +55,7 @@ func SandboxDetailPage(d SandboxDetail, sandboxes []SandboxRow) templ.Component 
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "\"><div class=\"mb-4 flex flex-wrap items-start justify-between gap-3\"><div class=\"min-w-0\"><div class=\"flex items-center gap-2\"><a href=\"/dashboard/sandboxes\" class=\"inline-flex size-8 items-center justify-center rounded-md hover:bg-accent\" aria-label=\"Back to sandboxes\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "\"><div class=\"mb-4 flex flex-wrap items-start justify-between gap-3\"><div class=\"min-w-0\"><div class=\"flex items-center gap-2\"><a href=\"/sandboxes\" class=\"inline-flex size-8 items-center justify-center rounded-md hover:bg-accent\" aria-label=\"Back to sandboxes\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -523,7 +523,7 @@ func detailActions(d SandboxDetail) templ.Component {
 			Variant: button.VariantOutline,
 			Size:    button.SizeSm,
 			Attributes: templ.Attributes{
-				"data-on:click":  dsPost("/dashboard/api/sandboxes/" + pathSeg(d.ID) + "/start"),
+				"data-on:click":  dsPost("/ui/sandboxes/" + pathSeg(d.ID) + "/start"),
 				"data-indicator": "startbusy",
 				"data-show":      "$sbxstate !== 'running'",
 			},
@@ -565,7 +565,7 @@ func detailActions(d SandboxDetail) templ.Component {
 			Variant: button.VariantOutline,
 			Size:    button.SizeSm,
 			Attributes: templ.Attributes{
-				"data-on:click":  dsPost("/dashboard/api/sandboxes/" + pathSeg(d.ID) + "/stop"),
+				"data-on:click":  dsPost("/ui/sandboxes/" + pathSeg(d.ID) + "/stop"),
 				"data-indicator": "stopbusy",
 				"data-show":      "$sbxstate === 'running'",
 			},
@@ -628,7 +628,7 @@ func detailActions(d SandboxDetail) templ.Component {
 		templ_7745c5c3_Err = button.Button(button.Props{
 			Variant: button.VariantOutline,
 			Size:    button.SizeSm,
-			Href:    "/dashboard/terminal/" + pathSeg(d.ID),
+			Href:    "/terminal/" + pathSeg(d.ID),
 			Target:  "_blank",
 			Attributes: templ.Attributes{
 				"rel":   "noopener",
@@ -669,7 +669,7 @@ func detailActions(d SandboxDetail) templ.Component {
 					"Delete sandbox?",
 					d.ID+" will be stopped and removed. This cannot be undone.",
 					"Delete",
-					dsDelete("/dashboard/api/sandboxes/"+pathSeg(d.ID)+"?back=1"),
+					dsDelete("/ui/sandboxes/"+pathSeg(d.ID)+"?back=1"),
 				),
 			},
 		}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var25), templ_7745c5c3_Buffer)
@@ -1301,9 +1301,9 @@ func MetricsPanel(id string) templ.Component {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var53 string
-		templ_7745c5c3_Var53, templ_7745c5c3_Err = templ.ResolveAttributeValue("@get(" + jsExpr("/dashboard/api/sandboxes/"+pathSeg(id)+"/metrics") + ")")
+		templ_7745c5c3_Var53, templ_7745c5c3_Err = templ.ResolveAttributeValue("@get(" + jsExpr("/ui/sandboxes/"+pathSeg(id)+"/metrics") + ")")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/dashboard/views/sandboxes_detail.templ`, Line: 260, Col: 88}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/dashboard/views/sandboxes_detail.templ`, Line: 260, Col: 77}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var53)
 		if templ_7745c5c3_Err != nil {
@@ -1440,9 +1440,9 @@ func runTab(d SandboxDetail) templ.Component {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var60 string
-				templ_7745c5c3_Var60, templ_7745c5c3_Err = templ.ResolveAttributeValue(dsPost("/dashboard/api/sandboxes/" + pathSeg(d.ID) + "/run"))
+				templ_7745c5c3_Var60, templ_7745c5c3_Err = templ.ResolveAttributeValue(dsPost("/ui/sandboxes/" + pathSeg(d.ID) + "/run"))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/dashboard/views/sandboxes_detail.templ`, Line: 304, Col: 77}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/dashboard/views/sandboxes_detail.templ`, Line: 304, Col: 66}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var60)
 				if templ_7745c5c3_Err != nil {
@@ -1793,7 +1793,7 @@ func RunBlock(j JobView) templ.Component {
 				Size:    button.SizeSm,
 				Class:   "h-7 text-destructive",
 				Attributes: templ.Attributes{
-					"data-on:click": dsPost("/dashboard/api/sandboxes/" + pathSeg(j.SandboxID) + "/jobs/" + pathSeg(j.JobID) + "/cancel"),
+					"data-on:click": dsPost("/ui/sandboxes/" + pathSeg(j.SandboxID) + "/jobs/" + pathSeg(j.JobID) + "/cancel"),
 					"aria-label":    "Cancel this command",
 				},
 			}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var71), templ_7745c5c3_Buffer)
@@ -2054,7 +2054,7 @@ func logsTab(d SandboxDetail) templ.Component {
 					Variant: button.VariantOutline,
 					Size:    button.SizeSm,
 					Class:   "h-8",
-					Href:    "/dashboard/api/sandboxes/" + pathSeg(d.ID) + "/logs/download",
+					Href:    "/ui/sandboxes/" + pathSeg(d.ID) + "/logs/download",
 					Attributes: templ.Attributes{
 						"download":   "",
 						"aria-label": "Download logs",
@@ -2144,7 +2144,7 @@ func logsTab(d SandboxDetail) templ.Component {
 }
 
 func logsFetch(id string) string {
-	return "@get(" + jsExpr("/dashboard/api/sandboxes/"+pathSeg(id)+"/logs") + ")"
+	return "@get(" + jsExpr("/ui/sandboxes/"+pathSeg(id)+"/logs") + ")"
 }
 
 // LogsPanel renders persisted log lines with timestamps, per-source colouring
@@ -2551,7 +2551,7 @@ func filesTab(d SandboxDetail) templ.Component {
 }
 
 func filesFetch(id string) string {
-	return dsPost("/dashboard/api/sandboxes/" + pathSeg(id) + "/files")
+	return dsPost("/ui/sandboxes/" + pathSeg(id) + "/files")
 }
 
 // uploadScript posts the chosen files to the guest at the current directory.
@@ -2559,7 +2559,7 @@ func uploadScript(id string) string {
 	return "(async (input) => {" +
 		"for (const f of input.files) {" +
 		"const fd = new FormData(); fd.append('file', f); fd.append('dir', $filepath);" +
-		"await fetch(" + jsExpr("/dashboard/api/sandboxes/"+pathSeg(id)+"/files/upload") + ", {method:'POST', body: fd});" +
+		"await fetch(" + jsExpr("/ui/sandboxes/"+pathSeg(id)+"/files/upload") + ", {method:'POST', body: fd});" +
 		"} input.value='';" +
 		"})(evt.target); setTimeout(() => " + filesFetch(id) + ", 300)"
 }
@@ -2875,9 +2875,9 @@ func FilesPanel(id, dir string, crumbs []Crumb, rows []FileRow) templ.Component 
 						return templ_7745c5c3_Err
 					}
 					var templ_7745c5c3_Var113 string
-					templ_7745c5c3_Var113, templ_7745c5c3_Err = templ.ResolveAttributeValue("$filename=" + jsExpr(f.Path) + ";@get(" + jsExpr("/dashboard/api/sandboxes/"+pathSeg(id)+"/files/view?path="+queryVal(f.Path)) + ")")
+					templ_7745c5c3_Var113, templ_7745c5c3_Err = templ.ResolveAttributeValue("$filename=" + jsExpr(f.Path) + ";@get(" + jsExpr("/ui/sandboxes/"+pathSeg(id)+"/files/view?path="+queryVal(f.Path)) + ")")
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/dashboard/views/sandboxes_detail.templ`, Line: 788, Col: 157}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/dashboard/views/sandboxes_detail.templ`, Line: 788, Col: 146}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var113)
 					if templ_7745c5c3_Err != nil {
@@ -2937,9 +2937,9 @@ func FilesPanel(id, dir string, crumbs []Crumb, rows []FileRow) templ.Component 
 						return templ_7745c5c3_Err
 					}
 					var templ_7745c5c3_Var117 templ.SafeURL
-					templ_7745c5c3_Var117, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL("/dashboard/api/sandboxes/" + pathSeg(id) + "/files/download?path=" + queryVal(f.Path)))
+					templ_7745c5c3_Var117, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL("/ui/sandboxes/" + pathSeg(id) + "/files/download?path=" + queryVal(f.Path)))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/dashboard/views/sandboxes_detail.templ`, Line: 797, Col: 117}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/dashboard/views/sandboxes_detail.templ`, Line: 797, Col: 106}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var117))
 					if templ_7745c5c3_Err != nil {
@@ -3019,7 +3019,7 @@ func FilesPanel(id, dir string, crumbs []Crumb, rows []FileRow) templ.Component 
 					"Delete "+fileKind(f)+"?",
 					f.Path+" will be removed from the sandbox.",
 					"Delete",
-					dsDelete("/dashboard/api/sandboxes/"+pathSeg(id)+"/files?path="+queryVal(f.Path)),
+					dsDelete("/ui/sandboxes/"+pathSeg(id)+"/files?path="+queryVal(f.Path)),
 				))
 				if templ_7745c5c3_Err != nil {
 					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/dashboard/views/sandboxes_detail.templ`, Line: 815, Col: 33}
@@ -3204,9 +3204,9 @@ func FileViewContent(id, path, content string, editable bool, note string) templ
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var129 string
-				templ_7745c5c3_Var129, templ_7745c5c3_Err = templ.ResolveAttributeValue(dsPost("/dashboard/api/sandboxes/" + pathSeg(id) + "/files/save"))
+				templ_7745c5c3_Var129, templ_7745c5c3_Err = templ.ResolveAttributeValue(dsPost("/ui/sandboxes/" + pathSeg(id) + "/files/save"))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/dashboard/views/sandboxes_detail.templ`, Line: 866, Col: 83}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/dashboard/views/sandboxes_detail.templ`, Line: 866, Col: 72}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var129)
 				if templ_7745c5c3_Err != nil {
@@ -3363,9 +3363,9 @@ func NewFolderDialog(id string) templ.Component {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var135 string
-		templ_7745c5c3_Var135, templ_7745c5c3_Err = templ.ResolveAttributeValue(dsPost("/dashboard/api/sandboxes/" + pathSeg(id) + "/files/mkdir"))
+		templ_7745c5c3_Var135, templ_7745c5c3_Err = templ.ResolveAttributeValue(dsPost("/ui/sandboxes/" + pathSeg(id) + "/files/mkdir"))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/dashboard/views/sandboxes_detail.templ`, Line: 909, Col: 82}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/dashboard/views/sandboxes_detail.templ`, Line: 909, Col: 71}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var135)
 		if templ_7745c5c3_Err != nil {
@@ -3478,7 +3478,7 @@ func terminalTab(d SandboxDetail) templ.Component {
 				templ_7745c5c3_Err = button.Button(button.Props{
 					Variant: button.VariantOutline,
 					Size:    button.SizeSm,
-					Href:    "/dashboard/terminal/" + pathSeg(d.ID),
+					Href:    "/terminal/" + pathSeg(d.ID),
 					Target:  "_blank",
 					Attributes: templ.Attributes{
 						"rel": "noopener",
@@ -3514,9 +3514,9 @@ func terminalTab(d SandboxDetail) templ.Component {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var142 string
-				templ_7745c5c3_Var142, templ_7745c5c3_Err = templ.ResolveAttributeValue(templ.SafeURL("/dashboard/terminal/" + pathSeg(d.ID) + "?embed=1"))
+				templ_7745c5c3_Var142, templ_7745c5c3_Err = templ.ResolveAttributeValue(templ.SafeURL("/terminal/" + pathSeg(d.ID) + "?embed=1"))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/dashboard/views/sandboxes_detail.templ`, Line: 940, Col: 76}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/dashboard/views/sandboxes_detail.templ`, Line: 940, Col: 66}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var142)
 				if templ_7745c5c3_Err != nil {

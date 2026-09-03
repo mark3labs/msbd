@@ -9,6 +9,13 @@ info:
     microsandbox as a remote sandbox backend with no cgo on their side.
 
 
+    Every versioned endpoint lives under `/api/v1`. The unversioned paths
+    `/healthz`, `/readyz`, `/metrics`, `/docs` and `/openapi.yaml` sit at the
+    root, and the root itself (`/`, `/sandboxes`, `/volumes`, `/images`,
+    `/snapshots`, `/settings/*`) is the optional web dashboard, which
+    authenticates with its own login session rather than a bearer token.
+
+
     All endpoints except `/healthz` and `/readyz` require a bearer token.
 
 
@@ -80,7 +87,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorBody" }
 
-  /v1/version:
+  /api/v1/version:
     get:
       tags: [meta]
       summary: Report the default image and runtime/SDK versions
@@ -106,7 +113,7 @@ paths:
           content:
             text/plain: {}
 
-  /v1/terminal-tickets:
+  /api/v1/terminal-tickets:
     post:
       tags: [meta]
       summary: Mint a short-lived single-use terminal ticket
@@ -137,7 +144,7 @@ paths:
                   expires_at: { type: string, format: date-time }
         "400": { $ref: "#/components/responses/BadRequest" }
 
-  /v1/sandboxes:
+  /api/v1/sandboxes:
     post:
       tags: [lifecycle]
       summary: Create (boot) a sandbox
@@ -180,7 +187,7 @@ paths:
                 items: { $ref: "#/components/schemas/Instance" }
         "401": { $ref: "#/components/responses/Unauthorized" }
 
-  /v1/sandboxes/{id}:
+  /api/v1/sandboxes/{id}:
     parameters:
       - $ref: "#/components/parameters/SandboxId"
     get:
@@ -203,7 +210,7 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
 
-  /v1/sandboxes/{id}/stop:
+  /api/v1/sandboxes/{id}/stop:
     parameters:
       - $ref: "#/components/parameters/SandboxId"
     post:
@@ -217,7 +224,7 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
 
-  /v1/sandboxes/{id}/start:
+  /api/v1/sandboxes/{id}/start:
     parameters:
       - $ref: "#/components/parameters/SandboxId"
     post:
@@ -242,7 +249,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorBody" }
 
-  /v1/sandboxes/{id}/exec:
+  /api/v1/sandboxes/{id}/exec:
     parameters:
       - $ref: "#/components/parameters/SandboxId"
     post:
@@ -263,7 +270,7 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
 
-  /v1/sandboxes/{id}/run:
+  /api/v1/sandboxes/{id}/run:
     parameters:
       - $ref: "#/components/parameters/SandboxId"
     post:
@@ -287,7 +294,7 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
 
-  /v1/sandboxes/{id}/terminal:
+  /api/v1/sandboxes/{id}/terminal:
     parameters:
       - $ref: "#/components/parameters/SandboxId"
     get:
@@ -353,7 +360,7 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
 
-  /v1/sandboxes/{id}/jobs:
+  /api/v1/sandboxes/{id}/jobs:
     parameters:
       - $ref: "#/components/parameters/SandboxId"
     post:
@@ -377,7 +384,7 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
 
-  /v1/sandboxes/{id}/jobs/{job}:
+  /api/v1/sandboxes/{id}/jobs/{job}:
     parameters:
       - $ref: "#/components/parameters/SandboxId"
       - name: job
@@ -396,7 +403,7 @@ paths:
               schema: { $ref: "#/components/schemas/JobStatus" }
         "401": { $ref: "#/components/responses/Unauthorized" }
 
-  /v1/sandboxes/{id}/files/read:
+  /api/v1/sandboxes/{id}/files/read:
     parameters:
       - $ref: "#/components/parameters/SandboxId"
     post:
@@ -416,7 +423,7 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
 
-  /v1/sandboxes/{id}/files/write:
+  /api/v1/sandboxes/{id}/files/write:
     parameters:
       - $ref: "#/components/parameters/SandboxId"
     post:
@@ -433,7 +440,7 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
 
-  /v1/sandboxes/{id}/inspect:
+  /api/v1/sandboxes/{id}/inspect:
     parameters:
       - $ref: "#/components/parameters/SandboxId"
     get:
@@ -449,7 +456,7 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
 
-  /v1/sandboxes/{id}/jobs/{job}/stdin:
+  /api/v1/sandboxes/{id}/jobs/{job}/stdin:
     parameters:
       - $ref: "#/components/parameters/SandboxId"
       - { name: job, in: path, required: true, schema: { type: string } }
@@ -469,7 +476,7 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
 
-  /v1/sandboxes/{id}/jobs/{job}/signal:
+  /api/v1/sandboxes/{id}/jobs/{job}/signal:
     parameters:
       - $ref: "#/components/parameters/SandboxId"
       - { name: job, in: path, required: true, schema: { type: string } }
@@ -487,7 +494,7 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
 
-  /v1/sandboxes/{id}/files/list:
+  /api/v1/sandboxes/{id}/files/list:
     parameters: [ { $ref: "#/components/parameters/SandboxId" } ]
     post:
       tags: [files]
@@ -505,7 +512,7 @@ paths:
               schema: { $ref: "#/components/schemas/FileListResponse" }
         "404": { $ref: "#/components/responses/NotFound" }
 
-  /v1/sandboxes/{id}/files/stat:
+  /api/v1/sandboxes/{id}/files/stat:
     parameters: [ { $ref: "#/components/parameters/SandboxId" } ]
     post:
       tags: [files]
@@ -523,7 +530,7 @@ paths:
               schema: { $ref: "#/components/schemas/FileStatResponse" }
         "404": { $ref: "#/components/responses/NotFound" }
 
-  /v1/sandboxes/{id}/files/exists:
+  /api/v1/sandboxes/{id}/files/exists:
     parameters: [ { $ref: "#/components/parameters/SandboxId" } ]
     post:
       tags: [files]
@@ -541,7 +548,7 @@ paths:
               schema: { $ref: "#/components/schemas/FileExistsResponse" }
         "404": { $ref: "#/components/responses/NotFound" }
 
-  /v1/sandboxes/{id}/files/mkdir:
+  /api/v1/sandboxes/{id}/files/mkdir:
     parameters: [ { $ref: "#/components/parameters/SandboxId" } ]
     post:
       tags: [files]
@@ -555,7 +562,7 @@ paths:
         "204": { description: Created }
         "404": { $ref: "#/components/responses/NotFound" }
 
-  /v1/sandboxes/{id}/files/remove:
+  /api/v1/sandboxes/{id}/files/remove:
     parameters: [ { $ref: "#/components/parameters/SandboxId" } ]
     post:
       tags: [files]
@@ -569,7 +576,7 @@ paths:
         "204": { description: Removed }
         "404": { $ref: "#/components/responses/NotFound" }
 
-  /v1/sandboxes/{id}/files/copy:
+  /api/v1/sandboxes/{id}/files/copy:
     parameters: [ { $ref: "#/components/parameters/SandboxId" } ]
     post:
       tags: [files]
@@ -583,7 +590,7 @@ paths:
         "204": { description: Copied }
         "404": { $ref: "#/components/responses/NotFound" }
 
-  /v1/sandboxes/{id}/files/rename:
+  /api/v1/sandboxes/{id}/files/rename:
     parameters: [ { $ref: "#/components/parameters/SandboxId" } ]
     post:
       tags: [files]
@@ -597,7 +604,7 @@ paths:
         "204": { description: Renamed }
         "404": { $ref: "#/components/responses/NotFound" }
 
-  /v1/sandboxes/{id}/files/copy-from-host:
+  /api/v1/sandboxes/{id}/files/copy-from-host:
     parameters: [ { $ref: "#/components/parameters/SandboxId" } ]
     post:
       tags: [files]
@@ -611,7 +618,7 @@ paths:
         "204": { description: Copied }
         "404": { $ref: "#/components/responses/NotFound" }
 
-  /v1/sandboxes/{id}/files/copy-to-host:
+  /api/v1/sandboxes/{id}/files/copy-to-host:
     parameters: [ { $ref: "#/components/parameters/SandboxId" } ]
     post:
       tags: [files]
@@ -625,7 +632,7 @@ paths:
         "204": { description: Copied }
         "404": { $ref: "#/components/responses/NotFound" }
 
-  /v1/metrics:
+  /api/v1/metrics:
     get:
       tags: [metrics]
       summary: Metrics for all running sandboxes
@@ -639,7 +646,7 @@ paths:
                 items: { $ref: "#/components/schemas/Metrics" }
         "401": { $ref: "#/components/responses/Unauthorized" }
 
-  /v1/sandboxes/{id}/metrics:
+  /api/v1/sandboxes/{id}/metrics:
     parameters: [ { $ref: "#/components/parameters/SandboxId" } ]
     get:
       tags: [metrics]
@@ -652,7 +659,7 @@ paths:
               schema: { $ref: "#/components/schemas/Metrics" }
         "404": { $ref: "#/components/responses/NotFound" }
 
-  /v1/sandboxes/{id}/logs:
+  /api/v1/sandboxes/{id}/logs:
     parameters:
       - $ref: "#/components/parameters/SandboxId"
       - { name: tail, in: query, schema: { type: integer }, description: Return only the last N lines. }
@@ -668,7 +675,7 @@ paths:
               schema: { $ref: "#/components/schemas/LogsResponse" }
         "404": { $ref: "#/components/responses/NotFound" }
 
-  /v1/volumes:
+  /api/v1/volumes:
     post:
       tags: [volumes]
       summary: Create a named volume
@@ -697,7 +704,7 @@ paths:
                 items: { $ref: "#/components/schemas/Volume" }
         "401": { $ref: "#/components/responses/Unauthorized" }
 
-  /v1/volumes/{name}:
+  /api/v1/volumes/{name}:
     parameters: [ { $ref: "#/components/parameters/VolumeName" } ]
     get:
       tags: [volumes]
@@ -716,7 +723,7 @@ paths:
         "204": { description: Removed }
         "404": { $ref: "#/components/responses/NotFound" }
 
-  /v1/volumes/{name}/files/read:
+  /api/v1/volumes/{name}/files/read:
     parameters: [ { $ref: "#/components/parameters/VolumeName" } ]
     post:
       tags: [volumes]
@@ -734,7 +741,7 @@ paths:
               schema: { $ref: "#/components/schemas/FileReadResponse" }
         "404": { $ref: "#/components/responses/NotFound" }
 
-  /v1/volumes/{name}/files/write:
+  /api/v1/volumes/{name}/files/write:
     parameters: [ { $ref: "#/components/parameters/VolumeName" } ]
     post:
       tags: [volumes]
@@ -748,7 +755,7 @@ paths:
         "204": { description: Written }
         "404": { $ref: "#/components/responses/NotFound" }
 
-  /v1/volumes/{name}/files/mkdir:
+  /api/v1/volumes/{name}/files/mkdir:
     parameters: [ { $ref: "#/components/parameters/VolumeName" } ]
     post:
       tags: [volumes]
@@ -762,7 +769,7 @@ paths:
         "204": { description: Created }
         "404": { $ref: "#/components/responses/NotFound" }
 
-  /v1/volumes/{name}/files/remove:
+  /api/v1/volumes/{name}/files/remove:
     parameters: [ { $ref: "#/components/parameters/VolumeName" } ]
     post:
       tags: [volumes]
@@ -776,7 +783,7 @@ paths:
         "204": { description: Removed }
         "404": { $ref: "#/components/responses/NotFound" }
 
-  /v1/volumes/{name}/files/exists:
+  /api/v1/volumes/{name}/files/exists:
     parameters: [ { $ref: "#/components/parameters/VolumeName" } ]
     post:
       tags: [volumes]
@@ -794,7 +801,7 @@ paths:
               schema: { $ref: "#/components/schemas/FileExistsResponse" }
         "404": { $ref: "#/components/responses/NotFound" }
 
-  /v1/images:
+  /api/v1/images:
     get:
       tags: [images]
       summary: List cached images
@@ -817,7 +824,7 @@ paths:
         "204": { description: Removed }
         "401": { $ref: "#/components/responses/Unauthorized" }
 
-  /v1/images/pull:
+  /api/v1/images/pull:
     post:
       tags: [images]
       summary: Pull an OCI image into the local cache
@@ -840,7 +847,7 @@ paths:
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
 
-  /v1/images/inspect:
+  /api/v1/images/inspect:
     get:
       tags: [images]
       summary: Inspect a cached image
@@ -854,7 +861,7 @@ paths:
               schema: { $ref: "#/components/schemas/ImageDetail" }
         "404": { $ref: "#/components/responses/NotFound" }
 
-  /v1/images/prune:
+  /api/v1/images/prune:
     post:
       tags: [images]
       summary: Remove image artifacts unused by any sandbox
@@ -866,7 +873,7 @@ paths:
               schema: { $ref: "#/components/schemas/ImagePruneReport" }
         "401": { $ref: "#/components/responses/Unauthorized" }
 
-  /v1/snapshots:
+  /api/v1/snapshots:
     post:
       tags: [snapshots]
       summary: Create a snapshot from a stopped sandbox
@@ -895,7 +902,7 @@ paths:
                 items: { $ref: "#/components/schemas/Snapshot" }
         "401": { $ref: "#/components/responses/Unauthorized" }
 
-  /v1/snapshots/{name}:
+  /api/v1/snapshots/{name}:
     parameters: [ { $ref: "#/components/parameters/SnapshotName" } ]
     get:
       tags: [snapshots]
@@ -916,7 +923,7 @@ paths:
         "204": { description: Removed }
         "401": { $ref: "#/components/responses/Unauthorized" }
 
-  /v1/snapshots/{name}/verify:
+  /api/v1/snapshots/{name}/verify:
     parameters: [ { $ref: "#/components/parameters/SnapshotName" } ]
     post:
       tags: [snapshots]
@@ -929,7 +936,7 @@ paths:
               schema: { $ref: "#/components/schemas/SnapshotVerifyResponse" }
         "404": { $ref: "#/components/responses/NotFound" }
 
-  /v1/snapshots/export:
+  /api/v1/snapshots/export:
     post:
       tags: [snapshots]
       summary: Export a snapshot to an allowlisted host archive
@@ -942,7 +949,7 @@ paths:
         "204": { description: Exported }
         "401": { $ref: "#/components/responses/Unauthorized" }
 
-  /v1/snapshots/import:
+  /api/v1/snapshots/import:
     post:
       tags: [snapshots]
       summary: Import a snapshot archive from an allowlisted host path
@@ -959,7 +966,7 @@ paths:
               schema: { $ref: "#/components/schemas/Snapshot" }
         "401": { $ref: "#/components/responses/Unauthorized" }
 
-  /v1/snapshots/reindex:
+  /api/v1/snapshots/reindex:
     post:
       tags: [snapshots]
       summary: Rebuild the local snapshot index

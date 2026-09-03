@@ -65,8 +65,8 @@ func TestViewsRender(t *testing.T) {
 	}))
 	render(t, "SnapshotsPage", SnapshotsPage([]SnapshotRow{{Digest: "sha256:deadbeef", Name: "snap", ImageRef: "alpine", Format: "vmdk", Size: "1 MiB", CreatedAt: now}}, sbx, sort))
 	render(t, "SnapshotsPageEmpty", SnapshotsPage(nil, nil, sort))
-	render(t, "TerminalPage", TerminalPage("sbx_1", "ws://localhost/v1/sandboxes/sbx_1/terminal", "tok", false))
-	render(t, "TerminalPageEmbed", TerminalPage("sbx_1", "ws://localhost/v1/sandboxes/sbx_1/terminal", "tok", true))
+	render(t, "TerminalPage", TerminalPage("sbx_1", "ws://localhost/api/v1/sandboxes/sbx_1/terminal", "tok", false))
+	render(t, "TerminalPageEmbed", TerminalPage("sbx_1", "ws://localhost/api/v1/sandboxes/sbx_1/terminal", "tok", true))
 	render(t, "TerminalNotFound", TerminalNotFound("sbx_1"))
 	render(t, "CreateSandboxDialog", CreateSandboxDialog(m))
 	render(t, "CreateVolumeDialog", CreateVolumeDialog())
@@ -90,7 +90,7 @@ func TestViewsRender(t *testing.T) {
 	render(t, "CreateUserDialog", CreateUserDialog())
 	render(t, "SetPasswordDialog", SetPasswordDialog())
 	render(t, "ChangePasswordDialog", ChangePasswordDialog())
-	render(t, "LoginPage", LoginPage("/dashboard", "test"))
+	render(t, "LoginPage", LoginPage("/", "test"))
 	render(t, "LoginError", LoginError("incorrect username or password"))
 	render(t, "LockedPage", LockedPage("test"))
 }
@@ -105,11 +105,11 @@ func TestNavMarksActiveSection(t *testing.T) {
 		sec  Section
 		href string
 	}{
-		{SectionOverview, "/dashboard"},
-		{SectionSandboxes, "/dashboard/sandboxes"},
-		{SectionVolumes, "/dashboard/volumes"},
-		{SectionImages, "/dashboard/images"},
-		{SectionSnapshots, "/dashboard/snapshots"},
+		{SectionOverview, "/"},
+		{SectionSandboxes, "/sandboxes"},
+		{SectionVolumes, "/volumes"},
+		{SectionImages, "/images"},
+		{SectionSnapshots, "/snapshots"},
 	} {
 		m := testMeta()
 		m.Section = tc.sec
@@ -250,7 +250,7 @@ func TestMutatingActionsDisableRetry(t *testing.T) {
 		"create-user":     CreateUserDialog(),
 		"set-password":    SetPasswordDialog(),
 		"change-password": ChangePasswordDialog(),
-		"login":           LoginPage("/dashboard", "test"),
+		"login":           LoginPage("/", "test"),
 	}
 	for name, c := range pages {
 		var b strings.Builder
@@ -320,12 +320,12 @@ func TestImagesPageOffersPullManagement(t *testing.T) {
 	}
 	out := b.String()
 	for _, want := range []string{
-		"/dashboard/api/images/pull",         // pull + re-pull
-		"force=1",                            // row re-pull forces
-		"/dashboard/api/images/prune",        // prune posts to the real route
-		"/dashboard/api/images?ref=",         // remove
-		"/dashboard/api/images/inspect?ref=", // inspect
-		"moving tag",                         // mutable-tag hint
+		"/ui/images/pull",         // pull + re-pull
+		"force=1",                 // row re-pull forces
+		"/ui/images/prune",        // prune posts to the real route
+		"/ui/images?ref=",         // remove
+		"/ui/images/inspect?ref=", // inspect
+		"moving tag",              // mutable-tag hint
 		"aria-label=\"Remove image alpine:latest\"",
 	} {
 		if !strings.Contains(out, want) {

@@ -103,7 +103,7 @@ func KeysPage(rows []KeyRow, s TableSort) templ.Component {
 				Variant: button.VariantOutline,
 				Size:    button.SizeSm,
 				Attributes: templ.Attributes{
-					"data-on:click":  "@get('/dashboard/api/keys/table')",
+					"data-on:click":  "@get('/ui/keys/table')",
 					"data-indicator": "keyrefresh",
 					"aria-label":     "Refresh API key list",
 				},
@@ -282,7 +282,7 @@ func KeyTable(rows []KeyRow, s TableSort) templ.Component {
 								}()
 							}
 							ctx = templ.InitializeContext(ctx)
-							templ_7745c5c3_Err = SortHead("/dashboard/api/keys/table", "name", "Name", s).Render(ctx, templ_7745c5c3_Buffer)
+							templ_7745c5c3_Err = SortHead("/ui/keys/table", "name", "Name", s).Render(ctx, templ_7745c5c3_Buffer)
 							if templ_7745c5c3_Err != nil {
 								return templ_7745c5c3_Err
 							}
@@ -360,7 +360,7 @@ func KeyTable(rows []KeyRow, s TableSort) templ.Component {
 								}()
 							}
 							ctx = templ.InitializeContext(ctx)
-							templ_7745c5c3_Err = SortHead("/dashboard/api/keys/table", "created", "Created", s).Render(ctx, templ_7745c5c3_Buffer)
+							templ_7745c5c3_Err = SortHead("/ui/keys/table", "created", "Created", s).Render(ctx, templ_7745c5c3_Buffer)
 							if templ_7745c5c3_Err != nil {
 								return templ_7745c5c3_Err
 							}
@@ -386,7 +386,7 @@ func KeyTable(rows []KeyRow, s TableSort) templ.Component {
 								}()
 							}
 							ctx = templ.InitializeContext(ctx)
-							templ_7745c5c3_Err = SortHead("/dashboard/api/keys/table", "used", "Last used", s).Render(ctx, templ_7745c5c3_Buffer)
+							templ_7745c5c3_Err = SortHead("/ui/keys/table", "used", "Last used", s).Render(ctx, templ_7745c5c3_Buffer)
 							if templ_7745c5c3_Err != nil {
 								return templ_7745c5c3_Err
 							}
@@ -754,7 +754,7 @@ func KeyTable(rows []KeyRow, s TableSort) templ.Component {
 												"Revoke API key?",
 												k.Name+" will stop working immediately. Clients using it get 401 on the next request.",
 												"Revoke",
-												dsPost("/dashboard/api/keys/"+pathSeg(k.ID)+"/revoke"),
+												dsPost("/ui/keys/"+pathSeg(k.ID)+"/revoke"),
 											),
 										},
 									}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var32), templ_7745c5c3_Buffer)
@@ -795,7 +795,7 @@ func KeyTable(rows []KeyRow, s TableSort) templ.Component {
 											"Delete API key?",
 											k.Name+" will be erased along with its audit record. Revoke instead if you want to keep the history.",
 											"Delete",
-											dsDelete("/dashboard/api/keys/"+pathSeg(k.ID)),
+											dsDelete("/ui/keys/"+pathSeg(k.ID)),
 										),
 									},
 								}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var33), templ_7745c5c3_Buffer)
@@ -1015,9 +1015,9 @@ func CreateKeyDialog() templ.Component {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var42 string
-				templ_7745c5c3_Var42, templ_7745c5c3_Err = templ.ResolveAttributeValue(dsPost("/dashboard/api/keys"))
+				templ_7745c5c3_Var42, templ_7745c5c3_Err = templ.ResolveAttributeValue(dsPost("/ui/keys"))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/dashboard/views/settings.templ`, Line: 196, Col: 80}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/dashboard/views/settings.templ`, Line: 196, Col: 69}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var42)
 				if templ_7745c5c3_Err != nil {
@@ -1179,7 +1179,7 @@ func CreateKeyDialog() templ.Component {
 					})
 					templ_7745c5c3_Err = button.Button(button.Props{
 						Attributes: templ.Attributes{
-							"data-on:click":  dsPost("/dashboard/api/keys"),
+							"data-on:click":  dsPost("/ui/keys"),
 							"data-indicator": "keybusy",
 							"data-attr":      "{disabled: $keybusy || !$keyname}",
 						},
@@ -1375,7 +1375,7 @@ func UsersPage(rows []UserRow, s TableSort) templ.Component {
 				Variant: button.VariantOutline,
 				Size:    button.SizeSm,
 				Attributes: templ.Attributes{
-					"data-on:click":  "@get('/dashboard/api/users/table')",
+					"data-on:click":  "@get('/ui/users/table')",
 					"data-indicator": "userrefresh",
 					"aria-label":     "Refresh user list",
 				},
@@ -1558,7 +1558,7 @@ func UserTable(rows []UserRow, s TableSort) templ.Component {
 								}()
 							}
 							ctx = templ.InitializeContext(ctx)
-							templ_7745c5c3_Err = SortHead("/dashboard/api/users/table", "username", "Username", s).Render(ctx, templ_7745c5c3_Buffer)
+							templ_7745c5c3_Err = SortHead("/ui/users/table", "username", "Username", s).Render(ctx, templ_7745c5c3_Buffer)
 							if templ_7745c5c3_Err != nil {
 								return templ_7745c5c3_Err
 							}
@@ -1584,7 +1584,7 @@ func UserTable(rows []UserRow, s TableSort) templ.Component {
 								}()
 							}
 							ctx = templ.InitializeContext(ctx)
-							templ_7745c5c3_Err = SortHead("/dashboard/api/users/table", "role", "Role", s).Render(ctx, templ_7745c5c3_Buffer)
+							templ_7745c5c3_Err = SortHead("/ui/users/table", "role", "Role", s).Render(ctx, templ_7745c5c3_Buffer)
 							if templ_7745c5c3_Err != nil {
 								return templ_7745c5c3_Err
 							}
@@ -1610,7 +1610,7 @@ func UserTable(rows []UserRow, s TableSort) templ.Component {
 								}()
 							}
 							ctx = templ.InitializeContext(ctx)
-							templ_7745c5c3_Err = SortHead("/dashboard/api/users/table", "created", "Created", s).Render(ctx, templ_7745c5c3_Buffer)
+							templ_7745c5c3_Err = SortHead("/ui/users/table", "created", "Created", s).Render(ctx, templ_7745c5c3_Buffer)
 							if templ_7745c5c3_Err != nil {
 								return templ_7745c5c3_Err
 							}
@@ -1636,7 +1636,7 @@ func UserTable(rows []UserRow, s TableSort) templ.Component {
 								}()
 							}
 							ctx = templ.InitializeContext(ctx)
-							templ_7745c5c3_Err = SortHead("/dashboard/api/users/table", "login", "Last login", s).Render(ctx, templ_7745c5c3_Buffer)
+							templ_7745c5c3_Err = SortHead("/ui/users/table", "login", "Last login", s).Render(ctx, templ_7745c5c3_Buffer)
 							if templ_7745c5c3_Err != nil {
 								return templ_7745c5c3_Err
 							}
@@ -1932,7 +1932,7 @@ func UserTable(rows []UserRow, s TableSort) templ.Component {
 												roleToggleTitle(u.Role)+"?",
 												u.Username+" will become "+otherRole(u.Role)+".",
 												roleToggleTitle(u.Role),
-												dsPost("/dashboard/api/users/"+pathSeg(u.Username)+"/role?role="+queryVal(otherRole(u.Role))),
+												dsPost("/ui/users/"+pathSeg(u.Username)+"/role?role="+queryVal(otherRole(u.Role))),
 											),
 										},
 									}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var78), templ_7745c5c3_Buffer)
@@ -1974,7 +1974,7 @@ func UserTable(rows []UserRow, s TableSort) templ.Component {
 												"Delete user?",
 												u.Username+" will be removed and signed out everywhere.",
 												"Delete",
-												dsDelete("/dashboard/api/users/"+pathSeg(u.Username)),
+												dsDelete("/ui/users/"+pathSeg(u.Username)),
 											),
 										},
 									}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var79), templ_7745c5c3_Buffer)
@@ -2210,9 +2210,9 @@ func CreateUserDialog() templ.Component {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var88 string
-				templ_7745c5c3_Var88, templ_7745c5c3_Err = templ.ResolveAttributeValue(dsPost("/dashboard/api/users"))
+				templ_7745c5c3_Var88, templ_7745c5c3_Err = templ.ResolveAttributeValue(dsPost("/ui/users"))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/dashboard/views/settings.templ`, Line: 476, Col: 81}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/dashboard/views/settings.templ`, Line: 476, Col: 70}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var88)
 				if templ_7745c5c3_Err != nil {
@@ -2380,7 +2380,7 @@ func CreateUserDialog() templ.Component {
 					})
 					templ_7745c5c3_Err = button.Button(button.Props{
 						Attributes: templ.Attributes{
-							"data-on:click":  dsPost("/dashboard/api/users"),
+							"data-on:click":  dsPost("/ui/users"),
 							"data-indicator": "userbusy",
 							"data-attr":      "{disabled: $userbusy || !$newuser || !$newpass}",
 						},
@@ -2537,9 +2537,9 @@ func SetPasswordDialog() templ.Component {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var101 string
-				templ_7745c5c3_Var101, templ_7745c5c3_Err = templ.ResolveAttributeValue(dsPost("/dashboard/api/users/password"))
+				templ_7745c5c3_Var101, templ_7745c5c3_Err = templ.ResolveAttributeValue(dsPost("/ui/users/password"))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/dashboard/views/settings.templ`, Line: 535, Col: 90}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/dashboard/views/settings.templ`, Line: 535, Col: 79}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var101)
 				if templ_7745c5c3_Err != nil {
@@ -2661,7 +2661,7 @@ func SetPasswordDialog() templ.Component {
 					})
 					templ_7745c5c3_Err = button.Button(button.Props{
 						Attributes: templ.Attributes{
-							"data-on:click":  dsPost("/dashboard/api/users/password"),
+							"data-on:click":  dsPost("/ui/users/password"),
 							"data-indicator": "pwbusy",
 							"data-attr":      "{disabled: $pwbusy || !$pwvalue}",
 						},
@@ -2818,9 +2818,9 @@ func ChangePasswordDialog() templ.Component {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var113 string
-				templ_7745c5c3_Var113, templ_7745c5c3_Err = templ.ResolveAttributeValue(dsPost("/dashboard/api/account/password"))
+				templ_7745c5c3_Var113, templ_7745c5c3_Err = templ.ResolveAttributeValue(dsPost("/ui/account/password"))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/dashboard/views/settings.templ`, Line: 584, Col: 92}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/dashboard/views/settings.templ`, Line: 584, Col: 81}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var113)
 				if templ_7745c5c3_Err != nil {
@@ -2996,7 +2996,7 @@ func ChangePasswordDialog() templ.Component {
 					})
 					templ_7745c5c3_Err = button.Button(button.Props{
 						Attributes: templ.Attributes{
-							"data-on:click":  dsPost("/dashboard/api/account/password"),
+							"data-on:click":  dsPost("/ui/account/password"),
 							"data-indicator": "cpbusy",
 							"data-attr":      "{disabled: $cpbusy || !$curpass || !$newpass1 || $newpass1 !== $newpass2}",
 						},

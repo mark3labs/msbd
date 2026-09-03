@@ -87,7 +87,9 @@ func (s *Server) authRequired(ctx context.Context) bool {
 	return len(s.apiKeys) > 0 || s.keys.AuthConfigured(ctx)
 }
 
-// SetDashboard mounts the optional web dashboard under /dashboard.
+// SetDashboard mounts the optional web dashboard at the root of the URL space
+// (/, /sandboxes, /volumes, …). The REST API lives under /api/v1, so the two
+// never collide.
 func (s *Server) SetDashboard(d *dashboard.Handler) *Server {
 	s.dash = d
 	return s
@@ -114,13 +116,13 @@ func (s *Server) Handler() http.Handler {
 	})
 
 	// Meta.
-	mux.HandleFunc("GET /v1/version", s.auth(s.handleVersion))
+	mux.HandleFunc("GET /api/v1/version", s.auth(s.handleVersion))
 
 	// Prometheus-style operational metrics (auth-gated like everything else).
 	mux.HandleFunc("GET /metrics", s.auth(s.handleProm))
 
 	// Short-lived single-use terminal tickets (for browser WS clients).
-	mux.HandleFunc("POST /v1/terminal-tickets", s.auth(s.handleTerminalTicket))
+	mux.HandleFunc("POST /api/v1/terminal-tickets", s.auth(s.handleTerminalTicket))
 
 	// API docs (unauthenticated; the spec is not a secret).
 	if len(s.openapi) > 0 {
@@ -128,81 +130,81 @@ func (s *Server) Handler() http.Handler {
 		mux.HandleFunc("GET /openapi.yaml", s.handleOpenAPI)
 	}
 
-	// Web dashboard (optional; gated by its own Basic auth).
+	// Web dashboard, mounted at the root (optional; gated by its own auth).
 	if s.dash != nil {
 		s.dash.Mount(mux)
 	}
 
 	// Lifecycle.
-	mux.HandleFunc("POST /v1/sandboxes", s.auth(s.handleCreate))
-	mux.HandleFunc("GET /v1/sandboxes", s.auth(s.handleList))
-	mux.HandleFunc("GET /v1/sandboxes/{id}", s.auth(s.handleGet))
-	mux.HandleFunc("GET /v1/sandboxes/{id}/inspect", s.auth(s.handleInspect))
-	mux.HandleFunc("DELETE /v1/sandboxes/{id}", s.auth(s.handleDelete))
-	mux.HandleFunc("POST /v1/sandboxes/{id}/stop", s.auth(s.handleStop))
-	mux.HandleFunc("POST /v1/sandboxes/{id}/start", s.auth(s.handleStart))
+	mux.HandleFunc("POST /api/v1/sandboxes", s.auth(s.handleCreate))
+	mux.HandleFunc("GET /api/v1/sandboxes", s.auth(s.handleList))
+	mux.HandleFunc("GET /api/v1/sandboxes/{id}", s.auth(s.handleGet))
+	mux.HandleFunc("GET /api/v1/sandboxes/{id}/inspect", s.auth(s.handleInspect))
+	mux.HandleFunc("DELETE /api/v1/sandboxes/{id}", s.auth(s.handleDelete))
+	mux.HandleFunc("POST /api/v1/sandboxes/{id}/stop", s.auth(s.handleStop))
+	mux.HandleFunc("POST /api/v1/sandboxes/{id}/start", s.auth(s.handleStart))
 
 	// Exec / Run.
-	mux.HandleFunc("POST /v1/sandboxes/{id}/exec", s.auth(s.handleExec))
-	mux.HandleFunc("POST /v1/sandboxes/{id}/run", s.auth(s.handleRun))
+	mux.HandleFunc("POST /api/v1/sandboxes/{id}/exec", s.auth(s.handleExec))
+	mux.HandleFunc("POST /api/v1/sandboxes/{id}/run", s.auth(s.handleRun))
 
 	// Interactive terminal (WebSocket upgrade). Bearer auth via header or
 	// ?key= query param (browsers can't set headers on a WS upgrade).
-	mux.HandleFunc("GET /v1/sandboxes/{id}/terminal", s.authWS(s.handleTerminal))
+	mux.HandleFunc("GET /api/v1/sandboxes/{id}/terminal", s.authWS(s.handleTerminal))
 
 	// Async jobs.
-	mux.HandleFunc("POST /v1/sandboxes/{id}/jobs", s.auth(s.handleLaunch))
-	mux.HandleFunc("GET /v1/sandboxes/{id}/jobs/{job}", s.auth(s.handlePoll))
-	mux.HandleFunc("POST /v1/sandboxes/{id}/jobs/{job}/stdin", s.auth(s.handleJobStdin))
-	mux.HandleFunc("POST /v1/sandboxes/{id}/jobs/{job}/signal", s.auth(s.handleJobSignal))
+	mux.HandleFunc("POST /api/v1/sandboxes/{id}/jobs", s.auth(s.handleLaunch))
+	mux.HandleFunc("GET /api/v1/sandboxes/{id}/jobs/{job}", s.auth(s.handlePoll))
+	mux.HandleFunc("POST /api/v1/sandboxes/{id}/jobs/{job}/stdin", s.auth(s.handleJobStdin))
+	mux.HandleFunc("POST /api/v1/sandboxes/{id}/jobs/{job}/signal", s.auth(s.handleJobSignal))
 
 	// File IO.
-	mux.HandleFunc("POST /v1/sandboxes/{id}/files/read", s.auth(s.handleReadFile))
-	mux.HandleFunc("POST /v1/sandboxes/{id}/files/write", s.auth(s.handleWriteFile))
-	mux.HandleFunc("POST /v1/sandboxes/{id}/files/list", s.auth(s.handleFileList))
-	mux.HandleFunc("POST /v1/sandboxes/{id}/files/stat", s.auth(s.handleFileStat))
-	mux.HandleFunc("POST /v1/sandboxes/{id}/files/exists", s.auth(s.handleFileExists))
-	mux.HandleFunc("POST /v1/sandboxes/{id}/files/mkdir", s.auth(s.handleFileMkdir))
-	mux.HandleFunc("POST /v1/sandboxes/{id}/files/remove", s.auth(s.handleFileRemove))
-	mux.HandleFunc("POST /v1/sandboxes/{id}/files/copy", s.auth(s.handleFileCopy))
-	mux.HandleFunc("POST /v1/sandboxes/{id}/files/rename", s.auth(s.handleFileRename))
-	mux.HandleFunc("POST /v1/sandboxes/{id}/files/copy-from-host", s.auth(s.handleFileCopyFromHost))
-	mux.HandleFunc("POST /v1/sandboxes/{id}/files/copy-to-host", s.auth(s.handleFileCopyToHost))
+	mux.HandleFunc("POST /api/v1/sandboxes/{id}/files/read", s.auth(s.handleReadFile))
+	mux.HandleFunc("POST /api/v1/sandboxes/{id}/files/write", s.auth(s.handleWriteFile))
+	mux.HandleFunc("POST /api/v1/sandboxes/{id}/files/list", s.auth(s.handleFileList))
+	mux.HandleFunc("POST /api/v1/sandboxes/{id}/files/stat", s.auth(s.handleFileStat))
+	mux.HandleFunc("POST /api/v1/sandboxes/{id}/files/exists", s.auth(s.handleFileExists))
+	mux.HandleFunc("POST /api/v1/sandboxes/{id}/files/mkdir", s.auth(s.handleFileMkdir))
+	mux.HandleFunc("POST /api/v1/sandboxes/{id}/files/remove", s.auth(s.handleFileRemove))
+	mux.HandleFunc("POST /api/v1/sandboxes/{id}/files/copy", s.auth(s.handleFileCopy))
+	mux.HandleFunc("POST /api/v1/sandboxes/{id}/files/rename", s.auth(s.handleFileRename))
+	mux.HandleFunc("POST /api/v1/sandboxes/{id}/files/copy-from-host", s.auth(s.handleFileCopyFromHost))
+	mux.HandleFunc("POST /api/v1/sandboxes/{id}/files/copy-to-host", s.auth(s.handleFileCopyToHost))
 
 	// Metrics.
-	mux.HandleFunc("GET /v1/metrics", s.auth(s.handleMetricsAll))
-	mux.HandleFunc("GET /v1/sandboxes/{id}/metrics", s.auth(s.handleMetrics))
+	mux.HandleFunc("GET /api/v1/metrics", s.auth(s.handleMetricsAll))
+	mux.HandleFunc("GET /api/v1/sandboxes/{id}/metrics", s.auth(s.handleMetrics))
 
 	// Logs.
-	mux.HandleFunc("GET /v1/sandboxes/{id}/logs", s.auth(s.handleLogs))
+	mux.HandleFunc("GET /api/v1/sandboxes/{id}/logs", s.auth(s.handleLogs))
 
 	// Volumes.
-	mux.HandleFunc("POST /v1/volumes", s.auth(s.handleVolumeCreate))
-	mux.HandleFunc("GET /v1/volumes", s.auth(s.handleVolumeList))
-	mux.HandleFunc("GET /v1/volumes/{name}", s.auth(s.handleVolumeGet))
-	mux.HandleFunc("DELETE /v1/volumes/{name}", s.auth(s.handleVolumeDelete))
-	mux.HandleFunc("POST /v1/volumes/{name}/files/read", s.auth(s.handleVolumeReadFile))
-	mux.HandleFunc("POST /v1/volumes/{name}/files/write", s.auth(s.handleVolumeWriteFile))
-	mux.HandleFunc("POST /v1/volumes/{name}/files/mkdir", s.auth(s.handleVolumeMkdir))
-	mux.HandleFunc("POST /v1/volumes/{name}/files/remove", s.auth(s.handleVolumeRemoveFile))
-	mux.HandleFunc("POST /v1/volumes/{name}/files/exists", s.auth(s.handleVolumeExists))
+	mux.HandleFunc("POST /api/v1/volumes", s.auth(s.handleVolumeCreate))
+	mux.HandleFunc("GET /api/v1/volumes", s.auth(s.handleVolumeList))
+	mux.HandleFunc("GET /api/v1/volumes/{name}", s.auth(s.handleVolumeGet))
+	mux.HandleFunc("DELETE /api/v1/volumes/{name}", s.auth(s.handleVolumeDelete))
+	mux.HandleFunc("POST /api/v1/volumes/{name}/files/read", s.auth(s.handleVolumeReadFile))
+	mux.HandleFunc("POST /api/v1/volumes/{name}/files/write", s.auth(s.handleVolumeWriteFile))
+	mux.HandleFunc("POST /api/v1/volumes/{name}/files/mkdir", s.auth(s.handleVolumeMkdir))
+	mux.HandleFunc("POST /api/v1/volumes/{name}/files/remove", s.auth(s.handleVolumeRemoveFile))
+	mux.HandleFunc("POST /api/v1/volumes/{name}/files/exists", s.auth(s.handleVolumeExists))
 
 	// Images.
-	mux.HandleFunc("GET /v1/images", s.auth(s.handleImageList))
-	mux.HandleFunc("POST /v1/images/pull", s.auth(s.handleImagePull))
-	mux.HandleFunc("GET /v1/images/inspect", s.auth(s.handleImageInspect))
-	mux.HandleFunc("DELETE /v1/images", s.auth(s.handleImageRemove))
-	mux.HandleFunc("POST /v1/images/prune", s.auth(s.handleImagePrune))
+	mux.HandleFunc("GET /api/v1/images", s.auth(s.handleImageList))
+	mux.HandleFunc("POST /api/v1/images/pull", s.auth(s.handleImagePull))
+	mux.HandleFunc("GET /api/v1/images/inspect", s.auth(s.handleImageInspect))
+	mux.HandleFunc("DELETE /api/v1/images", s.auth(s.handleImageRemove))
+	mux.HandleFunc("POST /api/v1/images/prune", s.auth(s.handleImagePrune))
 
 	// Snapshots.
-	mux.HandleFunc("POST /v1/snapshots", s.auth(s.handleSnapshotCreate))
-	mux.HandleFunc("GET /v1/snapshots", s.auth(s.handleSnapshotList))
-	mux.HandleFunc("GET /v1/snapshots/{name}", s.auth(s.handleSnapshotGet))
-	mux.HandleFunc("DELETE /v1/snapshots/{name}", s.auth(s.handleSnapshotDelete))
-	mux.HandleFunc("POST /v1/snapshots/{name}/verify", s.auth(s.handleSnapshotVerify))
-	mux.HandleFunc("POST /v1/snapshots/export", s.auth(s.handleSnapshotExport))
-	mux.HandleFunc("POST /v1/snapshots/import", s.auth(s.handleSnapshotImport))
-	mux.HandleFunc("POST /v1/snapshots/reindex", s.auth(s.handleSnapshotReindex))
+	mux.HandleFunc("POST /api/v1/snapshots", s.auth(s.handleSnapshotCreate))
+	mux.HandleFunc("GET /api/v1/snapshots", s.auth(s.handleSnapshotList))
+	mux.HandleFunc("GET /api/v1/snapshots/{name}", s.auth(s.handleSnapshotGet))
+	mux.HandleFunc("DELETE /api/v1/snapshots/{name}", s.auth(s.handleSnapshotDelete))
+	mux.HandleFunc("POST /api/v1/snapshots/{name}/verify", s.auth(s.handleSnapshotVerify))
+	mux.HandleFunc("POST /api/v1/snapshots/export", s.auth(s.handleSnapshotExport))
+	mux.HandleFunc("POST /api/v1/snapshots/import", s.auth(s.handleSnapshotImport))
+	mux.HandleFunc("POST /api/v1/snapshots/reindex", s.auth(s.handleSnapshotReindex))
 
 	return recoverMW(logMW(mux))
 }
@@ -354,10 +356,21 @@ func logMW(next http.Handler) http.Handler {
 		start := time.Now()
 		next.ServeHTTP(sr, r)
 		globalReqStats.observe(sr.status)
+		// r.Pattern (Go 1.23+) is the ServeMux pattern that matched, filled in by
+		// the mux on this same request value, so it is readable here on the way
+		// back out. Logging the route template next to the concrete path makes
+		// route shadowing diagnosable in production: the dashboard owns the root
+		// of the URL space, so "which pattern actually handled this?" is a real
+		// question. Empty means nothing matched (a 404 from the mux itself).
+		route := r.Pattern
+		if route == "" {
+			route = "(unmatched)"
+		}
 		log.Info("request",
 			"id", rid,
 			"method", r.Method,
 			"path", r.URL.Path,
+			"route", route,
 			"status", sr.status,
 			"remote", clientIP(r),
 			"dur", time.Since(start).Round(time.Millisecond))

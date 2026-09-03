@@ -694,7 +694,7 @@ func CreateSandboxDialog(m Meta) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 27, "<div id=\"create-sandbox-error\"></div><form class=\"grid max-h-[65vh] gap-4 overflow-y-auto py-4 pr-1\" data-on:submit=\"@post('/dashboard/api/sandboxes', {retry:'never'})\" data-indicator=\"sbxbusy\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 27, "<div id=\"create-sandbox-error\"></div><form class=\"grid max-h-[65vh] gap-4 overflow-y-auto py-4 pr-1\" data-on:submit=\"@post('/ui/sandboxes', {retry:'never'})\" data-indicator=\"sbxbusy\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -1150,7 +1150,7 @@ func CreateSandboxDialog(m Meta) templ.Component {
 					})
 					templ_7745c5c3_Err = button.Button(button.Props{
 						Attributes: templ.Attributes{
-							"data-on:click":  "@post('/dashboard/api/sandboxes', {retry:'never'})",
+							"data-on:click":  "@post('/ui/sandboxes', {retry:'never'})",
 							"data-indicator": "sbxbusy",
 							"data-attr":      "{disabled: $sbxbusy || !$sbximage}",
 						},
@@ -1310,7 +1310,7 @@ func CreateVolumeDialog() templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 48, "<div id=\"create-volume-error\"></div><form class=\"grid gap-4 py-4\" data-on:submit=\"@post('/dashboard/api/volumes', {retry:'never'})\" data-indicator=\"volbusy\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 48, "<div id=\"create-volume-error\"></div><form class=\"grid gap-4 py-4\" data-on:submit=\"@post('/ui/volumes', {retry:'never'})\" data-indicator=\"volbusy\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -1506,7 +1506,7 @@ func CreateVolumeDialog() templ.Component {
 					})
 					templ_7745c5c3_Err = button.Button(button.Props{
 						Attributes: templ.Attributes{
-							"data-on:click":  "@post('/dashboard/api/volumes', {retry:'never'})",
+							"data-on:click":  "@post('/ui/volumes', {retry:'never'})",
 							"data-indicator": "volbusy",
 							"data-attr":      "{disabled: $volbusy || !$volname}",
 						},
@@ -1657,7 +1657,7 @@ func PullImageDialog(m Meta) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 61, "<div id=\"pull-image-error\"></div><form class=\"grid gap-4 py-4\" data-on:submit=\"@post('/dashboard/api/images/pull', {retry:'never'})\" data-indicator=\"pullbusy\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 61, "<div id=\"pull-image-error\"></div><form class=\"grid gap-4 py-4\" data-on:submit=\"@post('/ui/images/pull', {retry:'never'})\" data-indicator=\"pullbusy\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -1860,7 +1860,7 @@ func PullImageDialog(m Meta) templ.Component {
 					})
 					templ_7745c5c3_Err = button.Button(button.Props{
 						Attributes: templ.Attributes{
-							"data-on:click":  "@post('/dashboard/api/images/pull', {retry:'never'})",
+							"data-on:click":  "@post('/ui/images/pull', {retry:'never'})",
 							"data-indicator": "pullbusy",
 							"data-attr":      "{disabled: $pullbusy || !$imgref}",
 						},
@@ -2055,7 +2055,7 @@ func CreateSnapshotDialog(sandboxes []SandboxRow, preselect string) templ.Compon
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 82, "<div id=\"create-snapshot-error\"></div><form class=\"grid gap-4 py-4\" data-on:submit=\"@post('/dashboard/api/snapshots', {retry:'never'})\" data-indicator=\"snapbusy\"><div class=\"grid gap-1.5\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 82, "<div id=\"create-snapshot-error\"></div><form class=\"grid gap-4 py-4\" data-on:submit=\"@post('/ui/snapshots', {retry:'never'})\" data-indicator=\"snapbusy\"><div class=\"grid gap-1.5\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -2259,7 +2259,7 @@ func CreateSnapshotDialog(sandboxes []SandboxRow, preselect string) templ.Compon
 					})
 					templ_7745c5c3_Err = button.Button(button.Props{
 						Attributes: templ.Attributes{
-							"data-on:click":  "@post('/dashboard/api/snapshots', {retry:'never'})",
+							"data-on:click":  "@post('/ui/snapshots', {retry:'never'})",
 							"data-indicator": "snapbusy",
 							"data-attr":      "{disabled: $snapbusy || !$snapsource}",
 						},

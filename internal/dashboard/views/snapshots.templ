@@ -16,7 +16,7 @@ templ SnapshotsPage(rows []SnapshotRow, sandboxes []SandboxRow, s TableSort) {
 				Variant: button.VariantOutline,
 				Size:    button.SizeSm,
 				Attributes: templ.Attributes{
-					"data-on:click":  "@get('/dashboard/api/snapshots/table')",
+					"data-on:click":  "@get('/ui/snapshots/table')",
 					"data-indicator": "snaprefresh",
 					"aria-label":     "Refresh snapshot list",
 				},
@@ -48,7 +48,7 @@ templ SnapshotTable(rows []SnapshotRow, s TableSort) {
 					@table.Header() {
 						@table.Row() {
 							@table.Head() {
-								@SortHead("/dashboard/api/snapshots/table", "name", "Name", s)
+								@SortHead("/ui/snapshots/table", "name", "Name", s)
 							}
 							@table.Head(table.HeadProps{Class: "hidden md:table-cell"}) {
 								Digest
@@ -60,10 +60,10 @@ templ SnapshotTable(rows []SnapshotRow, s TableSort) {
 								Format
 							}
 							@table.Head() {
-								@SortHead("/dashboard/api/snapshots/table", "size", "Size", s)
+								@SortHead("/ui/snapshots/table", "size", "Size", s)
 							}
 							@table.Head(table.HeadProps{Class: "hidden sm:table-cell"}) {
-								@SortHead("/dashboard/api/snapshots/table", "created", "Created", s)
+								@SortHead("/ui/snapshots/table", "created", "Created", s)
 							}
 							@table.Head(table.HeadProps{Class: "text-right"}) {
 								Actions
@@ -96,7 +96,7 @@ templ SnapshotTable(rows []SnapshotRow, s TableSort) {
 								@table.Cell(table.CellProps{Class: "text-right"}) {
 									<div class="flex items-center justify-end gap-1">
 										@iconButton("Verify integrity of "+sn.Name, "shield-check",
-											dsPost("/dashboard/api/snapshots/"+pathSeg(sn.Digest)+"/verify"))
+											dsPost("/ui/snapshots/"+pathSeg(sn.Digest)+"/verify"))
 										@button.Button(button.Props{
 											Variant: button.VariantGhost,
 											Size:    button.SizeIcon,
@@ -108,7 +108,7 @@ templ SnapshotTable(rows []SnapshotRow, s TableSort) {
 													"Delete snapshot?",
 													sn.Name+" ("+ShortDigest(sn.Digest)+") will be removed. This cannot be undone.",
 													"Delete",
-													dsDelete("/dashboard/api/snapshots/"+pathSeg(sn.Digest)),
+													dsDelete("/ui/snapshots/"+pathSeg(sn.Digest)),
 												),
 											},
 										}) {
