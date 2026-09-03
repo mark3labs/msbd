@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: msbd — Microsandbox REST host
-  version: 0.6.0
+  version: 0.8.0
   description: >
     A standalone, self-hostable HTTP server that wraps the microsandbox Go SDK
     (cgo + libkrun) and exposes a small REST API for managing fast, local
