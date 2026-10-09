@@ -1,0 +1,102 @@
+package buttongroup
+
+import "github.com/mark3labs/msbd/internal/dashboard/utils"
+
+type Orientation string
+
+const (
+	OrientationHorizontal Orientation = "horizontal"
+	OrientationVertical   Orientation = "vertical"
+)
+
+type Props struct {
+	ID          string
+	Class       string
+	Attributes  templ.Attributes
+	Orientation Orientation
+}
+
+type TextProps struct {
+	ID         string
+	Class      string
+	Attributes templ.Attributes
+}
+
+type SeparatorProps struct {
+	ID          string
+	Class       string
+	Attributes  templ.Attributes
+	Orientation Orientation
+}
+
+// 1:1 base/ui/button-group.tsx: structure lives here, the look comes from the
+// active style-*.css via the classes.
+const baseClasses = "has-[>[data-slot=button-group]]:gap-2 has-[select[aria-hidden=true]:last-child]:[&>[data-slot=select-trigger]:last-of-type]:rounded-r-lg flex w-fit items-stretch *:focus-visible:relative *:focus-visible:z-10 [&>[data-slot=select-trigger]:not([class*='w-'])]:w-fit [&>input]:flex-1"
+
+func orientationClasses(o Orientation) string {
+	if o == OrientationVertical {
+		return "[&>[data-slot]:not(:has(~[data-slot]))]:rounded-b-lg! flex-col *:data-slot:rounded-b-none [&>[data-slot]~[data-slot]]:rounded-t-none [&>[data-slot]~[data-slot]]:border-t-0"
+	}
+	return "[&>[data-slot]:not(:has(~[data-slot]))]:rounded-r-lg! *:data-slot:rounded-r-none [&>[data-slot]~[data-slot]]:rounded-l-none [&>[data-slot]~[data-slot]]:border-l-0"
+}
+
+templ ButtonGroup(props ...Props) {
+	{{ var p Props }}
+	if len(props) > 0 {
+		{{ p = props[0] }}
+	}
+	// shadcn renders data-orientation only when the prop is set; the cva
+	// default for the classes is horizontal.
+	<div
+		if p.ID != "" {
+			id={ p.ID }
+		}
+		role="group"
+		data-slot="button-group"
+		if p.Orientation != "" {
+			data-orientation={ string(p.Orientation) }
+		}
+		class={ utils.CN(baseClasses, orientationClasses(p.Orientation), p.Class) }
+		{ p.Attributes... }
+	>
+		{ children... }
+	</div>
+}
+
+templ Text(props ...TextProps) {
+	{{ var p TextProps }}
+	if len(props) > 0 {
+		{{ p = props[0] }}
+	}
+	<div
+		if p.ID != "" {
+			id={ p.ID }
+		}
+		data-slot="button-group-text"
+		class={ utils.CN("bg-muted gap-2 rounded-lg border px-2.5 text-sm font-medium [&_svg:not([class*='size-'])]:size-4 flex items-center [&_svg]:pointer-events-none", p.Class) }
+		{ p.Attributes... }
+	>
+		{ children... }
+	</div>
+}
+
+templ Separator(props ...SeparatorProps) {
+	{{ var p SeparatorProps }}
+	if len(props) > 0 {
+		{{ p = props[0] }}
+	}
+	if p.Orientation == "" {
+		{{ p.Orientation = OrientationVertical }}
+	}
+	<div
+		if p.ID != "" {
+			id={ p.ID }
+		}
+		role="separator"
+		data-slot="button-group-separator"
+		data-orientation={ string(p.Orientation) }
+		aria-orientation={ string(p.Orientation) }
+		class={ utils.CN("shrink-0 bg-border data-horizontal:h-px data-horizontal:w-full data-vertical:w-px data-vertical:self-stretch", "bg-input relative self-stretch data-horizontal:mx-px data-horizontal:w-auto data-vertical:my-px data-vertical:h-auto", p.Class) }
+		{ p.Attributes... }
+	></div>
+}

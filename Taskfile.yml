@@ -13,6 +13,8 @@ vars:
   # Single source of truth for the version lives in the VERSION file.
   VERSION:
     sh: tr -d '[:space:]' < VERSION
+  # Pin the beta CLI independently of the server's module dependencies.
+  SHADCN_TEMPL: go run github.com/axadrn/shadcn-templ/v2/cmd/shadcn-templ@v2.0.0-beta.13
 
 tasks:
   default:
@@ -31,8 +33,20 @@ tasks:
   dashboard:
     desc: Regenerate the dashboard (templ code + Tailwind CSS). Run after editing internal/dashboard/**/*.templ.
     cmds:
+      - task: dashboard:scripts
       - templ generate
       - tailwindcss -i internal/dashboard/assets/css/input.css -o internal/dashboard/assets/css/output.css --minify
+
+  dashboard:scripts:
+    desc: Build the pinned shadcn-templ component JS bundle and embedded URL manifest (no Node required)
+    cmds:
+      - '{{.SHADCN_TEMPL}} bundle'
+
+  dashboard:components:
+    desc: Rebuild only vendored component JS and templ code (leaves views and theme CSS alone)
+    cmds:
+      - task: dashboard:scripts
+      - templ generate -path internal/dashboard/components
 
   # ---------------------------------------------------------------------------
   # Dev loop: templ hot-reload proxy + air binary rebuild + Tailwind watch,
@@ -49,12 +63,17 @@ tasks:
   # ---------------------------------------------------------------------------
   dev:
     desc: 'Start the dev server (templ hot-reload on :7332, air rebuild, Tailwind watch)'
-    deps: [dev:templ, dev:tailwind, dev:server]
+    deps: [dev:scripts, dev:templ, dev:tailwind, dev:server]
 
   dev:templ:
     desc: templ generate --watch with a live-reload proxy on :7332 (browser-facing)
     cmds:
       - templ generate --watch --proxy="http://localhost:8099" --proxyport=7332 --open-browser=false
+
+  dev:scripts:
+    desc: Watch shadcn-templ component sources and rebuild the readable development bundle
+    cmds:
+      - '{{.SHADCN_TEMPL}} bundle --watch'
 
   dev:tailwind:
     desc: Watch the dashboard Tailwind CSS (rebuilds output.css on .templ changes)
@@ -88,6 +107,7 @@ tasks:
     ignore_error: true
     cmds:
       - pkill -f "templ generate --watch" || true
+      - pkill -f "shadcn-templ.*bundle --watch" || true
       - pkill -f "air --build.cmd" || true
       - pkill -f "tailwindcss -i internal/dashboard/assets/css/input.css" || true
       - pkill -f "tmp/bin/msbd serve" || true

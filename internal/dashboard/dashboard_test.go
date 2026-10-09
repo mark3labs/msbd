@@ -110,10 +110,6 @@ func TestStaticAssets(t *testing.T) {
 		"/assets/vendor/datastar.js",
 		"/assets/vendor/xterm.js",
 		"/assets/js/metric-chart.js",
-		"/assets/js/dialog.min.js",
-		"/assets/js/tabs.min.js",
-		"/assets/js/progress.min.js",
-		"/assets/js/copybutton.min.js",
 	} {
 		resp, err := http.Get(ts.URL + path)
 		if err != nil {
@@ -565,10 +561,8 @@ func TestDashboardNeverShadowsTheAPI(t *testing.T) {
 	}
 }
 
-// assetRefRe finds every local asset URL a rendered page pulls in: the
-// stylesheet, the Datastar runtime, and the per-component templui scripts
-// (whose base path lives in the vendored utils/templui.go and is regenerated
-// from .templui.json).
+// assetRefRe finds local stylesheet and runtime URLs, including the hashed
+// shadcn-templ component bundle generated from components.json.
 var assetRefRe = regexp.MustCompile(`(?:src|href)="(/assets/[^"?]+)`)
 
 // TestRenderedAssetURLsResolve walks the asset URLs the shell actually emits
@@ -597,20 +591,15 @@ func TestRenderedAssetURLsResolve(t *testing.T) {
 			t.Errorf("rendered page does not reference %s", want)
 		}
 	}
-	// templui components ship as *.min.js under componentScriptBasePath. Match
-	// on ".min.js" specifically: layout.templ also hardcodes /assets/js/
-	// metric-chart.js, so a plain "/assets/js/" prefix count would stay
-	// non-zero even with a stale component base path.
+	// Exactly one hashed component bundle must accompany Datastar.
 	componentJS := 0
 	for u := range seen {
-		if strings.HasPrefix(u, "/assets/js/") && strings.HasSuffix(u, ".min.js") {
+		if strings.HasPrefix(u, "/assets/js/shadcn-templ-") && strings.HasSuffix(u, ".js") {
 			componentJS++
 		}
 	}
-	if componentJS == 0 {
-		t.Error("rendered page references no /assets/js/*.min.js templui script — " +
-			"check componentScriptBasePath in internal/dashboard/utils/templui.go " +
-			"and jsPublicPath in .templui.json")
+	if componentJS != 1 {
+		t.Errorf("rendered page references %d component bundles, want 1", componentJS)
 	}
 
 	for u := range seen {

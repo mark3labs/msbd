@@ -90,7 +90,7 @@ func (h *Handler) volumeCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	closeDialog(sse, "create-volume")
-	notify(sse, toast.VariantSuccess, "Volume created", name)
+	notify(sse, toast.TypeSuccess, "Volume created", name)
 	h.reRenderVolumes(r, sse)
 }
 
@@ -100,7 +100,7 @@ func (h *Handler) volumeDelete(w http.ResponseWriter, r *http.Request) {
 	if notifyErr(sse, "Delete volume", h.svc.RemoveVolume(r.Context(), name)) {
 		return
 	}
-	notify(sse, toast.VariantSuccess, "Volume deleted", name)
+	notify(sse, toast.TypeSuccess, "Volume deleted", name)
 	h.reRenderVolumes(r, sse)
 }
 

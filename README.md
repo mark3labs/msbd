@@ -36,7 +36,9 @@ docker run --rm \
   ghcr.io/mark3labs/msbd:latest
 ```
 
-The first start downloads the microsandbox runtime (~30 MB) into the mounted volume. Subsequent starts skip it. Wait for `/readyz` to return 200:
+The first start downloads the SDK-pinned microsandbox runtime into the mounted volume when no runtime is installed. Subsequent starts reuse a complete installation; SDK 0.7.x does **not** automatically upgrade an older `msb`/`libkrunfw` pair, and a partial installation fails startup. When upgrading msbd, drain existing VMs and explicitly provision the matching upstream runtime (currently **0.7.7**) before restarting. The upstream SDK's `InstallRuntime` API supports explicit installation with `InstallOptions{Version: "0.7.7", Force: true}`; use the same runtime home as the daemon and back it up first. Do not delete the whole data volume: it also contains sandbox and authentication state.
+
+`/api/v1/version` reports the embedded FFI and SDK versions, not the installed supervisor version; check the resolved `msb --version` separately. Wait for `/readyz` to return 200:
 
 ```bash
 curl -fsS localhost:8099/readyz   # → ready
@@ -287,7 +289,7 @@ Every section is a **real, bookmarkable URL** — `/` (overview), `/sandboxes`, 
 
 Other niceties: a **light/dark/system theme** toggle (persisted, no flash of the wrong palette), a **responsive** layout with a mobile nav drawer and horizontally scrollable tables, **styled confirmation dialogs** (never `window.confirm`), busy states on every mutating control so a double-click can't boot two sandboxes, sticky error toasts plus inline errors next to the control that failed, and keyboard/screen-reader support (skip link, `aria-label`s on icon-only controls, table captions, `aria-sort` on sorted columns).
 
-It is server-rendered with [templ](https://templ.guide) + [templui](https://templui.io) components, styled with Tailwind, and made reactive with [Datastar](https://data-star.dev) (SSE-driven DOM patching). Everything — the compiled CSS, the Datastar runtime, xterm.js and the component JavaScript — is **embedded in the binary** (`//go:embed`); there are no external assets to deploy. Auth is independent of `MSBD_API_KEY`: the API stays bearer-gated while the dashboard has its own. It picks the strongest option available — a **login page with `HttpOnly`, `SameSite=Lax` session cookies** once you have created an account (`msbd users add`), the legacy single-account **HTTP Basic** if only `MSBD_DASHBOARD_USER`/`_PASS` are set, and open otherwise. The terminal page never embeds the API key — it uses a short-lived, single-use ticket.
+It is server-rendered with [templ](https://templ.guide) + [shadcn-templ](https://shadcn-templ.com) components, styled with Tailwind, and made reactive with [Datastar](https://data-star.dev) (SSE-driven DOM patching). Everything — the compiled CSS, the Datastar runtime, xterm.js and the component JavaScript — is **embedded in the binary** (`//go:embed`); there are no external assets to deploy. Auth is independent of `MSBD_API_KEY`: the API stays bearer-gated while the dashboard has its own. It picks the strongest option available — a **login page with `HttpOnly`, `SameSite=Lax` session cookies** once you have created an account (`msbd users add`), the legacy single-account **HTTP Basic** if only `MSBD_DASHBOARD_USER`/`_PASS` are set, and open otherwise. The terminal page never embeds the API key — it uses a short-lived, single-use ticket.
 
 If the API requires a key but the dashboard would have no auth at all, msbd **locks the dashboard** — every route serves a short page telling you to run `msbd users add`, which takes effect on the next reload with no restart. Override with `MSBD_DASHBOARD_ALLOW_INSECURE=true`.
 
@@ -381,7 +383,7 @@ Ctrl-C / SIGTERM trigger a graceful drain of in-flight requests.
 ### Repo layout
 
 ```
-cmd/msbd/main.go              # entrypoint — EnsureInstalled, reconcile, serve
+cmd/msbd/main.go              # entrypoint — core.EnsureRuntime, reconcile, serve
 cmd/msbd/admin.go             # `msbd users` / `msbd keys` / `msbd db` subcommands
 assets.go                     # //go:embed openapi.yaml (served at /docs)
 internal/api/router.go        # HTTP router + middleware (auth, recover, log)
@@ -411,8 +413,8 @@ internal/dashboard/dashboard.go    # web UI: page + SSE routes and their guards 
 internal/dashboard/auth.go         # open / basic / session auth modes, guards, cookies
 internal/dashboard/handlers.go     # page handlers (one real URL per section) + shared SSE helpers
 internal/dashboard/handlers_*.go   # Datastar SSE handlers (overview, sandboxes, files, volumes, images, snapshots, settings)
-internal/dashboard/views/*.templ   # templ pages/fragments (templui components + Datastar attrs)
-internal/dashboard/components/      # vendored templui components (via `templui add`)
+internal/dashboard/views/*.templ   # templ pages/fragments (shadcn-templ components + Datastar attrs)
+internal/dashboard/components/      # vendored shadcn-templ components (pinned Nova registry; see components/UPSTREAM.md)
 internal/dashboard/assets/          # input.css + committed output.css, datastar/xterm, component JS (embedded)
 openapi.yaml                  # the contract
 VERSION                       # release version (single source of truth)
@@ -422,6 +424,24 @@ Dockerfile                    # build from source
 Dockerfile.release            # used by goreleaser
 docker-compose.yml            # example compose deploy
 ```
+
+### Browser regression tests
+
+The dashboard uses vendored shadcn-templ **v2.0.0-beta.13** (the renamed project’s current v2 release line). Components, the hashed JS bundle, and CSS are committed; normal Go builds need no frontend toolchain. Run `task dashboard` after template or component changes. Keep the vendored `shadcn-tailwind.css` variants and `tw-animate.css` imports: controls depend on them.
+
+See [`scripts/browser/README.md`](scripts/browser/README.md) for the isolated Playwright/Chromium suite, including optional real microVM, file-browser, and xterm coverage. It never targets a production server. Screenshots and reports go to ignored `bin/browser/`.
+
+### Live terminal regression test
+
+Unit tests do not boot microVMs. To verify an SDK/protocol upgrade end-to-end, explicitly provision the SDK-matching runtime in an isolated `MSB_HOME`, then run on a host with `/dev/kvm` and registry access:
+
+```bash
+MSB_HOME=/path/to/isolated/microsandbox \
+MSBD_TEST_IMAGE=public.ecr.aws/docker/library/alpine:3.21 \
+go test -race -tags integration ./internal/core -run '^TestTerminalLive$' -count=1
+```
+
+The test creates and deletes its own sandbox and checks a real PTY, resize, stdin/output, Ctrl-C, and exit status. It does not install over or upgrade an existing runtime; never point it at a production runtime home.
 
 ### Releasing
 

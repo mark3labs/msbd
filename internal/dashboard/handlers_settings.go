@@ -107,7 +107,6 @@ func (h *Handler) keyCreate(w http.ResponseWriter, r *http.Request) {
 	// Reveal the token before refreshing the table: this is the one and only
 	// time it exists outside the database's hash.
 	_ = sse.PatchElementTempl(views.NewKeyDialog(key.Name, raw))
-	_ = sse.ExecuteScript("document.getElementById('new-key')?.showModal()")
 	h.reRenderKeys(r, sse)
 }
 
@@ -118,7 +117,7 @@ func (h *Handler) keyRevoke(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.invalidateKeys()
-	notify(sse, toast.VariantSuccess, "Key revoked", k.Name+" no longer authenticates.")
+	notify(sse, toast.TypeSuccess, "Key revoked", k.Name+" no longer authenticates.")
 	h.reRenderKeys(r, sse)
 }
 
@@ -129,7 +128,7 @@ func (h *Handler) keyDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.invalidateKeys()
-	notify(sse, toast.VariantSuccess, "Key deleted", k.Name)
+	notify(sse, toast.TypeSuccess, "Key deleted", k.Name)
 	h.reRenderKeys(r, sse)
 }
 
@@ -266,7 +265,7 @@ func (h *Handler) userCreate(w http.ResponseWriter, r *http.Request) {
 	h.users.invalidate()
 
 	closeDialog(sse, "create-user")
-	notify(sse, toast.VariantSuccess, "User created", u.Username+" ("+u.Role+")")
+	notify(sse, toast.TypeSuccess, "User created", u.Username+" ("+u.Role+")")
 	h.reRenderUsers(r, sse)
 }
 
@@ -295,7 +294,7 @@ func (h *Handler) userPassword(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = sse.PatchElementTempl(views.ClearInline("set-password-error"))
 	closeDialog(sse, "set-password")
-	notify(sse, toast.VariantSuccess, "Password set", name+" was signed out everywhere.")
+	notify(sse, toast.TypeSuccess, "Password set", name+" was signed out everywhere.")
 	h.reRenderUsers(r, sse)
 }
 
@@ -304,10 +303,10 @@ func (h *Handler) userRole(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	role := r.URL.Query().Get("role")
 	if err := h.store.SetRole(r.Context(), name, role); err != nil {
-		notify(sse, toast.VariantError, storeErrTitle(err)+": change role", cleanErr(err))
+		notify(sse, toast.TypeError, storeErrTitle(err)+": change role", cleanErr(err))
 		return
 	}
-	notify(sse, toast.VariantSuccess, "Role updated", name+" is now "+role)
+	notify(sse, toast.TypeSuccess, "Role updated", name+" is now "+role)
 	h.reRenderUsers(r, sse)
 }
 
@@ -319,16 +318,16 @@ func (h *Handler) userDelete(w http.ResponseWriter, r *http.Request) {
 	// page on a dead cookie. The table already hides the button; this is the
 	// server-side half of the same rule.
 	if strings.EqualFold(name, identityOf(r).Name) {
-		notify(sse, toast.VariantError, "Cannot delete yourself",
+		notify(sse, toast.TypeError, "Cannot delete yourself",
 			"Ask another admin to remove this account.")
 		return
 	}
 	if err := h.store.DeleteUser(r.Context(), name); err != nil {
-		notify(sse, toast.VariantError, storeErrTitle(err)+": delete user", cleanErr(err))
+		notify(sse, toast.TypeError, storeErrTitle(err)+": delete user", cleanErr(err))
 		return
 	}
 	h.users.invalidate()
-	notify(sse, toast.VariantSuccess, "User deleted", name)
+	notify(sse, toast.TypeSuccess, "User deleted", name)
 	h.reRenderUsers(r, sse)
 }
 

@@ -1,6 +1,7 @@
 package views
 
 import (
+	"github.com/mark3labs/msbd/internal/dashboard/components/spinner"
 	"strings"
 
 	"github.com/mark3labs/msbd/internal/dashboard/components/badge"
@@ -29,21 +30,23 @@ templ ImagesPage(m Meta, rows []ImageRow, s TableSort) {
 				@icon.RefreshCw(icon.Props{Class: "size-4"})
 				Refresh
 			}
-			@button.Button(button.Props{
-				Variant: button.VariantSecondary,
-				Size:    button.SizeSm,
-				Attributes: templ.Attributes{
-					"aria-label": "Prune unused images",
-					"data-on:click": confirmAction(
-						"Prune unused images?",
-						"Removes every cached image, manifest and layer that no sandbox or snapshot references. Images still in use are kept. This cannot be undone, but anything removed can be pulled again.",
-						"Prune",
-						dsPost("/ui/images/prune"),
-					),
-				},
-			}) {
-				@icon.Trash(icon.Props{Class: "size-4"})
-				Prune
+			if CanAdmin(ctx) {
+				@button.Button(button.Props{
+					Variant: button.VariantSecondary,
+					Size:    button.SizeSm,
+					Attributes: templ.Attributes{
+						"aria-label": "Prune unused images",
+						"data-on:click": confirmAction(
+							"Prune unused images?",
+							"Removes every cached image, manifest and layer that no sandbox or snapshot references. Images still in use are kept. This cannot be undone, but anything removed can be pulled again.",
+							"Prune",
+							dsPost("/ui/images/prune"),
+						),
+					},
+				}) {
+					@icon.Trash(icon.Props{Class: "size-4"})
+					Prune
+				}
 			}
 			@dialogOpenButton("pull-image", "Pull image")
 		}
@@ -131,26 +134,28 @@ templ ImageTable(rows []ImageRow, s TableSort) {
 									<div class="flex items-center justify-end gap-1">
 										@iconButton("Inspect "+im.Reference, "info",
 											dsGet("/ui/images/inspect?ref="+queryVal(im.Reference)))
-										@iconButton("Re-pull "+im.Reference+" (fetch the latest copy)", "refresh-cw",
-											dsPost("/ui/images/pull?ref="+queryVal(im.Reference)+"&force=1"))
-										@iconButton("Launch a sandbox from "+im.Reference, "circle-play",
-											"$sbximage="+jsExpr(im.Reference)+";"+openDialogJS("create-sandbox"))
-										@button.Button(button.Props{
-											Variant: button.VariantGhost,
-											Size:    button.SizeIcon,
-											Class:   "size-8 text-destructive",
-											Attributes: templ.Attributes{
-												"title":      "Remove " + im.Reference,
-												"aria-label": "Remove image " + im.Reference,
-												"data-on:click": confirmAction(
-													"Remove image?",
-													removeImageBody(im),
-													"Remove",
-													dsDelete("/ui/images?ref="+queryVal(im.Reference)),
-												),
-											},
-										}) {
-											@icon.Trash2(icon.Props{Class: "size-4"})
+										if CanAdmin(ctx) {
+											@iconButton("Re-pull "+im.Reference+" (fetch the latest copy)", "refresh-cw",
+												dsPost("/ui/images/pull?ref="+queryVal(im.Reference)+"&force=1"))
+											@iconButton("Launch a sandbox from "+im.Reference, "circle-play",
+												"$sbximage="+jsExpr(im.Reference)+";"+openDialogJS("create-sandbox"))
+											@button.Button(button.Props{
+												Variant: button.VariantGhost,
+												Size:    button.SizeIcon,
+												Class:   "size-8 text-destructive",
+												Attributes: templ.Attributes{
+													"title":      "Remove " + im.Reference,
+													"aria-label": "Remove image " + im.Reference,
+													"data-on:click": confirmAction(
+														"Remove image?",
+														removeImageBody(im),
+														"Remove",
+														dsDelete("/ui/images?ref="+queryVal(im.Reference)),
+													),
+												},
+											}) {
+												@icon.Trash2(icon.Props{Class: "size-4"})
+											}
 										}
 									</div>
 								}
@@ -175,7 +180,7 @@ templ PullProgress(ref, elapsed string) {
 	<div id="pull-progress" class="mb-4">
 		@card.Card(card.Props{Class: "border-primary/40"}) {
 			@card.Content(card.ContentProps{Class: "flex flex-wrap items-center gap-3 p-4"}) {
-				@icon.LoaderCircle(icon.Props{Class: "size-4 shrink-0 animate-spin text-primary"})
+				@spinner.Spinner(spinner.Props{Class: "shrink-0 text-primary"})
 				<div class="min-w-0 flex-1">
 					<p class="text-sm font-medium">
 						Pulling <span class="font-mono">{ ref }</span>

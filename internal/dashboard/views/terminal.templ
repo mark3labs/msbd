@@ -28,6 +28,12 @@ templ TerminalPage(id, wsBase, ticket string, embed bool) {
 				#term {
 					position: fixed;
 					inset: 0;
+				}
+				/* FitAddon subtracts the xterm element's padding, not its
+				   parent's. Padding #term over-allocates rows and clips the last
+				   line, especially at large fonts and fractional iframe sizes. */
+				#term > .xterm {
+					height: 100%;
 					padding: 6px;
 					box-sizing: border-box;
 				}
@@ -41,7 +47,9 @@ templ TerminalPage(id, wsBase, ticket string, embed bool) {
 					align-items: center;
 					gap: 10px;
 					padding: 4px 10px;
-					font: 12px ui-monospace, monospace;
+					font:
+						12px ui-monospace,
+						monospace;
 					color: #999;
 					background: rgba(0, 0, 0, 0.65);
 				}
@@ -67,7 +75,9 @@ templ TerminalPage(id, wsBase, ticket string, embed bool) {
 					background: #f59e0b;
 				}
 				#bar button {
-					font: 12px ui-monospace, monospace;
+					font:
+						12px ui-monospace,
+						monospace;
 					padding: 2px 8px;
 					color: #ddd;
 					background: #1a1a1a;
@@ -97,7 +107,9 @@ templ TerminalPage(id, wsBase, ticket string, embed bool) {
 					background: #0a0a0a;
 				}
 				#overlay button {
-					font: 13px ui-monospace, monospace;
+					font:
+						13px ui-monospace,
+						monospace;
 					margin: 12px 6px 0;
 					padding: 6px 14px;
 					color: #eee;
@@ -119,7 +131,7 @@ templ TerminalPage(id, wsBase, ticket string, embed bool) {
 				<button id="btn-smaller" type="button" title="Decrease font size" aria-label="Decrease font size">A−</button>
 				<button id="btn-bigger" type="button" title="Increase font size" aria-label="Increase font size">A+</button>
 				<button id="btn-clear" type="button" title="Clear the screen">Clear</button>
-				<a href="/" style="color:#8ab4ff;text-decoration:none">← dashboard</a>
+				<a href="/" style="color: #8ab4ff; text-decoration: none">← dashboard</a>
 			</div>
 			<div
 				id="term"
@@ -128,9 +140,9 @@ templ TerminalPage(id, wsBase, ticket string, embed bool) {
 				data-ticket={ ticket }
 				if embed {
 					data-embed="1"
-					style="top:0"
+					style="top: 0"
 				} else {
-					style="top:26px"
+					style="top: 26px"
 				}
 			></div>
 			<div id="overlay">
@@ -267,11 +279,15 @@ templ TerminalPage(id, wsBase, ticket string, embed bool) {
 					function setFont(next) {
 						fontSize = Math.max(8, Math.min(28, next));
 						term.options.fontSize = fontSize;
-						try { localStorage.setItem(FONT_KEY, String(fontSize)); } catch (e) {}
+						try {
+							localStorage.setItem(FONT_KEY, String(fontSize));
+						} catch (e) {}
 						refit();
 					}
 
-					document.getElementById("btn-reconnect").addEventListener("click", reconnect);
+					document
+						.getElementById("btn-reconnect")
+						.addEventListener("click", reconnect);
 					const back = document.getElementById("btn-back");
 					if (back) {
 						back.addEventListener("click", () => {
@@ -279,11 +295,17 @@ templ TerminalPage(id, wsBase, ticket string, embed bool) {
 						});
 					}
 					const bigger = document.getElementById("btn-bigger");
-					if (bigger) bigger.addEventListener("click", () => setFont(fontSize + 1));
+					if (bigger)
+						bigger.addEventListener("click", () => setFont(fontSize + 1));
 					const smaller = document.getElementById("btn-smaller");
-					if (smaller) smaller.addEventListener("click", () => setFont(fontSize - 1));
+					if (smaller)
+						smaller.addEventListener("click", () => setFont(fontSize - 1));
 					const clear = document.getElementById("btn-clear");
-					if (clear) clear.addEventListener("click", () => { term.clear(); term.focus(); });
+					if (clear)
+						clear.addEventListener("click", () => {
+							term.clear();
+							term.focus();
+						});
 
 					function sendResize() {
 						if (ws && ws.readyState === WebSocket.OPEN) {
@@ -307,6 +329,9 @@ templ TerminalPage(id, wsBase, ticket string, embed bool) {
 						fit.fit();
 						sendResize();
 					}
+					// Also fit when the iframe/container changes independently of a
+					// window resize (tabs, responsive cards, or fractional sizing).
+					new ResizeObserver(refit).observe(el);
 					window.addEventListener("resize", refit);
 					// Mobile: react to the on-screen keyboard resizing the viewport.
 					if (window.visualViewport) {
@@ -346,7 +371,7 @@ templ TerminalNotFound(id string) {
 			</style>
 		</head>
 		<body>
-			<div style="text-align:center">
+			<div style="text-align: center">
 				<p>Sandbox <b>{ id }</b> was not found.</p>
 				<p><a href="/sandboxes">← Back to dashboard</a></p>
 			</div>

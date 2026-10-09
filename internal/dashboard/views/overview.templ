@@ -56,13 +56,7 @@ templ OverviewBody(d OverviewData) {
 				}
 				@card.Content(card.ContentProps{Class: "space-y-4"}) {
 					if d.MaxSandboxes > 0 {
-						@progress.Progress(progress.Props{
-							Value:     d.CapPercent,
-							Max:       100,
-							ShowValue: true,
-							Label:     "Sandbox slots",
-							Variant:   capacityVariant(d.CapPercent),
-						})
+						@resourceProgress(d.CapPercent, "Sandbox slots", capacityClass(d.CapPercent))
 						if d.CapPercent >= 90 {
 							<p class="text-xs text-destructive">
 								Nearly full — further creates will fail with "capacity reached".
@@ -92,18 +86,8 @@ templ OverviewBody(d OverviewData) {
 					if !d.MetricsOK {
 						<p class="text-sm text-muted-foreground">{ orDashS(d.MetricsNote) }</p>
 					} else {
-						@progress.Progress(progress.Props{
-							Value:     pct(d.CPUPercent),
-							Max:       100,
-							ShowValue: true,
-							Label:     "CPU " + pct1(d.CPUPercent),
-						})
-						@progress.Progress(progress.Props{
-							Value:     d.MemPercent,
-							Max:       100,
-							ShowValue: true,
-							Label:     "Memory " + d.MemUsed + " / " + d.MemLimit,
-						})
+						@resourceProgress(pct(d.CPUPercent), "CPU "+pct1(d.CPUPercent), "")
+						@resourceProgress(d.MemPercent, "Memory "+d.MemUsed+" / "+d.MemLimit, "")
 					}
 				}
 			}
@@ -165,13 +149,22 @@ func statSub(d OverviewData) string {
 	return "no cap"
 }
 
-func capacityVariant(p int) progress.Variant {
+func capacityClass(p int) string {
 	switch {
 	case p >= 90:
-		return progress.VariantDanger
+		return "[&_[data-slot=progress-indicator]]:bg-destructive"
 	case p >= 70:
-		return progress.VariantWarning
+		return "[&_[data-slot=progress-indicator]]:bg-amber-500"
 	default:
-		return progress.VariantSuccess
+		return "[&_[data-slot=progress-indicator]]:bg-emerald-500"
+	}
+}
+
+templ resourceProgress(value int, label, class string) {
+	@progress.Progress(progress.Props{Value: value, Max: 100, Class: class}) {
+		@progress.Label() {
+			{ label }
+		}
+		@progress.Value()
 	}
 }

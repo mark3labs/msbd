@@ -87,29 +87,31 @@ templ VolumeTable(rows []VolumeRow, s TableSort) {
 								@table.Cell(table.CellProps{Class: "text-xs whitespace-nowrap"}) {
 									{ v.Used }
 									if v.Capacity != "—" {
-										<span class="text-muted-foreground"> / { v.Capacity }</span>
+										<span class="text-muted-foreground">/ { v.Capacity }</span>
 									}
 								}
 								@table.Cell(table.CellProps{Class: "hidden text-xs whitespace-nowrap sm:table-cell"}) {
 									@TimeAgo(v.CreatedAt)
 								}
 								@table.Cell(table.CellProps{Class: "text-right"}) {
-									@button.Button(button.Props{
-										Variant: button.VariantGhost,
-										Size:    button.SizeIcon,
-										Class:   "size-8 text-destructive",
-										Attributes: templ.Attributes{
-											"title":      "Delete " + v.Name,
-											"aria-label": "Delete volume " + v.Name,
-											"data-on:click": confirmAction(
-												"Delete volume?",
-												v.Name+" and everything stored in it will be removed. This cannot be undone.",
-												"Delete",
-												dsDelete("/ui/volumes/"+pathSeg(v.Name)),
-											),
-										},
-									}) {
-										@icon.Trash2(icon.Props{Class: "size-4"})
+									if CanAdmin(ctx) {
+										@button.Button(button.Props{
+											Variant: button.VariantGhost,
+											Size:    button.SizeIcon,
+											Class:   "size-8 text-destructive",
+											Attributes: templ.Attributes{
+												"title":      "Delete " + v.Name,
+												"aria-label": "Delete volume " + v.Name,
+												"data-on:click": confirmAction(
+													"Delete volume?",
+													v.Name+" and everything stored in it will be removed. This cannot be undone.",
+													"Delete",
+													dsDelete("/ui/volumes/"+pathSeg(v.Name)),
+												),
+											},
+										}) {
+											@icon.Trash2(icon.Props{Class: "size-4"})
+										}
 									}
 								}
 							}

@@ -8,9 +8,9 @@ import (
 
 // verifiedSDKVersion is the microsandbox SDK release whose agent wire format
 // the constants and CBOR struct mirrors in terminal_agent.go were verified
-// against. The SDK pins the embedded FFI and the downloaded msb runtime to this
-// exact version, so the protocol cannot drift at runtime — but a deliberate SDK
-// bump can change the wire format.
+// against. The SDK pins the embedded FFI, but EnsureRuntime in 0.7.x reuses
+// existing host runtime pairs without a version check. Provision a matching
+// runtime explicitly when validating a deliberate SDK upgrade.
 //
 // When this test fails after bumping the SDK: re-verify the protocolVersion,
 // message-type strings, and wire* struct fields in terminal_agent.go against
@@ -39,7 +39,22 @@ import (
 //     the ExecRequest we send is equivalent to declaring v=6 for peer-gating
 //     purposes: exec is available at every generation.
 //   - sdk/go/agent.go (the transport this backend rides) is byte-identical.
-const verifiedSDKVersion = "0.6.16"
+//
+// 0.6.16 → 0.7.7 verification (protocol generation 7 → 9):
+//   - Compared tagged v0.6.16 and v0.7.7 source from
+//     https://github.com/superradcompany/microsandbox/tree/v0.7.7:
+//     crates/protocol/lib/exec.rs and sdk/go/agent.go are byte-identical.
+//   - message.rs preserves the envelope (v/t/p, serde_bytes p, skipped id/flags),
+//     all exec wire strings, flags and minimum generation. Generation 8 bulk
+//     is opt-in for FS/TCP (bulk.rs); Rust sandbox/attach.rs still uses CBOR
+//     ExecRequest and exec data/resize/signal, with no bulk offer. Generation 9
+//     adds workload/transport-credit and root-disk controls.
+//   - Verified 2026-10-09 on /dev/kvm using an isolated MSB_HOME provisioned
+//     via InstallRuntime (msb --version = 0.7.7, libkrunfw.so.5.6.1):
+//     TestTerminalLive passed with public.ecr.aws/docker/library/alpine:3.21.
+//     Confirmed /dev/pts/0, initial 24x80, stdin/output round trip, resize to
+//     37x101, Ctrl-C interrupting sleep 30, and core.exec.exited code 7.
+const verifiedSDKVersion = "0.7.7"
 
 func TestPinnedSDKVersion(t *testing.T) {
 	if got := msb.SDKVersion(); got != verifiedSDKVersion {

@@ -127,7 +127,7 @@ func (h *Handler) imageInspect(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	_ = sse.PatchElementTempl(views.ImageDetailDialog(v))
-	_ = sse.ExecuteScript("window.tui?.dialog?.open('image-detail')")
+	_ = sse.ExecuteScript("window.templ?.dialog?.open('image-detail')")
 }
 
 type pullImageSignals struct {
@@ -165,7 +165,7 @@ func (h *Handler) imagePull(w http.ResponseWriter, r *http.Request) {
 	}
 	if wasCached && !force {
 		closeDialog(sse, "pull-image")
-		notify(sse, toast.VariantInfo, "Already cached", ref+" is in the local cache. Use Force (or Re-pull) to fetch a newer copy.")
+		notify(sse, toast.TypeInfo, "Already cached", ref+" is in the local cache. Use Force (or Re-pull) to fetch a newer copy.")
 		return
 	}
 
@@ -202,7 +202,7 @@ func (h *Handler) imagePull(w http.ResponseWriter, r *http.Request) {
 				if hint := pullErrorHint(msg); hint != "" {
 					msg += "\n\n" + hint
 				}
-				notify(sse, toast.VariantError, "Pull failed", msg)
+				notify(sse, toast.TypeError, "Pull failed", msg)
 				_ = sse.PatchElementTempl(views.InlineError("pull-image-error", "Pull failed", msg))
 				return
 			}
@@ -225,18 +225,18 @@ func (h *Handler) imagePull(w http.ResponseWriter, r *http.Request) {
 // moving tag is the only way to know whether anything changed.
 func (h *Handler) notifyPullOutcome(sse *datastar.ServerSentEventGenerator, img *core.Image, priorDigest string, wasCached bool, took time.Duration) {
 	if img == nil {
-		notify(sse, toast.VariantSuccess, "Pull complete", "took "+fmtDuration(took.Seconds()))
+		notify(sse, toast.TypeSuccess, "Pull complete", "took "+fmtDuration(took.Seconds()))
 		return
 	}
 	switch {
 	case !wasCached:
-		notify(sse, toast.VariantSuccess, "Image pulled",
+		notify(sse, toast.TypeSuccess, "Image pulled",
 			img.Reference+" is now cached ("+imgSize(img)+", took "+fmtDuration(took.Seconds())+").")
 	case priorDigest != "" && img.ManifestDigest != priorDigest:
-		notify(sse, toast.VariantSuccess, "Image updated",
+		notify(sse, toast.TypeSuccess, "Image updated",
 			img.Reference+" fetched a newer copy — digest "+views.ShortDigest(priorDigest)+" → "+views.ShortDigest(img.ManifestDigest)+".")
 	default:
-		notify(sse, toast.VariantInfo, "Already up to date",
+		notify(sse, toast.TypeInfo, "Already up to date",
 			img.Reference+" is unchanged — the registry copy matches the cached one.")
 	}
 }
@@ -278,7 +278,7 @@ func (h *Handler) imageRemove(w http.ResponseWriter, r *http.Request) {
 	if notifyErr(sse, "Remove image", h.svc.RemoveImage(r.Context(), ref, true)) {
 		return
 	}
-	notify(sse, toast.VariantSuccess, "Image removed", ref)
+	notify(sse, toast.TypeSuccess, "Image removed", ref)
 	h.reRenderImages(r, sse)
 }
 
@@ -289,7 +289,7 @@ func (h *Handler) imagePrune(w http.ResponseWriter, r *http.Request) {
 	if notifyErr(sse, "Prune images", err) {
 		return
 	}
-	notify(sse, toast.VariantSuccess, "Prune complete", pruneSummary(rep))
+	notify(sse, toast.TypeSuccess, "Prune complete", pruneSummary(rep))
 	h.reRenderImages(r, sse)
 }
 

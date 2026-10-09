@@ -1,5 +1,3 @@
-// templui component table - version: v1.11.1 installed by templui v1.11.1
-// 📚 Documentation: https://templui.io/docs/components/table
 package table
 
 import "github.com/mark3labs/msbd/internal/dashboard/utils"
@@ -32,7 +30,6 @@ type RowProps struct {
 	ID         string
 	Class      string
 	Attributes templ.Attributes
-	Selected   bool
 }
 
 type HeadProps struct {
@@ -58,15 +55,18 @@ templ Table(props ...Props) {
 	if len(props) > 0 {
 		{{ p = props[0] }}
 	}
-	<table
-		if p.ID != "" {
-			id={ p.ID }
-		}
-		class={ utils.TwMerge("w-full caption-bottom text-sm", p.Class) }
-		{ p.Attributes... }
-	>
-		{ children... }
-	</table>
+	<div data-slot="table-container" class="relative w-full overflow-x-auto">
+		<table
+			if p.ID != "" {
+				id={ p.ID }
+			}
+			data-slot="table"
+			class={ utils.CN("w-full caption-bottom text-sm", p.Class) }
+			{ p.Attributes... }
+		>
+			{ children... }
+		</table>
+	</div>
 }
 
 templ Header(props ...HeaderProps) {
@@ -78,7 +78,8 @@ templ Header(props ...HeaderProps) {
 		if p.ID != "" {
 			id={ p.ID }
 		}
-		class={ utils.TwMerge("[&_tr]:border-b", p.Class) }
+		data-slot="table-header"
+		class={ utils.CN("[&_tr]:border-b", p.Class) }
 		{ p.Attributes... }
 	>
 		{ children... }
@@ -94,7 +95,8 @@ templ Body(props ...BodyProps) {
 		if p.ID != "" {
 			id={ p.ID }
 		}
-		class={ utils.TwMerge("[&_tr:last-child]:border-0", p.Class) }
+		data-slot="table-body"
+		class={ utils.CN("[&_tr:last-child]:border-0", p.Class) }
 		{ p.Attributes... }
 	>
 		{ children... }
@@ -110,7 +112,8 @@ templ Footer(props ...FooterProps) {
 		if p.ID != "" {
 			id={ p.ID }
 		}
-		class={ utils.TwMerge("border-t bg-muted/50 font-medium [&>tr]:last:border-b-0", p.Class) }
+		data-slot="table-footer"
+		class={ utils.CN("bg-muted/50 border-t font-medium [&>tr]:last:border-b-0", p.Class) }
 		{ p.Attributes... }
 	>
 		{ children... }
@@ -126,16 +129,8 @@ templ Row(props ...RowProps) {
 		if p.ID != "" {
 			id={ p.ID }
 		}
-		class={
-			utils.TwMerge(
-				"border-b transition-colors hover:bg-muted/50",
-				utils.If(p.Selected, "data-[tui-table-state-selected]:bg-muted"),
-				p.Class,
-			),
-		}
-		if p.Selected {
-			data-tui-table-state-selected
-		}
+		data-slot="table-row"
+		class={ utils.CN("hover:bg-muted/50 data-[state=selected]:bg-muted border-b transition-colors has-aria-expanded:bg-muted/50", p.Class) }
 		{ p.Attributes... }
 	>
 		{ children... }
@@ -147,17 +142,14 @@ templ Head(props ...HeadProps) {
 	if len(props) > 0 {
 		{{ p = props[0] }}
 	}
+	// adds the checkbox padding for our
+	// data-slot=checkbox markup (our checkbox has no role attribute).
 	<th
 		if p.ID != "" {
 			id={ p.ID }
 		}
-		class={
-			utils.TwMerge(
-				"h-10 px-2 text-left align-middle font-medium text-muted-foreground",
-				"[&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]",
-				p.Class,
-			),
-		}
+		data-slot="table-head"
+		class={ utils.CN("text-foreground h-10 px-2 text-left align-middle font-medium whitespace-nowrap [&:has([role=checkbox])]:pr-0 [&:has([data-slot=checkbox])]:pr-0", p.Class) }
 		{ p.Attributes... }
 	>
 		{ children... }
@@ -169,17 +161,14 @@ templ Cell(props ...CellProps) {
 	if len(props) > 0 {
 		{{ p = props[0] }}
 	}
+	// adds the checkbox padding for our
+	// data-slot=checkbox markup (our checkbox has no role attribute).
 	<td
 		if p.ID != "" {
 			id={ p.ID }
 		}
-		class={
-			utils.TwMerge(
-				"p-2 align-middle",
-				"[&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]",
-				p.Class,
-			),
-		}
+		data-slot="table-cell"
+		class={ utils.CN("p-2 align-middle whitespace-nowrap [&:has([role=checkbox])]:pr-0 [&:has([data-slot=checkbox])]:pr-0", p.Class) }
 		{ p.Attributes... }
 	>
 		{ children... }
@@ -195,7 +184,8 @@ templ Caption(props ...CaptionProps) {
 		if p.ID != "" {
 			id={ p.ID }
 		}
-		class={ utils.TwMerge("mt-4 text-sm text-muted-foreground", p.Class) }
+		data-slot="table-caption"
+		class={ utils.CN("text-muted-foreground mt-4 text-sm", p.Class) }
 		{ p.Attributes... }
 	>
 		{ children... }

@@ -6,7 +6,21 @@ local daemon, temporary HOME/runtime/database, randomly generated credentials,
 and newly created microVM. No user's `.env`, existing sandbox or production
 server was used. Only new test infrastructure files were edited by this work.
 
-## Confirmed defects / proposed fixes
+## Final acceptance
+
+After fixes and a full embedded asset rebuild, **two consecutive isolated
+Chromium runs passed all 19 checks**, including real microVM files and xterm
+WebSocket command input; no JavaScript errors occurred. Latest artifacts are
+in ignored `bin/browser/`. The historical findings below are retained for
+regression context, not outstanding defects.
+
+Fixes: rebuilt CSS with upstream state/orientation variants and animations;
+used `DefaultOpen` for key reveal; preserved password target signals on portal;
+hid mutation controls from viewers; fixed delayed-bundle checkbox hydration.
+The xterm harness now waits for a prompt and verifies iframe focus before
+typing, retaining the exact guest-file assertion.
+
+## Initial defects / proposed fixes (resolved)
 
 ### 1. Committed CSS is stale after component migration
 
@@ -123,6 +137,5 @@ Passing real-browser behaviors after CSS regeneration:
   guest file through the REST API and checks its content.
 - No browser `pageerror` events in the final run.
 
-Artifacts are ignored, not committed. The reproducible script intentionally
-retains assertions for these unfixed bugs and exits nonzero. No shared runtime,
+Artifacts are ignored, not committed. The reproducible script retains assertions for these regressions. No shared runtime,
 view, handler, asset or build file was changed by this browser-test work.

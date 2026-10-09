@@ -2,10 +2,16 @@ package views
 
 import (
 	"github.com/mark3labs/msbd/internal/dashboard/components/badge"
+	"github.com/mark3labs/msbd/internal/dashboard/components/breadcrumb"
 	"github.com/mark3labs/msbd/internal/dashboard/components/button"
+	"github.com/mark3labs/msbd/internal/dashboard/components/buttongroup"
 	"github.com/mark3labs/msbd/internal/dashboard/components/card"
+	"github.com/mark3labs/msbd/internal/dashboard/components/copybutton"
+	"github.com/mark3labs/msbd/internal/dashboard/components/dialog"
 	"github.com/mark3labs/msbd/internal/dashboard/components/icon"
 	"github.com/mark3labs/msbd/internal/dashboard/components/input"
+	selectcomp "github.com/mark3labs/msbd/internal/dashboard/components/select"
+	"github.com/mark3labs/msbd/internal/dashboard/components/spinner"
 	"github.com/mark3labs/msbd/internal/dashboard/components/tabs"
 	"github.com/mark3labs/msbd/internal/dashboard/components/textarea"
 )
@@ -41,13 +47,18 @@ templ SandboxDetailPage(d SandboxDetail, sandboxes []SandboxRow) {
 			@detailActions(d)
 		</div>
 		<div id="detail-error"></div>
-		@tabs.Tabs(tabs.Props{ID: "sbxtabs"}) {
+		@tabs.Tabs(tabs.Props{ID: "sbxtabs", Value: stringPtr("overview"), Attributes: templ.Attributes{
+			"data-on:tabs-value-change": "$sbxtab = evt.detail.value",
+			"data-effect":               "window.templ && window.templ.tabs && window.templ.tabs.setActive(el, $sbxtab)",
+		}}) {
 			@tabs.List(tabs.ListProps{Class: "w-full justify-start overflow-x-auto"}) {
-				@tabs.Trigger(tabs.TriggerProps{Value: "overview", IsActive: true}) {
+				@tabs.Trigger(tabs.TriggerProps{Value: "overview"}) {
 					Overview
 				}
-				@tabs.Trigger(tabs.TriggerProps{Value: "run"}) {
-					Run
+				if CanAdmin(ctx) {
+					@tabs.Trigger(tabs.TriggerProps{Value: "run"}) {
+						Run
+					}
 				}
 				@tabs.Trigger(tabs.TriggerProps{Value: "logs"}) {
 					Logs
@@ -55,11 +66,13 @@ templ SandboxDetailPage(d SandboxDetail, sandboxes []SandboxRow) {
 				@tabs.Trigger(tabs.TriggerProps{Value: "files"}) {
 					Files
 				}
-				@tabs.Trigger(tabs.TriggerProps{Value: "terminal"}) {
-					Terminal
+				if CanAdmin(ctx) {
+					@tabs.Trigger(tabs.TriggerProps{Value: "terminal"}) {
+						Terminal
+					}
 				}
 			}
-			@tabs.Content(tabs.ContentProps{Value: "overview", IsActive: true}) {
+			@tabs.Content(tabs.ContentProps{Value: "overview"}) {
 				@overviewTab(d)
 			}
 			@tabs.Content(tabs.ContentProps{Value: "run"}) {
@@ -83,84 +96,75 @@ templ SandboxDetailPage(d SandboxDetail, sandboxes []SandboxRow) {
 
 func detailSignals(d SandboxDetail) string {
 	return "{sbxstate:" + jsExpr(d.State) + ", sbxuptime:" + jsExpr(d.Uptime) +
-		", runcmd:'', filepath:" + jsExpr(d.Workdir) +
+		", sbxtab:'overview', runcmd:'', filepath:" + jsExpr(d.Workdir) +
 		", showhidden:false, pathediting:false, logsrc:'', logtail:200, logwrap:true, fileedit:'', filename:'', newdir:''}"
 }
 
 // detailActions is the lifecycle action set, mirrored from the list row so the
 // detail page is not a dead end.
 templ detailActions(d SandboxDetail) {
-	<div class="flex flex-wrap items-center gap-2">
-		@button.Button(button.Props{
-			Variant: button.VariantOutline,
-			Size:    button.SizeSm,
-			Attributes: templ.Attributes{
-				"data-on:click":  dsPost("/ui/sandboxes/"+pathSeg(d.ID)+"/start"),
-				"data-indicator": "startbusy",
-				"data-show":      "$sbxstate !== 'running'",
-			},
-		}) {
-			@Busy("startbusy")
-			@icon.CirclePlay(icon.Props{Class: "size-4"})
-			Start
+	if CanAdmin(ctx) {
+		@buttongroup.ButtonGroup(buttongroup.Props{Class: "flex-wrap", Attributes: templ.Attributes{"aria-label": "Sandbox actions"}}) {
+			// Keep one first child: hidden sibling buttons still count for the
+			// group's first-child corner rules.
+			@button.Button(button.Props{
+				Variant: button.VariantOutline,
+				Size:    button.SizeSm,
+				Attributes: templ.Attributes{
+					"data-on:click": "$sbxstate === 'running' ? " + dsPost("/ui/sandboxes/"+pathSeg(d.ID)+"/stop") + " : " + dsPost("/ui/sandboxes/"+pathSeg(d.ID)+"/start"),
+					"data-indicator": "lifecyclebusy",
+					"data-attr:disabled": "$lifecyclebusy",
+				},
+			}) {
+				@Busy("lifecyclebusy")
+				<span data-show="$sbxstate !== 'running'">@icon.CirclePlay(icon.Props{Class: "size-4"})</span>
+				<span data-show="$sbxstate === 'running'">@icon.CircleStop(icon.Props{Class: "size-4"})</span>
+				<span data-text="$sbxstate === 'running' ? 'Stop' : 'Start'"></span>
+			}
+			@button.Button(button.Props{
+				Variant:    button.VariantOutline,
+				Size:       button.SizeSm,
+				Attributes: templ.Attributes{"data-on:click": openDialogJS("create-snapshot")},
+			}) {
+				@icon.Camera(icon.Props{Class: "size-4"})
+				Snapshot
+			}
+			@button.Button(button.Props{
+				Variant: button.VariantOutline,
+				Size:    button.SizeSm,
+				Href:    "/terminal/" + pathSeg(d.ID),
+				Target:  "_blank",
+				Attributes: templ.Attributes{
+					"rel":   "noopener",
+					"title": "Open the terminal in a new tab",
+				},
+			}) {
+				@icon.Terminal(icon.Props{Class: "size-4"})
+				Terminal
+			}
+			@button.Button(button.Props{
+				Variant: button.VariantOutline,
+				Size:    button.SizeSm,
+				Class:   "text-destructive",
+				Attributes: templ.Attributes{
+					"data-on:click": confirmAction(
+						"Delete sandbox?",
+						d.ID+" will be stopped and removed. This cannot be undone.",
+						"Delete",
+						dsDelete("/ui/sandboxes/"+pathSeg(d.ID)+"?back=1"),
+					),
+				},
+			}) {
+				@icon.Trash2(icon.Props{Class: "size-4"})
+				Delete
+			}
 		}
-		@button.Button(button.Props{
-			Variant: button.VariantOutline,
-			Size:    button.SizeSm,
-			Attributes: templ.Attributes{
-				"data-on:click":  dsPost("/ui/sandboxes/"+pathSeg(d.ID)+"/stop"),
-				"data-indicator": "stopbusy",
-				"data-show":      "$sbxstate === 'running'",
-			},
-		}) {
-			@Busy("stopbusy")
-			@icon.CircleStop(icon.Props{Class: "size-4"})
-			Stop
-		}
-		@button.Button(button.Props{
-			Variant:    button.VariantOutline,
-			Size:       button.SizeSm,
-			Attributes: templ.Attributes{"data-on:click": openDialogJS("create-snapshot")},
-		}) {
-			@icon.Camera(icon.Props{Class: "size-4"})
-			Snapshot
-		}
-		@button.Button(button.Props{
-			Variant: button.VariantOutline,
-			Size:    button.SizeSm,
-			Href:    "/terminal/" + pathSeg(d.ID),
-			Target:  "_blank",
-			Attributes: templ.Attributes{
-				"rel":   "noopener",
-				"title": "Open the terminal in a new tab",
-			},
-		}) {
-			@icon.Terminal(icon.Props{Class: "size-4"})
-			Terminal
-		}
-		@button.Button(button.Props{
-			Variant: button.VariantOutline,
-			Size:    button.SizeSm,
-			Class:   "text-destructive",
-			Attributes: templ.Attributes{
-				"data-on:click": confirmAction(
-					"Delete sandbox?",
-					d.ID+" will be stopped and removed. This cannot be undone.",
-					"Delete",
-					dsDelete("/ui/sandboxes/"+pathSeg(d.ID)+"?back=1"),
-				),
-			},
-		}) {
-			@icon.Trash2(icon.Props{Class: "size-4"})
-			Delete
-		}
-	</div>
+	}
 }
 
 // ---------------------------------------------------------------------------
 // Overview tab
 // ---------------------------------------------------------------------------
-
 templ overviewTab(d SandboxDetail) {
 	<div class="grid gap-4 pt-4 lg:grid-cols-2">
 		@card.Card() {
@@ -233,15 +237,7 @@ templ kv(k string) {
 }
 
 templ copyIconButton(targetID string) {
-	<button
-		type="button"
-		class="inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
-		title="Copy"
-		aria-label="Copy to clipboard"
-		onclick="navigator.clipboard.writeText(this.previousElementSibling.textContent)"
-	>
-		@icon.Copy(icon.Props{Class: "size-3.5"})
-	</button>
+	@copybutton.CopyButton(copybutton.Props{TargetID: targetID, Class: "size-7"})
 }
 
 // MetricsPanel renders the live, charted metrics block. It opens ONE long-lived
@@ -287,50 +283,51 @@ templ MetricsPanel(id string) {
 // ---------------------------------------------------------------------------
 // Run tab — backed by the async jobs API
 // ---------------------------------------------------------------------------
-
 templ runTab(d SandboxDetail) {
-	@card.Card(card.Props{Class: "mt-4"}) {
-		@card.Header() {
-			@card.Title() {
-				Run a command
-			}
-			@card.Description() {
-				Runs as an async job: output streams in, and long commands can be cancelled.
-			}
-		}
-		@card.Content() {
-			<form
-				class="flex flex-col gap-2 sm:flex-row sm:items-center"
-				data-on:submit={ dsPost("/ui/sandboxes/"+pathSeg(d.ID)+"/run") }
-				data-indicator="runbusy"
-			>
-				<div class="flex-1">
-					@input.Input(input.Props{
-						ID:          "runcmd",
-						Class:       "font-mono",
-						Placeholder: "echo hello",
-						Attributes: templ.Attributes{
-							"data-bind":  "runcmd",
-							"list":       "runcmd-history",
-							"aria-label": "Command to run",
-						},
-					})
-					<datalist id="runcmd-history"></datalist>
-				</div>
-				@button.Button(button.Props{
-					Type: button.TypeSubmit,
-					Attributes: templ.Attributes{
-						"data-attr": "{disabled: $runbusy || !$runcmd}",
-					},
-				}) {
-					@Busy("runbusy")
-					@icon.Play(icon.Props{Class: "size-4"})
-					Run
+	if CanAdmin(ctx) {
+		@card.Card(card.Props{Class: "mt-4"}) {
+			@card.Header() {
+				@card.Title() {
+					Run a command
 				}
-			</form>
-			@runHistoryScript()
-			<div id="run-history" class="mt-4 space-y-3"></div>
-			<div id="run-output"></div>
+				@card.Description() {
+					Runs as an async job: output streams in, and long commands can be cancelled.
+				}
+			}
+			@card.Content() {
+				<form
+					class="flex flex-col gap-2 sm:flex-row sm:items-center"
+					data-on:submit={ dsPost("/ui/sandboxes/" + pathSeg(d.ID) + "/run") }
+					data-indicator="runbusy"
+				>
+					<div class="flex-1">
+						@input.Input(input.Props{
+							ID:          "runcmd",
+							Class:       "font-mono",
+							Placeholder: "echo hello",
+							Attributes: templ.Attributes{
+								"data-bind":  "runcmd",
+								"list":       "runcmd-history",
+								"aria-label": "Command to run",
+							},
+						})
+						<datalist id="runcmd-history"></datalist>
+					</div>
+					@button.Button(button.Props{
+						Type: button.TypeSubmit,
+						Attributes: templ.Attributes{
+							"data-attr": "{disabled: $runbusy || !$runcmd}",
+						},
+					}) {
+						@Busy("runbusy")
+						@icon.Play(icon.Props{Class: "size-4"})
+						Run
+					}
+				</form>
+				@runHistoryScript()
+				<div id="run-history" class="mt-4 space-y-3"></div>
+				<div id="run-output"></div>
+			}
 		}
 	}
 }
@@ -382,7 +379,7 @@ templ RunBlock(j JobView) {
 					@icon.CircleX(icon.Props{Class: "size-4 text-destructive"})
 				}
 			} else {
-				@icon.LoaderCircle(icon.Props{Class: "size-4 animate-spin text-muted-foreground"})
+				@spinner.Spinner(spinner.Props{Class: "text-muted-foreground"})
 			}
 			<code class="min-w-0 flex-1 truncate text-xs">{ j.Cmd }</code>
 			if j.Done {
@@ -398,17 +395,19 @@ templ RunBlock(j JobView) {
 				<span class="text-xs text-muted-foreground">{ j.Elapsed }</span>
 			} else {
 				<span class="text-xs text-muted-foreground">{ j.Elapsed }</span>
-				@button.Button(button.Props{
-					Variant: button.VariantGhost,
-					Size:    button.SizeSm,
-					Class:   "h-7 text-destructive",
-					Attributes: templ.Attributes{
-						"data-on:click": dsPost("/ui/sandboxes/"+pathSeg(j.SandboxID)+"/jobs/"+pathSeg(j.JobID)+"/cancel"),
-						"aria-label":    "Cancel this command",
-					},
-				}) {
-					@icon.Ban(icon.Props{Class: "size-3.5"})
-					Cancel
+				if CanAdmin(ctx) {
+					@button.Button(button.Props{
+						Variant: button.VariantGhost,
+						Size:    button.SizeSm,
+						Class:   "h-7 text-destructive",
+						Attributes: templ.Attributes{
+							"data-on:click": dsPost("/ui/sandboxes/" + pathSeg(j.SandboxID) + "/jobs/" + pathSeg(j.JobID) + "/cancel"),
+							"aria-label":    "Cancel this command",
+						},
+					}) {
+						@icon.Ban(icon.Props{Class: "size-3.5"})
+						Cancel
+					}
 				}
 			}
 		</div>
@@ -445,7 +444,6 @@ func exitVariant(code int) badge.Variant {
 // ---------------------------------------------------------------------------
 // Logs tab
 // ---------------------------------------------------------------------------
-
 templ logsTab(d SandboxDetail) {
 	@card.Card(card.Props{Class: "mt-4"}) {
 		@card.Header(card.HeaderProps{Class: "gap-3"}) {
@@ -453,42 +451,15 @@ templ logsTab(d SandboxDetail) {
 				Logs
 			}
 			<div class="flex flex-wrap items-center gap-2">
-				<select
-					class="h-8 rounded-md border bg-background px-2 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring"
-					data-bind="logsrc"
-					aria-label="Log source"
-					data-on:change={ logsFetch(d.ID) }
-				>
-					<option value="">All sources</option>
-					<option value="stdout">stdout</option>
-					<option value="stderr">stderr</option>
-					<option value="output">output</option>
-					<option value="system">system</option>
-				</select>
-				<select
-					class="h-8 rounded-md border bg-background px-2 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring"
-					data-bind="logtail"
-					aria-label="Number of lines"
-					data-on:change={ logsFetch(d.ID) }
-				>
-					<option value="200">last 200</option>
-					<option value="500">last 500</option>
-					<option value="2000">last 2000</option>
-					<option value="0">everything</option>
-				</select>
-				<input
-					type="search"
-					class="h-8 w-40 rounded-md border bg-background px-2 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring"
-					placeholder="Search logs…"
-					aria-label="Search logs"
-					data-bind="logq"
-				/>
+				@signalSelect("logsrc", "logsrc", []selectcomp.ItemData{{Value: "", Label: "All sources"}, {Value: "stdout", Label: "stdout"}, {Value: "stderr", Label: "stderr"}, {Value: "output", Label: "output"}, {Value: "system", Label: "system"}}, "Choose…", logsFetch(d.ID))
+				@signalSelect("logtail", "logtail", []selectcomp.ItemData{{Value: "200", Label: "last 200"}, {Value: "500", Label: "last 500"}, {Value: "2000", Label: "last 2000"}, {Value: "0", Label: "everything"}}, "Choose…", logsFetch(d.ID))
+				@input.Input(input.Props{Type: "search", Class: "h-8 w-40 text-xs", Placeholder: "Search logs…", Attributes: templ.Attributes{"aria-label": "Search logs", "data-bind": "logq"}})
 				<label class="flex items-center gap-1 text-xs text-muted-foreground">
-					<input type="checkbox" class="size-3.5 rounded border" data-bind="logwrap"/>
+					@signalCheckbox("logwrap", "logwrap")
 					Wrap
 				</label>
 				<label class="flex items-center gap-1 text-xs text-muted-foreground">
-					<input type="checkbox" class="size-3.5 rounded border" data-bind="logfollow"/>
+					@signalCheckbox("logfollow", "logfollow")
 					Follow
 				</label>
 				@button.Button(button.Props{
@@ -546,13 +517,9 @@ templ LogsPanel(lines []LogLine) {
 		} else {
 			<div class="flex items-center justify-between pb-2 text-xs text-muted-foreground">
 				<span>{ itoa(len(lines)) } lines</span>
-				<button
-					type="button"
-					class="hover:text-foreground"
-					data-on:click="document.getElementById('logs-scroll').scrollTop = document.getElementById('logs-scroll').scrollHeight"
-				>
+				@button.Button(button.Props{Variant: button.VariantGhost, Size: button.SizeSm, Type: button.TypeButton, Class: "hover:text-foreground", Attributes: templ.Attributes{"data-on:click": "document.getElementById('logs-scroll').scrollTop = document.getElementById('logs-scroll').scrollHeight"}}) {
 					Jump to bottom ↓
-				</button>
+				}
 			</div>
 			<div
 				id="logs-scroll"
@@ -588,7 +555,6 @@ func logSourceClass(src string) string {
 // ---------------------------------------------------------------------------
 // Files tab
 // ---------------------------------------------------------------------------
-
 templ filesTab(d SandboxDetail) {
 	@card.Card(card.Props{Class: "mt-4"}) {
 		@card.Header(card.HeaderProps{Class: "gap-3"}) {
@@ -597,29 +563,31 @@ templ filesTab(d SandboxDetail) {
 			}
 			<div class="flex flex-wrap items-center gap-2">
 				<label class="flex items-center gap-1 text-xs text-muted-foreground">
-					<input type="checkbox" class="size-3.5 rounded border" data-bind="showhidden"/>
+					@signalCheckbox("showhidden", "showhidden")
 					Hidden files
 				</label>
-				@button.Button(button.Props{
-					Variant:    button.VariantOutline,
-					Size:       button.SizeSm,
-					Class:      "h-8",
-					Attributes: templ.Attributes{"data-on:click": openNativeJS("new-folder"), "aria-label": "New folder"},
-				}) {
-					@icon.FolderPlus(icon.Props{Class: "size-3.5"})
-					New folder
+				if CanAdmin(ctx) {
+					@button.Button(button.Props{
+						Variant:    button.VariantOutline,
+						Size:       button.SizeSm,
+						Class:      "h-8",
+						Attributes: templ.Attributes{"data-on:click": openNativeJS("new-folder"), "aria-label": "New folder"},
+					}) {
+						@icon.FolderPlus(icon.Props{Class: "size-3.5"})
+						New folder
+					}
+					<label class="inline-flex h-8 cursor-pointer items-center gap-1 rounded-md border px-3 text-sm hover:bg-accent">
+						@icon.Upload(icon.Props{Class: "size-3.5"})
+						Upload
+						<input
+							type="file"
+							class="hidden"
+							id="file-upload"
+							data-on:change={ uploadScript(d.ID) }
+							multiple
+						/>
+					</label>
 				}
-				<label class="inline-flex h-8 cursor-pointer items-center gap-1 rounded-md border px-3 text-sm hover:bg-accent">
-					@icon.Upload(icon.Props{Class: "size-3.5"})
-					Upload
-					<input
-						type="file"
-						class="hidden"
-						id="file-upload"
-						data-on:change={ uploadScript(d.ID) }
-						multiple
-					/>
-				</label>
 				@button.Button(button.Props{
 					Variant: button.VariantOutline,
 					Size:    button.SizeSm,
@@ -647,7 +615,7 @@ templ filesTab(d SandboxDetail) {
 }
 
 func filesFetch(id string) string {
-	return dsPost("/ui/sandboxes/"+pathSeg(id)+"/files")
+	return dsPost("/ui/sandboxes/" + pathSeg(id) + "/files")
 }
 
 // uploadScript posts the chosen files to the guest at the current directory.
@@ -672,45 +640,34 @@ templ addressBar(id string, crumbs []Crumb) {
 		data-indicator="filesbusy"
 	>
 		<!-- Breadcrumb (navigation mode) -->
-		<nav
-			data-show="!$pathediting"
-			aria-label="Breadcrumb"
-			class="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto text-sm [scrollbar-width:none]"
-		>
-			for i, c := range crumbs {
-				if i > 0 {
-					@icon.ChevronRight(icon.Props{Class: "size-3.5 shrink-0 text-muted-foreground/50"})
-				}
-				if i == len(crumbs)-1 {
-					<!-- Current directory: shown, not a link. -->
-					if i == 0 {
-						<span class="inline-flex size-6 shrink-0 items-center justify-center text-foreground" title="Root" aria-current="page">
-							@icon.House(icon.Props{Class: "size-4"})
-						</span>
-					} else {
-						<span class="truncate px-1 font-mono font-medium text-foreground" aria-current="page">{ c.Label }</span>
+		@breadcrumb.Breadcrumb(breadcrumb.Props{Class: "min-w-0 flex-1 overflow-x-auto", Attributes: templ.Attributes{"data-show": "!$pathediting"}}) {
+			@breadcrumb.List(breadcrumb.ListProps{Class: "flex-nowrap"}) {
+				for i, c := range crumbs {
+					if i > 0 {
+						@breadcrumb.Separator()
 					}
-				} else {
-					if i == 0 {
-						<button
-							type="button"
-							title="Root"
-							aria-label="Go to root"
-							class="inline-flex size-6 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
-							data-on:click={ crumbNav(id, c.Path) }
-						>
-							@icon.House(icon.Props{Class: "size-4"})
-						</button>
-					} else {
-						<button
-							type="button"
-							class="truncate rounded px-1 py-0.5 font-mono text-muted-foreground hover:bg-accent hover:text-foreground"
-							data-on:click={ crumbNav(id, c.Path) }
-						>{ c.Label }</button>
+					@breadcrumb.Item() {
+						if i == len(crumbs)-1 {
+							@breadcrumb.Page(breadcrumb.ItemProps{Class: "font-mono"}) {
+								if i == 0 {
+									@icon.House(icon.Props{Class: "size-4"})
+								} else {
+									{ c.Label }
+								}
+							}
+						} else {
+							@button.Button(button.Props{Variant: button.VariantGhost, Size: button.SizeXs, Class: "font-mono", Attributes: templ.Attributes{"data-on:click": crumbNav(id, c.Path), "aria-label": "Go to " + c.Path}}) {
+								if i == 0 {
+									@icon.House(icon.Props{Class: "size-4"})
+								} else {
+									{ c.Label }
+								}
+							}
+						}
 					}
 				}
 			}
-		</nav>
+		}
 		<!-- Raw path field (edit mode) -->
 		<input
 			id="filepath"
@@ -776,17 +733,13 @@ templ FilesPanel(id, dir string, crumbs []Crumb, rows []FileRow) {
 							@icon.File(icon.Props{Class: "size-4 shrink-0 text-muted-foreground"})
 						}
 						if f.IsDir {
-							<button
-								type="button"
-								class="min-w-0 flex-1 truncate text-left font-mono text-xs hover:underline"
-								data-on:click={ "$filepath=" + jsExpr(f.Path) + ";" + filesFetch(id) }
-							>{ f.Name }/</button>
+							@button.Button(button.Props{Variant: button.VariantGhost, Size: button.SizeSm, Type: button.TypeButton, Class: "min-w-0 flex-1 truncate text-left font-mono text-xs hover:underline", Attributes: templ.Attributes{"data-on:click": "$filepath=" + jsExpr(f.Path) + ";" + filesFetch(id)}}) {
+								{ f.Name }/
+							}
 						} else {
-							<button
-								type="button"
-								class="min-w-0 flex-1 truncate text-left font-mono text-xs hover:underline"
-								data-on:click={ "$filename=" + jsExpr(f.Path) + ";@get(" + jsExpr("/ui/sandboxes/"+pathSeg(id)+"/files/view?path="+queryVal(f.Path)) + ")" }
-							>{ f.Name }</button>
+							@button.Button(button.Props{Variant: button.VariantGhost, Size: button.SizeSm, Type: button.TypeButton, Class: "min-w-0 flex-1 truncate text-left font-mono text-xs hover:underline", Attributes: templ.Attributes{"data-on:click": "$filename=" + jsExpr(f.Path) + ";@get(" + jsExpr("/ui/sandboxes/"+pathSeg(id)+"/files/view?path="+queryVal(f.Path)) + ")"}}) {
+								{ f.Name }
+							}
 						}
 						<span class="hidden font-mono text-xs text-muted-foreground sm:inline">{ f.Mode }</span>
 						<span class="w-20 text-right text-xs text-muted-foreground tabular-nums">{ f.Size }</span>
@@ -802,20 +755,16 @@ templ FilesPanel(id, dir string, crumbs []Crumb, rows []FileRow) {
 									@icon.Download(icon.Props{Class: "size-3.5"})
 								</a>
 							}
-							<button
-								type="button"
-								class="inline-flex size-7 items-center justify-center rounded-md text-destructive hover:bg-accent"
-								title={ "Delete " + f.Name }
-								aria-label={ "Delete " + f.Name }
-								data-on:click={ confirmAction(
-                                    "Delete "+fileKind(f)+"?",
-                                    f.Path+" will be removed from the sandbox.",
-                                    "Delete",
-                                    dsDelete("/ui/sandboxes/"+pathSeg(id)+"/files?path="+queryVal(f.Path)),
-                                ) }
-							>
-								@icon.Trash2(icon.Props{Class: "size-3.5"})
-							</button>
+							if CanAdmin(ctx) {
+								@button.Button(button.Props{Variant: button.VariantGhost, Size: button.SizeSm, Type: button.TypeButton, Class: "inline-flex size-7 items-center justify-center rounded-md text-destructive hover:bg-accent", Attributes: templ.Attributes{"title": "Delete " + f.Name, "aria-label": "Delete " + f.Name, "data-on:click": confirmAction(
+									"Delete "+fileKind(f)+"?",
+									f.Path+" will be removed from the sandbox.",
+									"Delete",
+									dsDelete("/ui/sandboxes/"+pathSeg(id)+"/files?path="+queryVal(f.Path)),
+								)}}) {
+									@icon.Trash2(icon.Props{Class: "size-3.5"})
+								}
+							}
 						</span>
 					</div>
 				}
@@ -843,7 +792,7 @@ templ FileViewContent(id, path, content string, editable bool, note string) {
 			if note != "" {
 				<p class="pb-2 text-xs text-amber-500">{ note }</p>
 			}
-			if editable {
+			if editable && CanAdmin(ctx) {
 				@textarea.Textarea(textarea.Props{
 					ID:         "fileedit",
 					Rows:       18,
@@ -854,93 +803,93 @@ templ FileViewContent(id, path, content string, editable bool, note string) {
 				<pre class="max-h-[60vh] overflow-auto rounded bg-muted p-2 text-xs">{ content }</pre>
 			}
 			<div class="flex justify-end gap-2 pt-3">
-				<button
-					type="button"
-					class="inline-flex h-9 items-center rounded-md border px-4 text-sm hover:bg-accent"
-					data-on:click={ closeNativeJS("file-view") }
-				>Close</button>
-				if editable {
-					<button
-						type="button"
-						class="inline-flex h-9 items-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-						data-on:click={ dsPost("/ui/sandboxes/"+pathSeg(id)+"/files/save") }
-						data-indicator="savebusy"
-					>
+				@button.Button(button.Props{Variant: button.VariantGhost, Size: button.SizeSm, Type: button.TypeButton, Class: "inline-flex h-9 items-center rounded-md border px-4 text-sm hover:bg-accent", Attributes: templ.Attributes{"data-on:click": closeNativeJS("file-view")}}) {
+					Close
+				}
+				if editable && CanAdmin(ctx) {
+					@button.Button(button.Props{Variant: button.VariantGhost, Size: button.SizeSm, Type: button.TypeButton, Class: "inline-flex h-9 items-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90", Attributes: templ.Attributes{"data-on:click": dsPost("/ui/sandboxes/" + pathSeg(id) + "/files/save"), "data-indicator": "savebusy"}}) {
 						@Busy("savebusy")
 						Save
-					</button>
+					}
 				}
 			</div>
 		}
-		<!-- Open the modal once the content has been patched in. -->
-		@templ.Raw(`<script>document.getElementById('file-view')?.showModal();</script>`)
 	</div>
 }
 
 // dialogShell is a minimal modal used for dynamically patched dialogs.
 templ dialogShell(id, title string) {
-	<dialog
-		id={ id }
-		class="fixed top-1/2 left-1/2 z-50 w-[92vw] max-w-3xl -translate-x-1/2 -translate-y-1/2 rounded-lg border bg-background p-4 text-foreground shadow-lg backdrop:bg-black/50"
-	>
-		<h2 class="mb-3 truncate font-mono text-sm font-semibold">{ title }</h2>
-		{ children... }
-	</dialog>
+	@dialog.Dialog(dialog.Props{ID: id, DefaultOpen: true}) {
+		@dialog.Content(dialog.ContentProps{Class: "sm:max-w-3xl"}) {
+			@dialog.Header() {
+				@dialog.Title(dialog.TitleProps{Class: "truncate font-mono text-sm"}) {
+					{ title }
+				}
+			}
+			{ children... }
+		}
+	}
 }
 
 // NewFolderDialog creates a directory in the current path.
 templ NewFolderDialog(id string) {
-	<dialog
-		id="new-folder"
-		class="fixed top-1/2 left-1/2 z-50 w-[92vw] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-lg border bg-background p-4 text-foreground shadow-lg backdrop:bg-black/50"
-	>
-		<h2 class="mb-1 text-sm font-semibold">New folder</h2>
-		<p class="mb-3 text-xs text-muted-foreground">Created inside <span class="font-mono" data-text="$filepath"></span></p>
-		@input.Input(input.Props{ID: "newdir", Placeholder: "my-folder", Attributes: templ.Attributes{"data-bind": "newdir"}})
-		<div class="flex justify-end gap-2 pt-3">
-			<button
-				type="button"
-				class="inline-flex h-9 items-center rounded-md border px-4 text-sm hover:bg-accent"
-				data-on:click={ closeNativeJS("new-folder") }
-			>Cancel</button>
-			<button
-				type="button"
-				class="inline-flex h-9 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-				data-on:click={ dsPost("/ui/sandboxes/"+pathSeg(id)+"/files/mkdir") }
-			>Create</button>
-		</div>
-	</dialog>
+	if CanAdmin(ctx) {
+		@dialog.Dialog(dialog.Props{ID: "new-folder"}) {
+			@dialog.Content() {
+				@dialog.Header() {
+					@dialog.Title() {
+						New folder
+					}
+					@dialog.Description() {
+						Created inside <span class="font-mono" data-text="$filepath"></span>
+					}
+				}
+				@field("newdir", "Folder name") {
+					@input.Input(input.Props{ID: "newdir", Placeholder: "my-folder", Attributes: templ.Attributes{"data-bind": "newdir"}})
+				}
+				@dialog.Footer() {
+					@button.Button(button.Props{Variant: button.VariantOutline, Attributes: dialog.Close(ctx)}) {
+						Cancel
+					}
+					@button.Button(button.Props{Attributes: templ.Attributes{"data-on:click": dsPost("/ui/sandboxes/" + pathSeg(id) + "/files/mkdir"), "data-indicator": "mkdirbusy", "data-attr:disabled": "$mkdirbusy || !$newdir"}}) {
+						@Busy("mkdirbusy") Create
+					}
+				}
+			}
+		}
+	}
 }
 
 // ---------------------------------------------------------------------------
 // Terminal tab
 // ---------------------------------------------------------------------------
-
 templ terminalTab(d SandboxDetail) {
-	@card.Card(card.Props{Class: "mt-4"}) {
-		@card.Header(card.HeaderProps{Class: "flex-row items-center justify-between space-y-0"}) {
-			@card.Title() {
-				Terminal
+	if CanAdmin(ctx) {
+		@card.Card(card.Props{Class: "mt-4"}) {
+			@card.Header(card.HeaderProps{Class: "flex-row items-center justify-between space-y-0"}) {
+				@card.Title() {
+					Terminal
+				}
+				@button.Button(button.Props{
+					Variant: button.VariantOutline,
+					Size:    button.SizeSm,
+					Href:    "/terminal/" + pathSeg(d.ID),
+					Target:  "_blank",
+					Attributes: templ.Attributes{
+						"rel": "noopener",
+					},
+				}) {
+					@icon.ExternalLink(icon.Props{Class: "size-4"})
+					Open full screen
+				}
 			}
-			@button.Button(button.Props{
-				Variant: button.VariantOutline,
-				Size:    button.SizeSm,
-				Href:    "/terminal/" + pathSeg(d.ID),
-				Target:  "_blank",
-				Attributes: templ.Attributes{
-					"rel": "noopener",
-				},
-			}) {
-				@icon.ExternalLink(icon.Props{Class: "size-4"})
-				Open full screen
+			@card.Content() {
+				<iframe
+					src={ templ.SafeURL("/terminal/" + pathSeg(d.ID) + "?embed=1") }
+					class="h-[28rem] w-full rounded border bg-black"
+					title={ "Terminal for " + d.ID }
+				></iframe>
 			}
-		}
-		@card.Content() {
-			<iframe
-				src={ templ.SafeURL("/terminal/" + pathSeg(d.ID) + "?embed=1") }
-				class="h-[28rem] w-full rounded border bg-black"
-				title={ "Terminal for " + d.ID }
-			></iframe>
 		}
 	}
 }

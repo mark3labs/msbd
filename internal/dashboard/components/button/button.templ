@@ -1,11 +1,6 @@
-// templui component button - version: v1.11.1 installed by templui v1.11.1
-// 📚 Documentation: https://templui.io/docs/components/button
 package button
 
-import (
-	"github.com/mark3labs/msbd/internal/dashboard/utils"
-	"strings"
-)
+import "github.com/mark3labs/msbd/internal/dashboard/utils"
 
 type Variant string
 type Size string
@@ -28,9 +23,13 @@ const (
 
 const (
 	SizeDefault Size = "default"
+	SizeXs      Size = "xs"
 	SizeSm      Size = "sm"
 	SizeLg      Size = "lg"
 	SizeIcon    Size = "icon"
+	SizeIconXs  Size = "icon-xs"
+	SizeIconSm  Size = "icon-sm"
+	SizeIconLg  Size = "icon-lg"
 )
 
 type Props struct {
@@ -39,13 +38,16 @@ type Props struct {
 	Attributes templ.Attributes
 	Variant    Variant
 	Size       Size
-	FullWidth  bool
 	Href       string
 	Target     string
 	Disabled   bool
 	Type       Type
 	Form       string
 }
+
+// 1:1 base/ui/button.tsx: structure lives here, the look comes from the
+// active style-*.css via the classes.
+const baseClasses = "focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 rounded-lg border border-transparent bg-clip-padding text-sm font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px [&_svg:not([class*='size-'])]:size-4 group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0"
 
 templ Button(props ...Props) {
 	{{ var p Props }}
@@ -55,57 +57,57 @@ templ Button(props ...Props) {
 	if p.Type == "" {
 		{{ p.Type = TypeButton }}
 	}
+	if p.Variant == "" {
+		{{ p.Variant = VariantDefault }}
+	}
+	if p.Size == "" {
+		{{ p.Size = SizeDefault }}
+	}
 	if p.Href != "" && !p.Disabled {
+		// Base UI's Button with nativeButton false (shadcn renders the link
+		// through it): useButton makes the element a button.
 		<a
-			if p.ID != "" {
+			if _, ok := p.Attributes["id"]; !ok && p.ID != "" {
 				id={ p.ID }
 			}
 			href={ templ.SafeURL(p.Href) }
 			if p.Target != "" {
 				target={ p.Target }
 			}
-			class={
-				utils.TwMerge(
-					"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-all",
-					"disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 shrink-0 [&_svg]:shrink-0",
-					"outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]",
-					"aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive",
-					"cursor-pointer",
-					p.variantClasses(),
-					p.sizeClasses(),
-					p.modifierClasses(),
-					p.Class,
-				),
+			if _, ok := p.Attributes["data-slot"]; !ok {
+				data-slot="button"
 			}
+			if _, ok := p.Attributes["role"]; !ok {
+				role="button"
+			}
+			if _, ok := p.Attributes["tabindex"]; !ok {
+				tabindex="0"
+			}
+			class={ utils.CN(baseClasses, p.variantClasses(), p.sizeClasses(), p.Class) }
 			{ p.Attributes... }
 		>
 			{ children... }
 		</a>
 	} else {
 		<button
-			if p.ID != "" {
+			if _, ok := p.Attributes["id"]; !ok && p.ID != "" {
 				id={ p.ID }
 			}
-			class={
-				utils.TwMerge(
-					"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-all",
-					"disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 shrink-0 [&_svg]:shrink-0",
-					"outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]",
-					"aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive",
-					"cursor-pointer",
-					p.variantClasses(),
-					p.sizeClasses(),
-					p.modifierClasses(),
-					p.Class,
-				),
+			if _, ok := p.Attributes["data-slot"]; !ok {
+				data-slot="button"
 			}
-			if p.Type != "" {
+			if _, ok := p.Attributes["tabindex"]; !ok {
+				tabindex="0"
+			}
+			class={ utils.CN(baseClasses, p.variantClasses(), p.sizeClasses(), p.Class) }
+			if _, ok := p.Attributes["type"]; !ok && p.Type != "" {
 				type={ string(p.Type) }
 			}
 			if p.Form != "" {
 				form={ p.Form }
 			}
 			disabled?={ p.Disabled }
+			data-disabled?={ p.Disabled }
 			{ p.Attributes... }
 		>
 			{ children... }
@@ -113,40 +115,46 @@ templ Button(props ...Props) {
 	}
 }
 
+// Variants is shadcn's buttonVariants: the classes of a button with these
+// props, for an element that is no Button.
+func Variants(p Props) string {
+	return utils.CN(baseClasses, p.variantClasses(), p.sizeClasses(), p.Class)
+}
+
 func (b Props) variantClasses() string {
 	switch b.Variant {
 	case VariantDestructive:
-		return "bg-destructive text-white shadow-xs hover:bg-destructive/90 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40 dark:bg-destructive/60"
+		return "bg-destructive/10 hover:bg-destructive/20 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40 dark:bg-destructive/20 text-destructive focus-visible:border-destructive/40 dark:hover:bg-destructive/30"
 	case VariantOutline:
-		return "border bg-background shadow-xs hover:bg-accent hover:text-accent-foreground dark:bg-input/30 dark:border-input dark:hover:bg-input/50"
+		return "border-border bg-background hover:bg-muted hover:text-foreground dark:bg-input/30 dark:border-input dark:hover:bg-input/50 aria-expanded:bg-muted aria-expanded:text-foreground"
 	case VariantSecondary:
-		return "bg-secondary text-secondary-foreground shadow-xs hover:bg-secondary/80"
+		return "bg-secondary text-secondary-foreground hover:bg-[color-mix(in_oklch,var(--secondary),var(--foreground)_5%)] aria-expanded:bg-secondary aria-expanded:text-secondary-foreground"
 	case VariantGhost:
-		return "hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50"
+		return "hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 aria-expanded:bg-muted aria-expanded:text-foreground"
 	case VariantLink:
 		return "text-primary underline-offset-4 hover:underline"
 	default:
-		return "bg-primary text-primary-foreground shadow-xs hover:bg-primary/90"
+		return "bg-primary text-primary-foreground hover:bg-primary/80"
 	}
 }
 
 func (b Props) sizeClasses() string {
 	switch b.Size {
+	case SizeXs:
+		return "h-6 gap-1 rounded-[min(var(--radius-md),10px)] px-2 text-xs in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3"
 	case SizeSm:
-		return "h-8 rounded-md gap-1.5 px-3 has-[>svg]:px-2.5"
+		return "h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5"
 	case SizeLg:
-		return "h-10 rounded-md px-6 has-[>svg]:px-4"
+		return "h-9 gap-1.5 px-2.5 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2"
 	case SizeIcon:
+		return "size-8"
+	case SizeIconXs:
+		return "size-6 rounded-[min(var(--radius-md),10px)] in-data-[slot=button-group]:rounded-lg [&_svg:not([class*='size-'])]:size-3"
+	case SizeIconSm:
+		return "size-7 rounded-[min(var(--radius-md),12px)] in-data-[slot=button-group]:rounded-lg"
+	case SizeIconLg:
 		return "size-9"
-	default: // SizeDefault
-		return "h-9 px-4 py-2 has-[>svg]:px-3"
+	default:
+		return "h-8 gap-1.5 px-2.5 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2"
 	}
-}
-
-func (b Props) modifierClasses() string {
-	classes := []string{}
-	if b.FullWidth {
-		classes = append(classes, "w-full")
-	}
-	return strings.Join(classes, " ")
 }

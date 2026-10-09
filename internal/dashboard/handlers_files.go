@@ -160,14 +160,14 @@ func (h *Handler) filesSave(w http.ResponseWriter, r *http.Request) {
 
 	p := strings.TrimSpace(sig.Name)
 	if p == "" {
-		notify(sse, toast.VariantWarning, "Save", "no file is open")
+		notify(sse, toast.TypeWarning, "Save", "no file is open")
 		return
 	}
 	if notifyErr(sse, "Save file", h.svc.WriteFile(r.Context(), id, p, "", []byte(sig.Contents))) {
 		return
 	}
 	closeNative(sse, "file-view")
-	notify(sse, toast.VariantSuccess, "Saved", p)
+	notify(sse, toast.TypeSuccess, "Saved", p)
 	h.repaintFiles(r, sse, id, sig.Path)
 }
 
@@ -179,7 +179,7 @@ func (h *Handler) filesMkdir(w http.ResponseWriter, r *http.Request) {
 
 	name := strings.TrimSpace(sig.NewDir)
 	if name == "" {
-		notify(sse, toast.VariantWarning, "New folder", "name is required")
+		notify(sse, toast.TypeWarning, "New folder", "name is required")
 		return
 	}
 	target := path.Join(cleanDir(sig.Path), name)
@@ -188,7 +188,7 @@ func (h *Handler) filesMkdir(w http.ResponseWriter, r *http.Request) {
 	}
 	closeNative(sse, "new-folder")
 	_ = sse.MarshalAndPatchSignals(&filesSignals{NewDir: ""})
-	notify(sse, toast.VariantSuccess, "Folder created", target)
+	notify(sse, toast.TypeSuccess, "Folder created", target)
 	h.repaintFiles(r, sse, id, sig.Path)
 }
 
@@ -202,7 +202,7 @@ func (h *Handler) filesRemove(w http.ResponseWriter, r *http.Request) {
 	if notifyErr(sse, "Delete", h.svc.Remove(r.Context(), id, p, "", true)) {
 		return
 	}
-	notify(sse, toast.VariantSuccess, "Deleted", p)
+	notify(sse, toast.TypeSuccess, "Deleted", p)
 	h.repaintFiles(r, sse, id, sig.Path)
 }
 

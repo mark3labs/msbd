@@ -1,0 +1,36 @@
+package spinner
+
+import (
+	"github.com/mark3labs/msbd/internal/dashboard/components/icon"
+	"github.com/mark3labs/msbd/internal/dashboard/utils"
+)
+
+type Props struct {
+	ID         string
+	Class      string
+	Attributes templ.Attributes
+}
+
+templ Spinner(props ...Props) {
+	{{ var p Props }}
+	if len(props) > 0 {
+		{{ p = props[0] }}
+	}
+	{{
+		attrs := templ.Attributes{
+			"data-slot":  "spinner",
+			"role":       "status",
+			"aria-label": "Loading",
+		}
+		if p.ID != "" {
+			attrs["id"] = p.ID
+		}
+		for k, v := range p.Attributes {
+			attrs[k] = v
+		}
+	}}
+	@icon.LoaderCircle(icon.Props{
+		Class:      utils.CN("size-4 animate-spin", p.Class),
+		Attributes: attrs,
+	})
+}

@@ -208,7 +208,7 @@ func (h *Handler) terminalTicket(w http.ResponseWriter, r *http.Request) {
 // ---------------------------------------------------------------------------
 
 // notify appends a transient toast to the live region.
-func notify(sse *datastar.ServerSentEventGenerator, v toast.Variant, title, desc string) {
+func notify(sse *datastar.ServerSentEventGenerator, v toast.Type, title, desc string) {
 	_ = sse.PatchElementTempl(
 		views.Notify(v, title, desc),
 		datastar.WithSelectorID("toaster"),
@@ -222,7 +222,7 @@ func notifyErr(sse *datastar.ServerSentEventGenerator, action string, err error)
 	if err == nil {
 		return false
 	}
-	notify(sse, toast.VariantError, action+" failed", cleanErr(err))
+	notify(sse, toast.TypeError, action+" failed", cleanErr(err))
 	return true
 }
 
@@ -234,7 +234,7 @@ func failInline(sse *datastar.ServerSentEventGenerator, slotID, action string, e
 		_ = sse.PatchElementTempl(views.ClearInline(slotID))
 		return false
 	}
-	notify(sse, toast.VariantError, action+" failed", cleanErr(err))
+	notify(sse, toast.TypeError, action+" failed", cleanErr(err))
 	_ = sse.PatchElementTempl(views.InlineError(slotID, action+" failed", cleanErr(err)))
 	return true
 }
@@ -248,14 +248,14 @@ func cleanErr(err error) string {
 	return s
 }
 
-// closeDialog dismisses a templui dialog after a successful action.
+// closeDialog dismisses a shadcn-templ dialog after a successful action.
 func closeDialog(sse *datastar.ServerSentEventGenerator, id string) {
-	_ = sse.ExecuteScript("window.tui?.dialog?.close(" + jsString(id) + ")")
+	_ = sse.ExecuteScript("window.templ?.dialog?.close(" + jsString(id) + ")")
 }
 
-// closeNative dismisses a plain <dialog> element.
+// closeNative retains the fragment helper name for migrated component dialogs.
 func closeNative(sse *datastar.ServerSentEventGenerator, id string) {
-	_ = sse.ExecuteScript("document.getElementById(" + jsString(id) + ")?.close()")
+	closeDialog(sse, id)
 }
 
 func jsString(s string) string {

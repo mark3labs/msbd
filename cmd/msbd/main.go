@@ -31,8 +31,6 @@ import (
 	"github.com/mark3labs/msbd/internal/store"
 
 	rootmsbd "github.com/mark3labs/msbd"
-
-	msb "github.com/superradcompany/microsandbox/sdk/go"
 )
 
 // Build metadata, injected at link time via -ldflags "-X main.version=...".
@@ -290,15 +288,16 @@ func runServe(ctx context.Context, o *serveOptions) error {
 		"version", version, "commit", commit, "built", date,
 		"sdk", core.SDKVersion(), "listen", o.listen, "default_image", o.defaultImage)
 
-	// 1) Ensure the msb + libkrunfw runtime is present (downloads on first run).
+	// 1) Resolve msb + libkrunfw, downloading only when wholly absent.
+	// SDK 0.7.x reuses complete installations; it does not upgrade them.
 	ictx, cancel := context.WithTimeout(ctx, 5*time.Minute)
-	err = msb.EnsureInstalled(ictx)
+	err = core.EnsureRuntime(ictx)
 	cancel()
 	if err != nil {
 		return fmt.Errorf("ensure runtime installed: %w", err)
 	}
 	if v, rerr := core.RuntimeVersion(); rerr == nil {
-		log.Info("msb runtime ready", "version", v)
+		log.Info("microsandbox FFI ready", "version", v)
 	}
 
 	svc := core.NewService(core.Opts{

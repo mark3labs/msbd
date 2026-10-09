@@ -57,7 +57,7 @@ func (h *Handler) sandboxStart(w http.ResponseWriter, r *http.Request) {
 	if failInline(sse, "detail-error", "Start", h.svc.Start(r.Context(), id)) {
 		return
 	}
-	notify(sse, toast.VariantSuccess, "Started", id)
+	notify(sse, toast.TypeSuccess, "Started", id)
 	h.refreshSandboxViews(r, sse, id)
 }
 
@@ -67,7 +67,7 @@ func (h *Handler) sandboxStop(w http.ResponseWriter, r *http.Request) {
 	if failInline(sse, "detail-error", "Stop", h.svc.Stop(r.Context(), id)) {
 		return
 	}
-	notify(sse, toast.VariantSuccess, "Stopped", id)
+	notify(sse, toast.TypeSuccess, "Stopped", id)
 	h.refreshSandboxViews(r, sse, id)
 }
 
@@ -77,7 +77,7 @@ func (h *Handler) sandboxDelete(w http.ResponseWriter, r *http.Request) {
 	if failInline(sse, "detail-error", "Delete", h.svc.Delete(r.Context(), id)) {
 		return
 	}
-	notify(sse, toast.VariantSuccess, "Deleted", id)
+	notify(sse, toast.TypeSuccess, "Deleted", id)
 	// Deleting from the detail page would leave the user on a dead URL.
 	if r.URL.Query().Get("back") == "1" {
 		_ = sse.Redirect("/sandboxes")
@@ -172,7 +172,7 @@ func (h *Handler) sandboxCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	closeDialog(sse, "create-sandbox")
-	notify(sse, toast.VariantSuccess, "Sandbox created", ins.ID)
+	notify(sse, toast.TypeSuccess, "Sandbox created", ins.ID)
 	h.refreshTable(r, sse)
 }
 
@@ -194,7 +194,7 @@ func (h *Handler) sandboxRun(w http.ResponseWriter, r *http.Request) {
 
 	cmd := strings.TrimSpace(sig.Cmd)
 	if cmd == "" {
-		notify(sse, toast.VariantWarning, "Run", "command is empty")
+		notify(sse, toast.TypeWarning, "Run", "command is empty")
 		return
 	}
 
@@ -257,7 +257,7 @@ func (h *Handler) sandboxJobCancel(w http.ResponseWriter, r *http.Request) {
 		h.takeCancelled(id, job)
 		return
 	}
-	notify(sse, toast.VariantInfo, "Command cancelled", job)
+	notify(sse, toast.TypeInfo, "Command cancelled", job)
 }
 
 // ---- Logs ----

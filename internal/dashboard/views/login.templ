@@ -1,11 +1,11 @@
 package views
 
 import (
+	"github.com/mark3labs/msbd/internal/dashboard/components/alert"
 	"github.com/mark3labs/msbd/internal/dashboard/components/button"
 	"github.com/mark3labs/msbd/internal/dashboard/components/card"
 	"github.com/mark3labs/msbd/internal/dashboard/components/icon"
 	"github.com/mark3labs/msbd/internal/dashboard/components/input"
-	"github.com/mark3labs/msbd/internal/dashboard/components/label"
 )
 
 // LoginPage is a STANDALONE document — the app shell would be misleading here
@@ -47,10 +47,7 @@ templ LoginPage(next, version string) {
 								data-on:submit={ dsPost("/login") }
 								data-indicator="loginbusy"
 							>
-								<div class="grid gap-1.5">
-									@label.Label(label.Props{For: "username"}) {
-										Username
-									}
+								@field("username", "Username") {
 									@input.Input(input.Props{
 										ID: "username",
 										Attributes: templ.Attributes{
@@ -61,14 +58,11 @@ templ LoginPage(next, version string) {
 											"name":         "username",
 										},
 									})
-								</div>
-								<div class="grid gap-1.5">
-									@label.Label(label.Props{For: "password"}) {
-										Password
-									}
+								}
+								@field("password", "Password") {
 									@input.Input(input.Props{
 										ID:   "password",
-										Type: input.TypePassword,
+										Type: "password",
 										Attributes: templ.Attributes{
 											"data-bind":    "loginpass",
 											"required":     "true",
@@ -76,7 +70,7 @@ templ LoginPage(next, version string) {
 											"name":         "password",
 										},
 									})
-								</div>
+								}
 								@button.Button(button.Props{
 									Type:  button.TypeSubmit,
 									Class: "w-full",
@@ -111,9 +105,11 @@ func loginSignals(next string) string {
 // wrong, so the form can't be used to enumerate accounts.
 templ LoginError(msg string) {
 	<div id="login-error" class="mb-3">
-		<div class="rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-			{ msg }
-		</div>
+		@alert.Alert(alert.Props{Variant: alert.VariantDestructive}) {
+			@alert.Description() {
+				{ msg }
+			}
+		}
 	</div>
 }
 

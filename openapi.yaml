@@ -1459,7 +1459,7 @@ components:
         image_ref: { type: string }
         format: { type: string }
         size_bytes: { type: integer, nullable: true }
-        path: { type: string }
+        path: { type: string, description: "Snapshot reference; a filesystem path for local snapshots." }
         created_at: { type: string, format: date-time }
 
     SnapshotExportRequest:

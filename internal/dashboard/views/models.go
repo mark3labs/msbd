@@ -345,7 +345,7 @@ func pathSeg(s string) string { return url.PathEscape(s) }
 // queryVal escapes a value for safe use as a URL query value.
 func queryVal(s string) string { return url.QueryEscape(s) }
 
-// stateBadge maps a sandbox state to a templui badge variant string.
+// stateBadge maps a sandbox state to a shadcn-templ badge variant string.
 func stateBadge(state string) string {
 	switch state {
 	case "running":
@@ -373,7 +373,7 @@ func stateDot(state string) string {
 	}
 }
 
-// roleBadge maps a user role to a templui badge variant string.
+// roleBadge maps a user role to a shadcn-templ badge variant string.
 func roleBadge(role string) string {
 	if role == "admin" {
 		return "default"
@@ -381,7 +381,7 @@ func roleBadge(role string) string {
 	return "secondary"
 }
 
-// keyStatusBadge maps an API key status to a templui badge variant string.
+// keyStatusBadge maps an API key status to a shadcn-templ badge variant string.
 func keyStatusBadge(status string) string {
 	switch status {
 	case "active":
@@ -415,15 +415,10 @@ func joinMax(v []string, n int) string {
 	return strings.Join(v[:n], ", ") + ", …"
 }
 
-// openNativeJS / closeNativeJS drive a plain <dialog> element (used for the
-// dynamically patched file dialogs, which are not templui dialog roots).
-func openNativeJS(id string) string {
-	return "document.getElementById(" + jsExpr(id) + ")?.showModal();"
-}
-
-func closeNativeJS(id string) string {
-	return "document.getElementById(" + jsExpr(id) + ")?.close();"
-}
+// These historical helper names remain for view call sites; all dialog owners
+// now use the shadcn-templ lifecycle, including SSE-patched content.
+func openNativeJS(id string) string  { return openDialogJS(id) }
+func closeNativeJS(id string) string { return closeDialogJS(id) }
 
 // ---------------------------------------------------------------------------
 // Datastar action helpers

@@ -1,13 +1,14 @@
 package views
 
 import (
+	"github.com/mark3labs/msbd/internal/dashboard/components/alert"
 	"github.com/mark3labs/msbd/internal/dashboard/components/badge"
 	"github.com/mark3labs/msbd/internal/dashboard/components/button"
 	"github.com/mark3labs/msbd/internal/dashboard/components/card"
 	"github.com/mark3labs/msbd/internal/dashboard/components/dialog"
 	"github.com/mark3labs/msbd/internal/dashboard/components/icon"
 	"github.com/mark3labs/msbd/internal/dashboard/components/input"
-	"github.com/mark3labs/msbd/internal/dashboard/components/label"
+	selectcomp "github.com/mark3labs/msbd/internal/dashboard/components/select"
 	"github.com/mark3labs/msbd/internal/dashboard/components/table"
 )
 
@@ -202,29 +203,14 @@ templ CreateKeyDialog() {
 						})
 						@hint("What this key is for. Shown in the list and in audit output.")
 					}
-					<div class="grid gap-1.5">
-						@label.Label(label.Props{For: "keyexpires"}) {
-							Expires
-						}
-						<select
-							id="keyexpires"
-							data-bind="keyexpires"
-							class="flex h-9 w-full rounded-md border bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:ring-2 focus-visible:ring-ring"
-						>
-							<option value="">Never</option>
-							<option value="7d">7 days</option>
-							<option value="30d">30 days</option>
-							<option value="90d">90 days</option>
-							<option value="365d">1 year</option>
-						</select>
+					@field("keyexpires", "Expires") {
+						@signalSelect("keyexpires", "keyexpires", []selectcomp.ItemData{{Value: "", Label: "Never"}, {Value: "7d", Label: "7 days"}, {Value: "30d", Label: "30 days"}, {Value: "90d", Label: "90 days"}, {Value: "365d", Label: "1 year"}}, "Choose…")
 						@hint("An expiring key fails closed: clients get 401 once it lapses.")
-					</div>
+					}
 				</form>
 				@dialog.Footer() {
-					@dialog.Close() {
-						@button.Button(button.Props{Variant: button.VariantOutline}) {
-							Cancel
-						}
+					@button.Button(button.Props{Variant: button.VariantOutline, Attributes: dialog.Close(ctx)}) {
+						Cancel
 					}
 					@button.Button(button.Props{
 						Attributes: templ.Attributes{
@@ -243,39 +229,42 @@ templ CreateKeyDialog() {
 }
 
 // NewKeyDialog reveals a freshly minted token. It is patched in over SSE, so it
-// is a plain <dialog> driven with showModal()/close() rather than a templui
-// dialog root (which registers its trigger at page load).
+// uses the shadcn-templ dialog lifecycle, which initializes SSE-patched owners
+// and retires their portaled content when the owning slot is replaced.
 //
 // This is the ONLY time the token exists outside the client's hands: the store
 // keeps a SHA-256 hash, so closing this dialog without copying means minting a
 // new key.
 templ NewKeyDialog(name, token string) {
 	<div id="new-key-slot">
-		<dialog id="new-key" class="m-auto w-[min(32rem,92vw)] rounded-lg border bg-background p-0 text-foreground backdrop:bg-black/50">
-			<div class="grid gap-4 p-6">
-				<div class="grid gap-1">
-					<h2 class="text-lg font-semibold">API key created</h2>
-					<p class="text-sm text-muted-foreground">
+		@dialog.Dialog(dialog.Props{ID: "new-key", DefaultOpen: true}) {
+			@dialog.Content() {
+				@dialog.Header() {
+					@dialog.Title() {
+						API key created
+					}
+					@dialog.Description() {
 						Copy the token for <span class="font-medium text-foreground">{ name }</span> now —
 						it is stored only as a hash and cannot be shown again.
-					</p>
-				</div>
-				<div class="rounded-md border bg-muted/50 p-3">
-					@Copyable("new-key-token", token, "text-sm break-all")
-				</div>
-				<div class="flex items-center gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-600 dark:text-amber-400">
-					@icon.TriangleAlert(icon.Props{Class: "size-4 shrink-0"})
-					Treat this like a password. Anyone holding it has full control of every sandbox.
-				</div>
-				<div class="flex justify-end">
-					<button
-						type="button"
-						class="inline-flex h-9 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-						data-on:click={ closeNativeJS("new-key") }
-					>Done</button>
-				</div>
-			</div>
-		</dialog>
+					}
+				}
+				<div class="rounded-md border bg-muted/50 p-3">@Copyable("new-key-token", token, "text-sm break-all") </div>
+				@alert.Alert() {
+					@icon.TriangleAlert(icon.Props{Class: "size-4"})
+					@alert.Title() {
+						Treat this like a password
+					}
+					@alert.Description() {
+						Anyone holding it has full control of every sandbox.
+					}
+				}
+				@dialog.Footer() {
+					@button.Button(button.Props{Attributes: dialog.Close(ctx)}) {
+						Done
+					}
+				}
+			}
+		}
 	</div>
 }
 
@@ -485,7 +474,7 @@ templ CreateUserDialog() {
 					@field("newpass", "Password") {
 						@input.Input(input.Props{
 							ID:   "newpass",
-							Type: input.TypePassword,
+							Type: "password",
 							Attributes: templ.Attributes{
 								"data-bind": "newpass", "required": "true", "autocomplete": "new-password", "minlength": "8",
 							},
@@ -495,10 +484,8 @@ templ CreateUserDialog() {
 					@selectField("newrole", "Role", "newrole", []string{"admin", "viewer"})
 				</form>
 				@dialog.Footer() {
-					@dialog.Close() {
-						@button.Button(button.Props{Variant: button.VariantOutline}) {
-							Cancel
-						}
+					@button.Button(button.Props{Variant: button.VariantOutline, Attributes: dialog.Close(ctx)}) {
+						Cancel
 					}
 					@button.Button(button.Props{
 						Attributes: templ.Attributes{
@@ -522,7 +509,7 @@ templ CreateUserDialog() {
 templ SetPasswordDialog() {
 	@dialog.Dialog(dialog.Props{ID: "set-password"}) {
 		@dialog.Content() {
-			<div data-signals="{pwuser:'', pwvalue:''}">
+			<div data-signals__ifmissing="{pwuser:'', pwvalue:''}">
 				@dialog.Header() {
 					@dialog.Title() {
 						Set password
@@ -536,7 +523,7 @@ templ SetPasswordDialog() {
 					@field("pwvalue", "New password") {
 						@input.Input(input.Props{
 							ID:   "pwvalue",
-							Type: input.TypePassword,
+							Type: "password",
 							Attributes: templ.Attributes{
 								"data-bind": "pwvalue", "required": "true", "autocomplete": "new-password", "minlength": "8",
 							},
@@ -544,10 +531,8 @@ templ SetPasswordDialog() {
 					}
 				</form>
 				@dialog.Footer() {
-					@dialog.Close() {
-						@button.Button(button.Props{Variant: button.VariantOutline}) {
-							Cancel
-						}
+					@button.Button(button.Props{Variant: button.VariantOutline, Attributes: dialog.Close(ctx)}) {
+						Cancel
 					}
 					@button.Button(button.Props{
 						Attributes: templ.Attributes{
@@ -585,14 +570,14 @@ templ ChangePasswordDialog() {
 					@field("curpass", "Current password") {
 						@input.Input(input.Props{
 							ID:         "curpass",
-							Type:       input.TypePassword,
+							Type:       "password",
 							Attributes: templ.Attributes{"data-bind": "curpass", "required": "true", "autocomplete": "current-password"},
 						})
 					}
 					@field("newpass1", "New password") {
 						@input.Input(input.Props{
 							ID:   "newpass1",
-							Type: input.TypePassword,
+							Type: "password",
 							Attributes: templ.Attributes{
 								"data-bind": "newpass1", "required": "true", "autocomplete": "new-password", "minlength": "8",
 							},
@@ -601,7 +586,7 @@ templ ChangePasswordDialog() {
 					@field("newpass2", "Confirm new password") {
 						@input.Input(input.Props{
 							ID:   "newpass2",
-							Type: input.TypePassword,
+							Type: "password",
 							Attributes: templ.Attributes{
 								"data-bind": "newpass2", "required": "true", "autocomplete": "new-password", "minlength": "8",
 							},
@@ -612,10 +597,8 @@ templ ChangePasswordDialog() {
 					</p>
 				</form>
 				@dialog.Footer() {
-					@dialog.Close() {
-						@button.Button(button.Props{Variant: button.VariantOutline}) {
-							Cancel
-						}
+					@button.Button(button.Props{Variant: button.VariantOutline, Attributes: dialog.Close(ctx)}) {
+						Cancel
 					}
 					@button.Button(button.Props{
 						Attributes: templ.Attributes{

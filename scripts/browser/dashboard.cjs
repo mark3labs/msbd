@@ -37,6 +37,14 @@ async function until(fn, message, timeout = 10000) {
 async function visible(locator) { await locator.waitFor({ state: 'visible', timeout: 10000 }); }
 async function gone(locator) { await locator.waitFor({ state: 'hidden', timeout: 10000 }); }
 async function screenshot(name) {
+  // Capture the settled UI, not the first frame of a sheet/dialog transition.
+  // Leave infinite animations (spinners/cursors) alone.
+  await page.evaluate(async () => {
+    await Promise.all(document.getAnimations().filter(animation =>
+      animation.effect?.getComputedTiming().iterations !== Infinity
+    ).map(animation => animation.finished.catch(() => {})));
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  });
   // Token reveal is sensitive even in an isolated test. Never capture its value.
   await page.screenshot({ path: path.join(artifacts, `${name}.png`), fullPage: true,
     mask: [page.locator('#new-key-token')] });
@@ -159,14 +167,21 @@ async function main() {
   });
   await page.setViewportSize({ width: 1440, height: 1000 });
   await test('checkbox', async () => {
-    await goto('/sandboxes');
-    const check = page.getByRole('checkbox', { name: 'Auto-refresh', exact: true });
-    await until(async () => (await check.getAttribute('aria-checked')) === 'true', 'auto-refresh checkbox did not hydrate from live:true');
-    const initial = await check.getAttribute('aria-checked');
-    await check.click();
-    await until(async () => (await check.getAttribute('aria-checked')) !== initial, '#live checkbox did not change');
-    await check.click();
-    await until(async () => (await check.getAttribute('aria-checked')) === initial, '#live checkbox did not revert');
+    // Force Datastar to initialize before the deferred component bundle:
+    // guarded effects must still hydrate live:true when that bundle arrives.
+    const bundle = '**/assets/js/shadcn-templ-*.js';
+    const slowBundle = async route => { await delay(1500); await route.continue(); };
+    await page.route(bundle, slowBundle);
+    try {
+      await goto('/sandboxes');
+      const check = page.getByRole('checkbox', { name: 'Auto-refresh', exact: true });
+      await until(async () => (await check.getAttribute('aria-checked')) === 'true', 'auto-refresh checkbox did not hydrate from live:true');
+      const initial = await check.getAttribute('aria-checked');
+      await check.click();
+      await until(async () => (await check.getAttribute('aria-checked')) !== initial, '#live checkbox did not change');
+      await check.click();
+      await until(async () => (await check.getAttribute('aria-checked')) === initial, '#live checkbox did not revert');
+    } finally { await page.unroute(bundle, slowBundle); }
   });
   await test('key-create-select-reveal', async () => {
     await goto('/settings/keys');
@@ -275,6 +290,18 @@ async function vmTests() {
   if (!sandboxID) return;
   await test('real-sandbox-tabs', async () => {
     await goto(`/sandboxes/${sandboxID}`);
+    const actions = page.getByRole('group', { name: 'Sandbox actions', exact: true });
+    await visible(actions.getByRole('button', { name: 'Stop', exact: true }));
+    const corners = await actions.evaluate(el => {
+      const children = [...el.children].filter(child => child.getBoundingClientRect().width > 0);
+      return {
+        left: parseFloat(getComputedStyle(children[0]).borderTopLeftRadius),
+        right: parseFloat(getComputedStyle(children.at(-1)).borderTopRightRadius),
+        count: children.length,
+      };
+    });
+    assert.equal(corners.count, 4, 'action group must have no hidden lifecycle sibling');
+    assert.ok(corners.left > 0 && corners.right > 0, 'both action group ends must be rounded');
     for (const name of ['Run', 'Logs', 'Files', 'Overview']) {
       const tab = page.getByRole('tab', { name, exact: true });
       await tab.click();
@@ -300,12 +327,37 @@ async function vmTests() {
     const terminal = page.frameLocator('iframe');
     await visible(terminal.locator('.xterm-screen'));
     await until(async () => (await terminal.locator('#dot').getAttribute('class')) === 'ok', 'terminal WebSocket did not connect', 30000);
-    await terminal.locator('.xterm-helper-textarea').pressSequentially('printf BROWSER_TERMINAL_OK > /tmp/browser-terminal-ok');
-    await terminal.locator('.xterm-helper-textarea').press('Enter');
+    // WebSocket OPEN is transport readiness, not a rendered shell prompt.
+    // The tab/iframe can still take focus during mounting; click the visible
+    // terminal like a user, then verify focus before sending any keystrokes.
+    await until(async () => /(?:#|\$)\s*$/.test(await terminal.locator('.xterm-rows').innerText()), 'terminal shell prompt did not render', 30000);
+    await terminal.locator('.xterm-screen').click();
+    const input = terminal.locator('.xterm-helper-textarea');
+    await until(() => input.evaluate(el => document.hasFocus() && document.activeElement === el), 'terminal input did not receive focus');
+    await input.pressSequentially('printf BROWSER_TERMINAL_OK > /tmp/browser-terminal-ok');
+    await input.press('Enter');
     await until(async () => {
       try { const file = await api(`/sandboxes/${sandboxID}/files/read`, 'POST', { path: '/tmp/browser-terminal-ok' }); return Buffer.from(file.content_b64, 'base64').toString() === 'BROWSER_TERMINAL_OK'; } catch { return false; }
     }, 'terminal input did not create expected guest file', 30000);
     await screenshot('xterm');
+  });
+  await test('real-sandbox-terminal-last-row', async () => {
+    // Fit must leave every complete row inside the padded terminal content,
+    // even at fractional container sizes. This caught parent-padding clipping.
+    const terminal = page.frameLocator('iframe');
+    for (const height of [321.5, 447, 512.75]) {
+      await page.locator('iframe').evaluate((el, h) => { el.style.height = `${h}px`; }, height);
+      await until(() => terminal.locator('#term').evaluate(el => {
+        const xterm = el.querySelector('.xterm');
+        const screen = el.querySelector('.xterm-screen');
+        const rows = el.querySelector('.xterm-rows');
+        if (!xterm || !screen || !rows || !rows.lastElementChild) return false;
+        const bottom = el.getBoundingClientRect().bottom - parseFloat(getComputedStyle(xterm).paddingBottom);
+        return screen.getBoundingClientRect().bottom <= bottom + 0.5 &&
+          rows.lastElementChild.getBoundingClientRect().bottom <= bottom + 0.5;
+      }), `terminal last row clipped at height ${height}`);
+    }
+    await screenshot('xterm-last-row');
   });
 }
 (async () => {

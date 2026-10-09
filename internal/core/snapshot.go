@@ -25,7 +25,7 @@ type Snapshot struct {
 	ImageRef     string
 	Format       string
 	SizeBytes    *uint64
-	Path         string
+	Path         string // SDK reference; remains a filesystem path for local snapshots.
 	CreatedAt    time.Time
 }
 
@@ -56,7 +56,7 @@ func snapshotFromHandle(h *msb.SnapshotHandle) Snapshot {
 		ImageRef:     h.ImageRef(),
 		Format:       derefStr(h.Format()),
 		SizeBytes:    h.SizeBytes(),
-		Path:         h.Path(),
+		Path:         h.Reference(),
 		CreatedAt:    h.CreatedAt(),
 	}
 }
@@ -103,7 +103,7 @@ func (s *Service) CreateSnapshot(ctx context.Context, p SnapshotCreateParams) (*
 		ImageRef:     art.ImageRef(),
 		Format:       art.Format(),
 		SizeBytes:    art.SizeBytes(),
-		Path:         art.Path(),
+		Path:         art.Reference(),
 		CreatedAt:    created,
 	}, nil
 }

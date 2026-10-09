@@ -105,5 +105,5 @@ WebSockets and REST calls remain real. Acceptance runs must omit
 `MSBD_BROWSER_CSS` to test the binary's committed embedded assets.
 
 See [REPORT.md](REPORT.md) for the migration bugs observed in Chromium and exact
-reproduction selectors. The suite intentionally fails on these regressions;
-do not disable assertions to make an unfixed migration green.
+reproduction selectors. The suite retains assertions for these regressions;
+do not disable assertions to hide a regression.

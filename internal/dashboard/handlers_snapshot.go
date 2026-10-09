@@ -94,7 +94,7 @@ func (h *Handler) snapshotCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	closeDialog(sse, "create-snapshot")
-	notify(sse, toast.VariantSuccess, "Snapshot created", src)
+	notify(sse, toast.TypeSuccess, "Snapshot created", src)
 	h.reRenderSnapshots(r, sse)
 }
 
@@ -110,7 +110,7 @@ func (h *Handler) snapshotVerify(w http.ResponseWriter, r *http.Request) {
 	if res != nil && res.UpperDigest != "" {
 		msg = res.UpperAlgo + ":" + views.ShortDigest(res.UpperDigest)
 	}
-	notify(sse, toast.VariantSuccess, "Snapshot verified", msg)
+	notify(sse, toast.TypeSuccess, "Snapshot verified", msg)
 }
 
 func (h *Handler) snapshotDelete(w http.ResponseWriter, r *http.Request) {
@@ -119,7 +119,7 @@ func (h *Handler) snapshotDelete(w http.ResponseWriter, r *http.Request) {
 	if notifyErr(sse, "Delete snapshot", h.svc.RemoveSnapshot(r.Context(), name, true)) {
 		return
 	}
-	notify(sse, toast.VariantSuccess, "Snapshot deleted", views.ShortDigest(name))
+	notify(sse, toast.TypeSuccess, "Snapshot deleted", views.ShortDigest(name))
 	h.reRenderSnapshots(r, sse)
 }
 

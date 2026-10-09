@@ -94,27 +94,29 @@ templ SnapshotTable(rows []SnapshotRow, s TableSort) {
 									@TimeAgo(sn.CreatedAt)
 								}
 								@table.Cell(table.CellProps{Class: "text-right"}) {
-									<div class="flex items-center justify-end gap-1">
-										@iconButton("Verify integrity of "+sn.Name, "shield-check",
-											dsPost("/ui/snapshots/"+pathSeg(sn.Digest)+"/verify"))
-										@button.Button(button.Props{
-											Variant: button.VariantGhost,
-											Size:    button.SizeIcon,
-											Class:   "size-8 text-destructive",
-											Attributes: templ.Attributes{
-												"title":      "Delete " + sn.Name,
-												"aria-label": "Delete snapshot " + sn.Name,
-												"data-on:click": confirmAction(
-													"Delete snapshot?",
-													sn.Name+" ("+ShortDigest(sn.Digest)+") will be removed. This cannot be undone.",
-													"Delete",
-													dsDelete("/ui/snapshots/"+pathSeg(sn.Digest)),
-												),
-											},
-										}) {
-											@icon.Trash2(icon.Props{Class: "size-4"})
-										}
-									</div>
+									if CanAdmin(ctx) {
+										<div class="flex items-center justify-end gap-1">
+											@iconButton("Verify integrity of "+sn.Name, "shield-check",
+												dsPost("/ui/snapshots/"+pathSeg(sn.Digest)+"/verify"))
+											@button.Button(button.Props{
+												Variant: button.VariantGhost,
+												Size:    button.SizeIcon,
+												Class:   "size-8 text-destructive",
+												Attributes: templ.Attributes{
+													"title":      "Delete " + sn.Name,
+													"aria-label": "Delete snapshot " + sn.Name,
+													"data-on:click": confirmAction(
+														"Delete snapshot?",
+														sn.Name+" ("+ShortDigest(sn.Digest)+") will be removed. This cannot be undone.",
+														"Delete",
+														dsDelete("/ui/snapshots/"+pathSeg(sn.Digest)),
+													),
+												},
+											}) {
+												@icon.Trash2(icon.Props{Class: "size-4"})
+											}
+										</div>
+									}
 								}
 							}
 						}

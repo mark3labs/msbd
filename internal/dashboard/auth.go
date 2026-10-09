@@ -27,6 +27,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/mark3labs/msbd/internal/dashboard/views"
 	"github.com/mark3labs/msbd/internal/store"
 )
 
@@ -74,7 +75,8 @@ type ctxKey struct{}
 
 // withIdentity attaches the principal to the request context.
 func withIdentity(r *http.Request, id identity) *http.Request {
-	return r.WithContext(context.WithValue(r.Context(), ctxKey{}, id))
+	ctx := context.WithValue(r.Context(), ctxKey{}, id)
+	return r.WithContext(views.WithAdmin(ctx, id.IsAdmin()))
 }
 
 // identityOf returns the principal for a request. A request that never passed

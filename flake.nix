@@ -44,14 +44,13 @@
         go = pkgs.go_1_26;
         buildGoModule = pkgs.buildGoModule.override { inherit go; };
 
-        # Libraries the *prebuilt* microsandbox FFI `.so` (go:embed'd into the
-        # binary and extracted to ~/.microsandbox at runtime) and the
-        # downloaded `msb` supervisor dlopen/link against. glibc (NOT musl) and
-        # libcap-ng are the load-bearing ones; the rest are belt-and-suspenders
-        # for the runtime download + TLS image pulls.
+        # Non-libc libraries needed by the prebuilt microsandbox FFI and msb.
+        # Never put glibc on a shell-wide LD_LIBRARY_PATH: host tools use their
+        # own pinned loader, whose GLIBC_PRIVATE symbols may differ from this
+        # flake's libc. The FHS wrapper below supplies a matched loader/libc
+        # for downloaded binaries instead.
         runtimeLibs = with pkgs; [
           stdenv.cc.cc.lib # libgcc_s / libstdc++
-          glibc
           libcap_ng
           openssl
           zlib
@@ -73,7 +72,7 @@
           # store (modernc.org/sqlite — pure Go, so still no extra C toolchain).
           # If go.mod changes, run `nix build .#msbd` and replace this with the
           # hash Nix reports.
-          vendorHash = "sha256-pv3NrB68DVVdFdwSJcCHfRUGVw3UdpiRuWMtIpbzqMo=";
+          vendorHash = "sha256-GFvsdPgtNA1hXHqt6+b6X0X0n1jyCFrvpNvUW4td9oY=";
 
           subPackages = [ "cmd/msbd" ];
 
@@ -160,7 +159,8 @@
 
           env.CGO_ENABLED = "1";
 
-          # So a `go run ./cmd/msbd` in the shell can dlopen the runtime FFI.
+          # Let locally built binaries find the FFI's non-libc dependencies.
+          # Downloaded binaries on NixOS still need the FHS wrapper.
           LD_LIBRARY_PATH = lib.makeLibraryPath runtimeLibs;
 
           shellHook = ''

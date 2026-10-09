@@ -1,0 +1,17 @@
+{
+  "$schema": "https://shadcn-templ.com/schema/components.json",
+  "style": "base-nova",
+  "tailwind": {
+    "css": "internal/dashboard/assets/css/input.css",
+    "baseColor": "neutral",
+    "cssVariables": true
+  },
+  "scripts": {
+    "dir": "internal/dashboard/assets/js",
+    "path": "/assets/js"
+  },
+  "aliases": {
+    "components": "github.com/mark3labs/msbd/internal/dashboard/components",
+    "utils": "github.com/mark3labs/msbd/internal/dashboard/utils"
+  }
+}

@@ -1,154 +1,155 @@
-// templui component toast - version: v1.11.1 installed by templui v1.11.1
-// 📚 Documentation: https://templui.io/docs/components/toast
 package toast
 
 import (
+	"strconv"
+
 	"github.com/mark3labs/msbd/internal/dashboard/components/button"
 	"github.com/mark3labs/msbd/internal/dashboard/components/icon"
-	"github.com/mark3labs/msbd/internal/dashboard/utils"
-	"strconv"
 )
 
-type Variant string
-type Position string
+// Type is the toast type ToastIcon renders an icon for.
+type Type string
 
 const (
-	VariantDefault Variant = "default"
-	VariantSuccess Variant = "success"
-	VariantError   Variant = "error"
-	VariantWarning Variant = "warning"
-	VariantInfo    Variant = "info"
+	TypeSuccess Type = "success"
+	TypeInfo    Type = "info"
+	TypeWarning Type = "warning"
+	TypeError   Type = "error"
+	TypeLoading Type = "loading"
 )
 
-const (
-	PositionTopRight     Position = "top-right"
-	PositionTopLeft      Position = "top-left"
-	PositionTopCenter    Position = "top-center"
-	PositionBottomRight  Position = "bottom-right"
-	PositionBottomLeft   Position = "bottom-left"
-	PositionBottomCenter Position = "bottom-center"
-)
-
-type Props struct {
-	ID            string
-	Class         string
-	Attributes    templ.Attributes
-	Title         string
-	Description   string
-	Variant       Variant
-	Position      Position
-	Duration      int
-	Dismissible   bool
-	ShowIndicator bool
-	Icon          bool
+// ToasterProps are the Toast.Provider props shadcn's Toaster passes on.
+type ToasterProps struct {
+	// Timeout in ms before a toast closes. Defaults to 5000 (Base UI).
+	Timeout int
+	// Limit of toasts shown at once. Defaults to 3 (Base UI).
+	Limit int
 }
 
-templ Toast(props ...Props) {
-	{{ var p Props }}
+// Props are the toastManager.add options of a toast requested server side.
+type Props struct {
+	Title       string
+	Description string
+	Type        Type
+	// Timeout in ms overrides the toaster timeout for this toast.
+	Timeout int
+}
+
+// Toaster is shadcn's Toaster: Toast.Provider with Toast.Portal and
+// Toast.Viewport, mounted once in the layout. The provider props live on the
+// viewport, ToastList and ToastIcon are templates toast.js renders a toast
+// from, since the toasts only exist in the toast manager.
+templ Toaster(props ...ToasterProps) {
+	{{ var p ToasterProps }}
 	if len(props) > 0 {
 		{{ p = props[0] }}
 	}
-	if p.ID == "" {
-		{{ p.ID = utils.RandomID() }}
+	if p.Timeout == 0 {
+		{{ p.Timeout = 5000 }}
 	}
-	// Set defaults
-	if p.Variant == "" {
-		{{ p.Variant = VariantDefault }}
+	if p.Limit == 0 {
+		{{ p.Limit = 3 }}
 	}
-	if p.Position == "" {
-		{{ p.Position = PositionBottomRight }}
-	}
-	if p.Duration == 0 {
-		{{ p.Duration = 3000 }}
-	}
+	<div data-base-ui-portal data-slot="toast-portal">
+		<div
+			data-slot="toast-viewport"
+			tabindex="-1"
+			role="region"
+			aria-live="polite"
+			aria-atomic="false"
+			aria-relevant="additions text"
+			aria-label="Notifications"
+			data-templ-timeout={ strconv.Itoa(p.Timeout) }
+			data-templ-limit={ strconv.Itoa(p.Limit) }
+			class="pointer-events-none fixed inset-x-4 bottom-4 z-50 mx-auto w-auto max-w-sm outline-none sm:right-4 sm:left-auto sm:mx-0 sm:w-full"
+		></div>
+		<template data-templ-toast-list>
+			@toastListItem()
+		</template>
+		@toastIcon(TypeSuccess) {
+			@icon.CircleCheck(icon.Props{Attributes: templ.Attributes{"aria-hidden": "true"}})
+		}
+		@toastIcon(TypeInfo) {
+			@icon.Info(icon.Props{Attributes: templ.Attributes{"aria-hidden": "true"}})
+		}
+		@toastIcon(TypeWarning) {
+			@icon.TriangleAlert(icon.Props{Attributes: templ.Attributes{"aria-hidden": "true"}})
+		}
+		@toastIcon(TypeError) {
+			@icon.OctagonX(icon.Props{Class: "text-destructive", Attributes: templ.Attributes{"aria-hidden": "true"}})
+		}
+		@toastIcon(TypeLoading) {
+			@icon.LoaderCircle(icon.Props{Class: "animate-spin", Attributes: templ.Attributes{"aria-hidden": "true"}})
+		}
+	</div>
+}
+
+// toastListItem is one toast of ToastList: Toast, ToastContent, ToastTitle,
+// ToastDescription, ToastAction and ToastClose with shadcn's classes. toast.js
+// mounts the title, description and action only when the toast has them.
+templ toastListItem() {
 	<div
-		id={ p.ID }
-		data-tui-toast
-		data-tui-toast-duration={ strconv.Itoa(p.Duration) }
-		data-position={ string(p.Position) }
-		data-variant={ string(p.Variant) }
-		class={ utils.TwMerge(
-			// Base styles
-			"z-50 fixed pointer-events-auto p-4 w-full md:max-w-[420px]",
-			// Animation
-			"animate-in fade-in slide-in-from-bottom-4 duration-300",
-			// Position-based styles using data attributes
-			"data-[position=top-right]:top-0 data-[position=top-right]:right-0",
-			"data-[position=top-left]:top-0 data-[position=top-left]:left-0",
-			"data-[position=top-center]:top-0 data-[position=top-center]:left-1/2 data-[position=top-center]:-translate-x-1/2",
-			"data-[position=bottom-right]:bottom-0 data-[position=bottom-right]:right-0",
-			"data-[position=bottom-left]:bottom-0 data-[position=bottom-left]:left-0",
-			"data-[position=bottom-center]:bottom-0 data-[position=bottom-center]:left-1/2 data-[position=bottom-center]:-translate-x-1/2",
-			// Slide direction based on position
-			"data-[position*=top]:slide-in-from-top-4",
-			"data-[position*=bottom]:slide-in-from-bottom-4",
-			p.Class,
-		) }
-		{ p.Attributes... }
+		data-slot="toast"
+		class="rounded-2xl group/toast pointer-events-auto absolute right-0 bottom-0 z-[calc(1000-var(--toast-index))] w-full origin-bottom border bg-popover text-popover-foreground shadow-lg will-change-transform outline-none select-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 [--gap:0.75rem] [--height:var(--toast-frontmost-height,var(--toast-height))] [--offset-y:calc(var(--toast-offset-y)*-1+calc(var(--toast-index)*var(--gap)*-1)+var(--toast-swipe-movement-y))] [--peek:0.75rem] [--scale:calc(max(0,1-(var(--toast-index)*0.1)))] [--shrink:calc(1-var(--scale))] h-(--height) [transform:translateX(var(--toast-swipe-movement-x))_translateY(calc(var(--toast-swipe-movement-y)-(var(--toast-index)*var(--peek))-(var(--shrink)*var(--height))))_scale(var(--scale))] [transition:transform_500ms_cubic-bezier(0.22,1,0.36,1),opacity_500ms,height_150ms] after:absolute after:top-full after:left-0 after:h-[calc(var(--gap)+1px)] after:w-full after:content-[''] data-expanded:h-(--toast-height) data-expanded:[transform:translateX(var(--toast-swipe-movement-x))_translateY(var(--offset-y))] data-limited:opacity-0 data-starting-style:[transform:translateY(150%)] [&[data-ending-style]:not([data-limited]):not([data-swipe-direction])]:[transform:translateY(150%)] data-ending-style:data-[swipe-direction=down]:[transform:translateY(calc(var(--toast-swipe-movement-y)+150%))] data-ending-style:data-[swipe-direction=left]:[transform:translateX(calc(var(--toast-swipe-movement-x)-150%))_translateY(var(--offset-y))] data-ending-style:data-[swipe-direction=right]:[transform:translateX(calc(var(--toast-swipe-movement-x)+150%))_translateY(var(--offset-y))] data-ending-style:data-[swipe-direction=up]:[transform:translateY(calc(var(--toast-swipe-movement-y)-150%))] data-expanded:data-ending-style:data-[swipe-direction=down]:[transform:translateY(calc(var(--toast-swipe-movement-y)+150%))] data-expanded:data-ending-style:data-[swipe-direction=left]:[transform:translateX(calc(var(--toast-swipe-movement-x)-150%))_translateY(var(--offset-y))] data-expanded:data-ending-style:data-[swipe-direction=right]:[transform:translateX(calc(var(--toast-swipe-movement-x)+150%))_translateY(var(--offset-y))] data-expanded:data-ending-style:data-[swipe-direction=up]:[transform:translateY(calc(var(--toast-swipe-movement-y)-150%))]"
 	>
-		<div class="w-full bg-popover text-popover-foreground rounded-lg shadow-xs border pt-5 pb-4 px-4 flex items-center justify-center relative overflow-hidden group">
-			// Progress indicator
-			if p.ShowIndicator && p.Duration > 0 {
-				<div class="absolute top-0 left-0 right-0 h-1 overflow-hidden">
-					<div
-						class={ utils.TwMerge(
-							"toast-progress h-full origin-left transition-transform ease-linear",
-							// Variant colors
-							"data-[variant=default]:bg-gray-500",
-							"data-[variant=success]:bg-green-500",
-							"data-[variant=error]:bg-red-500",
-							"data-[variant=warning]:bg-yellow-500",
-							"data-[variant=info]:bg-blue-500",
-						) }
-						data-variant={ string(p.Variant) }
-						data-duration={ strconv.Itoa(p.Duration) }
-					></div>
-				</div>
-			}
-			// Icon
-			if p.Icon {
-				switch p.Variant {
-					case VariantSuccess:
-						@icon.CircleCheck(icon.Props{Class: "size-[22px] text-green-500 mr-3 flex-shrink-0"})
-					case VariantError:
-						@icon.CircleX(icon.Props{Class: "size-[22px] text-red-500 mr-3 flex-shrink-0"})
-					case VariantWarning:
-						@icon.TriangleAlert(icon.Props{Class: "size-[22px] text-yellow-500 mr-3 flex-shrink-0"})
-					case VariantInfo:
-						@icon.Info(icon.Props{Class: "size-[22px] text-blue-500 mr-3 flex-shrink-0"})
-				}
-			}
-			// Content
-			<span class="flex-1 min-w-0">
-				if p.Title != "" {
-					<p class="text-sm font-semibold truncate">{ p.Title }</p>
-				}
-				if p.Description != "" {
-					<p class="text-sm opacity-90 mt-1">{ p.Description }</p>
-				}
-			</span>
-			// Dismiss button
-			if p.Dismissible {
-				@button.Button(button.Props{
-					Size:    button.SizeIcon,
-					Variant: button.VariantGhost,
-					Attributes: templ.Attributes{
-						"aria-label":             "Close",
-						"data-tui-toast-dismiss": "",
-						"type":                   "button",
-					},
-				}) {
-					@icon.X(icon.Props{Class: "size-[18px] opacity-75 hover:opacity-100"})
-				}
+		<div
+			data-slot="toast-content"
+			class="flex h-full items-center gap-3 overflow-hidden p-4 transition-opacity duration-250 ease-[cubic-bezier(0.22,1,0.36,1)] data-behind:opacity-0 data-expanded:opacity-100"
+		>
+			<div class="flex min-w-0 flex-1 flex-col gap-1">
+				<h2 data-slot="toast-title" class="text-sm font-medium"></h2>
+				<p data-slot="toast-description" class="text-sm text-muted-foreground"></p>
+			</div>
+			@button.Button(button.Props{
+				Variant:    button.VariantOutline,
+				Size:       button.SizeSm,
+				Class:      "shrink-0",
+				Attributes: templ.Attributes{"data-slot": "toast-action"},
+			})
+			@button.Button(button.Props{
+				Variant:    button.VariantGhost,
+				Size:       button.SizeIconSm,
+				Class:      "relative shrink-0 text-muted-foreground after:absolute after:-inset-2 after:content-[''] hover:text-foreground",
+				Attributes: templ.Attributes{"data-slot": "toast-close", "aria-label": "Close toast"},
+			}) {
+				@icon.X(icon.Props{Attributes: templ.Attributes{"aria-hidden": "true"}})
 			}
 		</div>
 	</div>
 }
 
-var scriptOnce = templ.NewOnceHandle()
+// toastIcon is ToastIcon for one type.
+templ toastIcon(t Type) {
+	<template data-templ-toast-icon={ string(t) }>
+		<span
+			data-slot="toast-icon"
+			class="shrink-0 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4"
+		>
+			{ children... }
+		</span>
+	</template>
+}
 
-templ Script() {
-	@scriptOnce.Once() {
-		@utils.ComponentScript("toast")
+// Toast requests a toast server side (e.g. swapped in via htmx): toast.js
+// turns the marker into toastManager.add with these options.
+templ Toast(props ...Props) {
+	{{ var p Props }}
+	if len(props) > 0 {
+		{{ p = props[0] }}
 	}
+	<div
+		data-templ-toast
+		if p.Type != "" {
+			data-templ-type={ string(p.Type) }
+		}
+		if p.Timeout > 0 {
+			data-templ-timeout={ strconv.Itoa(p.Timeout) }
+		}
+		if p.Title != "" {
+			data-templ-title={ p.Title }
+		}
+		if p.Description != "" {
+			data-templ-description={ p.Description }
+		}
+	></div>
 }

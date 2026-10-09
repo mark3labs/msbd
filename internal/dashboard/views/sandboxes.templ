@@ -35,7 +35,7 @@ templ SandboxesPage(m Meta, rows []SandboxRow, s TableSort) {
 			@stateChip("stopped", "Stopped")
 			@stateChip("crashed", "Crashed")
 			<label class="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
-				<input type="checkbox" class="size-3.5 rounded border" data-bind="live"/>
+				@signalCheckbox("live", "live")
 				Auto-refresh
 			</label>
 		</div>
@@ -139,16 +139,9 @@ templ SandboxTable(rows []SandboxRow, s TableSort) {
 
 // stateChip is a client-side state filter toggle.
 templ stateChip(state, lbl string) {
-	<button
-		type="button"
-		class="rounded-full border px-3 py-1 text-xs font-medium transition-colors hover:bg-accent"
-		aria-pressed="false"
-		data-class={ "{'bg-primary': $statef === " + jsExpr(state) + ", 'text-primary-foreground': $statef === " + jsExpr(state) + "}" }
-		data-attr={ "{'aria-pressed': ($statef === " + jsExpr(state) + ") ? 'true' : 'false'}" }
-		data-on:click={ "$statef = " + jsExpr(state) }
-	>
+	@button.Button(button.Props{Variant: button.VariantGhost, Size: button.SizeSm, Type: button.TypeButton, Class: "rounded-full border px-3 py-1 text-xs font-medium transition-colors hover:bg-accent", Attributes: templ.Attributes{"aria-pressed": "false", "data-class": "{'bg-primary': $statef === " + jsExpr(state) + ", 'text-primary-foreground': $statef === " + jsExpr(state) + "}", "data-attr": "{'aria-pressed': ($statef === " + jsExpr(state) + ") ? 'true' : 'false'}", "data-on:click": "$statef = " + jsExpr(state)}}) {
 		{ lbl }
-	</button>
+	}
 }
 
 // rowFilterExpr is the per-row data-show expression: text search AND state chip.
@@ -174,45 +167,47 @@ func noMatchExpr(rows []SandboxRow) string {
 
 // rowActions renders the per-sandbox action buttons.
 templ rowActions(r SandboxRow) {
-	<div class="flex items-center justify-end gap-1">
-		if r.State == "running" {
-			@iconButton("Stop "+r.ID, "circle-stop", dsPost("/ui/sandboxes/"+pathSeg(r.ID)+"/stop"))
-		} else {
-			@iconButton("Start "+r.ID, "circle-play", dsPost("/ui/sandboxes/"+pathSeg(r.ID)+"/start"))
-		}
-		@button.Button(button.Props{
-			Variant: button.VariantGhost,
-			Size:    button.SizeIcon,
-			Href:    "/terminal/" + pathSeg(r.ID),
-			Target:  "_blank",
-			Class:   "size-8",
-			Attributes: templ.Attributes{
-				"title":      "Open a terminal in " + r.ID,
-				"aria-label": "Open a terminal in " + r.ID,
-				"rel":        "noopener",
-			},
-		}) {
-			@icon.Terminal(icon.Props{Class: "size-4"})
-		}
-		@iconButton("Snapshot "+r.ID, "camera", "$snapsource="+jsExpr(r.ID)+";"+openDialogJS("create-snapshot"))
-		@button.Button(button.Props{
-			Variant: button.VariantGhost,
-			Size:    button.SizeIcon,
-			Class:   "size-8 text-destructive",
-			Attributes: templ.Attributes{
-				"title":      "Delete " + r.ID,
-				"aria-label": "Delete " + r.ID,
-				"data-on:click": confirmAction(
-					"Delete sandbox?",
-					r.ID+" will be stopped and removed. This cannot be undone.",
-					"Delete",
-					dsDelete("/ui/sandboxes/"+pathSeg(r.ID)),
-				),
-			},
-		}) {
-			@icon.Trash2(icon.Props{Class: "size-4"})
-		}
-	</div>
+	if CanAdmin(ctx) {
+		<div class="flex items-center justify-end gap-1">
+			if r.State == "running" {
+				@iconButton("Stop "+r.ID, "circle-stop", dsPost("/ui/sandboxes/"+pathSeg(r.ID)+"/stop"))
+			} else {
+				@iconButton("Start "+r.ID, "circle-play", dsPost("/ui/sandboxes/"+pathSeg(r.ID)+"/start"))
+			}
+			@button.Button(button.Props{
+				Variant: button.VariantGhost,
+				Size:    button.SizeIcon,
+				Href:    "/terminal/" + pathSeg(r.ID),
+				Target:  "_blank",
+				Class:   "size-8",
+				Attributes: templ.Attributes{
+					"title":      "Open a terminal in " + r.ID,
+					"aria-label": "Open a terminal in " + r.ID,
+					"rel":        "noopener",
+				},
+			}) {
+				@icon.Terminal(icon.Props{Class: "size-4"})
+			}
+			@iconButton("Snapshot "+r.ID, "camera", "$snapsource="+jsExpr(r.ID)+";"+openDialogJS("create-snapshot"))
+			@button.Button(button.Props{
+				Variant: button.VariantGhost,
+				Size:    button.SizeIcon,
+				Class:   "size-8 text-destructive",
+				Attributes: templ.Attributes{
+					"title":      "Delete " + r.ID,
+					"aria-label": "Delete " + r.ID,
+					"data-on:click": confirmAction(
+						"Delete sandbox?",
+						r.ID+" will be stopped and removed. This cannot be undone.",
+						"Delete",
+						dsDelete("/ui/sandboxes/"+pathSeg(r.ID)),
+					),
+				},
+			}) {
+				@icon.Trash2(icon.Props{Class: "size-4"})
+			}
+		</div>
+	}
 }
 
 templ iconButton(label, ico, action string) {

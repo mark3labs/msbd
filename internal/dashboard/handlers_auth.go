@@ -142,7 +142,7 @@ func (h *Handler) accountPassword(w http.ResponseWriter, r *http.Request) {
 
 	_ = sse.PatchElementTempl(views.ClearInline("change-password-error"))
 	closeDialog(sse, "change-password")
-	notify(sse, toast.VariantSuccess, "Password changed", "Your other sessions were signed out.")
+	notify(sse, toast.TypeSuccess, "Password changed", "Your other sessions were signed out.")
 }
 
 // userID resolves a username to its id, returning 0 when it cannot (in which

@@ -17,16 +17,15 @@ package core
 //	send core.exec.signal{signal}                 -> Ctrl-C etc.
 //	recv core.exec.exited{code}                   -> session end
 //
-// WIRE FORMAT (reverse-engineered from microsandbox protocol v5; NOT part of
+// WIRE FORMAT (reverse-engineered from microsandbox protocol v9; NOT part of
 // the Go SDK's public API — see crates/protocol/lib in upstream):
 //
-//	frame body = CBOR(Message{ v:5, t:"<wire string>", p:<CBOR(payload)> })
+//	frame body = CBOR(Message{ v:9, t:"<wire string>", p:<CBOR(payload)> })
 //	             id + flags travel in the binary frame header, passed
 //	             separately to Stream/Send, NOT inside the CBOR.
 //
-// This couples msbd to an undocumented schema; if microsandbox bumps the
-// protocol, this backend breaks while the pipe backend keeps working. Treat it
-// as the opt-in, higher-fidelity path.
+// This couples msbd to an undocumented schema. Re-verify tagged upstream source
+// and run the live PTY integration test before accepting an SDK upgrade.
 
 import (
 	"context"
@@ -41,13 +40,14 @@ import (
 
 // Protocol constants, verified against crates/protocol/lib/message.rs.
 //
-// These mirror the WIRE FORMAT of the agent protocol that the SDK's embedded
-// FFI speaks. That FFI is byte-pinned by go.sum and the downloaded msb runtime
-// is version-checked against the SDK version (see sdk/go/setup.go), so this
-// format CANNOT drift at runtime — it is fixed for a given SDK version. The
-// only way it changes is a deliberate SDK bump in go.mod, which trips the
-// guard in TestPinnedSDKVersion (terminal_agent_test.go): re-verify these
-// constants against the new microsandbox protocol crate when that test fails.
+// The embedded FFI is pinned by the SDK, but SDK 0.7.x's EnsureRuntime reuses
+// existing host runtimes without checking versions. A complete runtime pair is
+// NOT proof of protocol compatibility. TestPinnedSDKVersion guards deliberate
+// SDK upgrades; the integration test must use the matching runtime release.
+// Tagged sources: https://github.com/superradcompany/microsandbox/tree/v0.7.7
+//
+//	crates/protocol/lib/{message,exec,bulk}.rs
+//	sdk/go/agent.go and sdk/rust/lib/sandbox/attach.rs
 //
 // Verification log:
 //
@@ -64,12 +64,18 @@ import (
 //	  does not use. All exec message type strings, their frame flags, and their
 //	  min_protocol_version (baseline gen 1) are untouched.
 //
-// `v` advertises OUR generation to the guest: MessageType::is_available_at
-// gates what the peer may send back. Exec messages are generation-1 baseline,
-// so they are valid at any generation, but we declare the true one so the guest
-// is free to use current-generation behaviour.
+// SDK 0.7.7 → PROTOCOL_VERSION 9 (source review; live verification recorded in
+// terminal_agent_test.go). exec.rs and sdk/go/agent.go are byte-identical to
+// v0.6.16. Exec strings/flags/minimum generation and Message's CBOR envelope
+// are unchanged. Generation 8 raw bulk is negotiated for FS/TCP only; Attach
+// still uses CBOR exec frames without a bulk offer. Generation 9 adds workload
+// and root-disk controls handled by the relay, not this exec session.
+//
+// `v` makes each frame self-describing. In generation 9, upstream documents
+// that behavior is gated by the transport handshake's negotiated generation,
+// not by this field per message. The SDK performs that handshake for us.
 const (
-	protocolVersion uint8 = 7
+	protocolVersion uint8 = 9
 
 	flagTerminal     uint8 = 0b0000_0001 // last frame for a correlation id
 	flagSessionStart uint8 = 0b0000_0010 // first frame of a session

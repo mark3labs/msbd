@@ -1,20 +1,20 @@
 package views
 
 import (
+	"github.com/mark3labs/msbd/internal/dashboard/components/button"
 	"time"
 
+	"github.com/mark3labs/msbd/internal/dashboard/components"
 	"github.com/mark3labs/msbd/internal/dashboard/components/alert"
-	"github.com/mark3labs/msbd/internal/dashboard/components/checkbox"
+	"github.com/mark3labs/msbd/internal/dashboard/components/buttongroup"
 	"github.com/mark3labs/msbd/internal/dashboard/components/copybutton"
-	"github.com/mark3labs/msbd/internal/dashboard/components/dialog"
+	"github.com/mark3labs/msbd/internal/dashboard/components/empty"
 	"github.com/mark3labs/msbd/internal/dashboard/components/icon"
 	"github.com/mark3labs/msbd/internal/dashboard/components/input"
-	"github.com/mark3labs/msbd/internal/dashboard/components/label"
-	"github.com/mark3labs/msbd/internal/dashboard/components/progress"
-	"github.com/mark3labs/msbd/internal/dashboard/components/selectbox"
-	"github.com/mark3labs/msbd/internal/dashboard/components/tabs"
+	sidebarcomp "github.com/mark3labs/msbd/internal/dashboard/components/sidebar"
+	"github.com/mark3labs/msbd/internal/dashboard/components/skeleton"
+	"github.com/mark3labs/msbd/internal/dashboard/components/spinner"
 	"github.com/mark3labs/msbd/internal/dashboard/components/toast"
-	"github.com/mark3labs/msbd/internal/dashboard/components/tooltip"
 )
 
 // Meta carries shell-level info shown in the header.
@@ -53,7 +53,7 @@ type Meta struct {
 func (m Meta) SignedIn() bool { return m.Username != "" }
 
 // Page is the full HTML document: it loads the compiled CSS, the vendored
-// Datastar runtime and the templui component scripts, then renders the app
+// Datastar runtime and the shadcn-templ component scripts, then renders the app
 // shell (sidebar + content region) around the given section body.
 //
 // Each section is a REAL page served at its own URL, so bookmarks, refresh and
@@ -70,38 +70,20 @@ templ Page(m Meta, body templ.Component) {
 			@themeBootScript()
 			<script type="module" src="/assets/vendor/datastar.js"></script>
 			<script src="/assets/js/metric-chart.js"></script>
-			@checkbox.Script()
-			@copybutton.Script()
-			@dialog.Script()
-			@input.Script()
-			@label.Script()
-			@progress.Script()
-			@selectbox.Script()
-			@tabs.Script()
-			@toast.Script()
-			@tooltip.Script()
+			@components.Scripts()
 		</head>
 		<body class="bg-background text-foreground antialiased">
 			<a
 				href="#content"
 				class="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:m-2 focus:rounded focus:bg-primary focus:px-3 focus:py-2 focus:text-primary-foreground"
 			>Skip to content</a>
-			<div class="flex h-screen w-full overflow-hidden" data-signals="{navopen:false}">
+			@sidebarcomp.Provider(sidebarcomp.ProviderProps{ID: "main-sidebar", Class: "h-screen min-h-0 overflow-hidden"}) {
 				@sidebar(m)
-				<!-- Mobile scrim: closes the drawer when tapped. -->
-				<div
-					class="fixed inset-0 z-30 bg-black/50 md:hidden"
-					data-show="$navopen"
-					data-on:click="$navopen = false"
-					aria-hidden="true"
-				></div>
 				<div class="flex min-w-0 flex-1 flex-col">
 					@topbar(m)
-					<main id="content" class="flex-1 overflow-y-auto p-4 sm:p-6" tabindex="-1">
-						@body
-					</main>
+					<main id="content" class="flex-1 overflow-y-auto p-4 sm:p-6" tabindex="-1">@body </main>
 				</div>
-			</div>
+			}
 			@Toaster()
 			@ConfirmDialog()
 			if m.SignedIn() {
@@ -131,6 +113,10 @@ templ themeBootScript() {
     try { localStorage.setItem("msbd-theme", next); } catch (e) {}
     paint(next);
   };
+  // Keep the system choice live when the OS changes without a page reload.
+  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", function () {
+    if (document.documentElement.dataset.theme === "system") paint("system");
+  });
   // The buttons do not exist yet while this runs in <head>; sync them once the
   // document is parsed so the active theme is visibly pressed.
   document.addEventListener("DOMContentLoaded", function () {
@@ -144,109 +130,85 @@ templ themeBootScript() {
 // title, both of which the desktop layout renders elsewhere.
 templ topbar(m Meta) {
 	<header class="flex h-14 shrink-0 items-center gap-2 border-b px-4 md:hidden">
-		<button
-			type="button"
-			class="inline-flex size-9 items-center justify-center rounded-md hover:bg-accent"
-			aria-label="Open navigation"
-			data-on:click="$navopen = true"
-		>
-			@icon.Menu(icon.Props{Class: "size-5"})
-		</button>
+		@sidebarcomp.Trigger(sidebarcomp.TriggerProps{Target: "main-sidebar", Attributes: templ.Attributes{"aria-label": "Toggle navigation"}})
 		<span class="font-semibold">{ m.Title }</span>
 	</header>
 }
 
-// sidebar is the persistent left navigation. On mobile it becomes an overlay
-// drawer driven by the $navopen signal.
+// sidebar uses the upstream responsive sheet and desktop navigation. Anchors
+// remain real page links; Settings remains gated by the existing auth metadata.
 templ sidebar(m Meta) {
-	<aside
-		class="fixed inset-y-0 left-0 z-40 flex w-60 shrink-0 flex-col border-r bg-sidebar text-sidebar-foreground transition-transform md:static md:translate-x-0"
-		data-class="{'-translate-x-full': !$navopen, 'translate-x-0': $navopen}"
-		aria-label="Main navigation"
-	>
-		<div class="flex h-14 items-center gap-2 border-b px-4">
+	@sidebarcomp.Sidebar(sidebarcomp.Props{ID: "main-sidebar", Attributes: templ.Attributes{"aria-label": "Main navigation"}}) {
+		@sidebarcomp.Header(sidebarcomp.HeaderProps{Class: "border-b px-4 py-5"}) {
 			<a href="/" class="flex items-center gap-2 font-semibold">
-				@icon.Box(icon.Props{Class: "size-5"})
-				msbd
+				@icon.Box(icon.Props{Class: "size-5"}) msbd
+				<span class="ml-auto text-xs text-muted-foreground" title={ "msbd " + m.Version }>{ m.Version }</span>
 			</a>
-			<span class="ml-auto text-xs text-muted-foreground" title={ "msbd " + m.Version }>{ m.Version }</span>
-			<button
-				type="button"
-				class="-mr-2 inline-flex size-8 items-center justify-center rounded-md hover:bg-accent md:hidden"
-				aria-label="Close navigation"
-				data-on:click="$navopen = false"
-			>
-				@icon.X(icon.Props{Class: "size-4"})
-			</button>
-		</div>
-		<nav class="flex flex-col gap-1 p-2">
-			@navItem(m, SectionOverview, "/", "layout-dashboard", "Overview")
-			@navItem(m, SectionSandboxes, "/sandboxes", "server", "Sandboxes")
-			@navItem(m, SectionVolumes, "/volumes", "hard-drive", "Volumes")
-			@navItem(m, SectionImages, "/images", "layers", "Images")
-			@navItem(m, SectionSnapshots, "/snapshots", "camera", "Snapshots")
-			if m.ShowSettings {
-				<div class="mt-2 px-3 pb-1 pt-2 text-xs font-medium text-muted-foreground/70 uppercase tracking-wide">Settings</div>
-				@navItem(m, SectionKeys, "/settings/keys", "key-round", "API keys")
-				@navItem(m, SectionUsers, "/settings/users", "users", "Users")
+		}
+		@sidebarcomp.Content() {
+			@sidebarcomp.Group(sidebarcomp.GroupProps{Class: "px-4 py-4"}) {
+				@sidebarcomp.Menu() {
+					@navItem(m, SectionOverview, "/", "layout-dashboard", "Overview")
+					@navItem(m, SectionSandboxes, "/sandboxes", "server", "Sandboxes")
+					@navItem(m, SectionVolumes, "/volumes", "hard-drive", "Volumes")
+					@navItem(m, SectionImages, "/images", "layers", "Images")
+					@navItem(m, SectionSnapshots, "/snapshots", "camera", "Snapshots")
+				}
 			}
-		</nav>
-		<div class="mt-auto space-y-2 border-t p-3 text-xs text-muted-foreground">
+			if m.ShowSettings {
+				@sidebarcomp.Group(sidebarcomp.GroupProps{Class: "px-4 py-4"}) {
+					@sidebarcomp.GroupLabel() {
+						Settings
+					}
+					@sidebarcomp.Menu() {
+						@navItem(m, SectionKeys, "/settings/keys", "key-round", "API keys")
+						@navItem(m, SectionUsers, "/settings/users", "users", "Users")
+					}
+				}
+			}
+		}
+		@sidebarcomp.Footer(sidebarcomp.FooterProps{Class: "space-y-2 border-t p-3 text-xs text-muted-foreground"}) {
 			@accountBox(m)
 			@themeToggle()
 			<div class="truncate" title={ "runtime " + m.RuntimeVersion }>runtime: { m.RuntimeVersion }</div>
 			<div class="truncate" title={ "sdk " + m.SDKVersion }>sdk: { m.SDKVersion }</div>
-			<a
-				href="/docs"
-				target="_blank"
-				rel="noopener"
-				class="inline-flex items-center gap-1 hover:text-foreground"
-			>
-				@icon.FileText(icon.Props{Class: "size-3.5"})
-				API docs
+			<a href="/docs" target="_blank" rel="noopener" class="inline-flex items-center gap-1 hover:text-foreground">
+				@icon.FileText(icon.Props{Class: "size-3.5"}) API docs
 			</a>
-		</div>
-	</aside>
+		}
+	}
 }
 
-// navItem is a real anchor so navigation is bookmarkable and back/forward work.
 templ navItem(m Meta, sec Section, url, ico, lbl string) {
-	<a
-		href={ templ.SafeURL(url) }
-		class={ "flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors",
-			templ.KV("bg-sidebar-accent text-sidebar-accent-foreground", m.Section == sec),
-			templ.KV("hover:bg-sidebar-accent/60", m.Section != sec) }
-		if m.Section == sec {
-			aria-current="page"
+	@sidebarcomp.MenuItem() {
+		@sidebarcomp.MenuButton(sidebarcomp.MenuButtonProps{Href: url, Class: "msbd-nav-link", IsActive: m.Section == sec, Attributes: navAttrs(m.Section == sec)}) {
+			@icon.Icon(ico)(icon.Props{Class: "size-4"})
+			<span>{ lbl }</span>
 		}
-	>
-		@icon.Icon(ico)(icon.Props{Class: "size-4"})
-		{ lbl }
-	</a>
+	}
+}
+
+func navAttrs(active bool) templ.Attributes {
+	if active {
+		return templ.Attributes{"aria-current": "page"}
+	}
+	return nil
 }
 
 // themeToggle switches between system, light and dark palettes. It writes to
 // localStorage via the boot script so the choice survives navigation.
 templ themeToggle() {
-	<div class="flex items-center gap-1" role="group" aria-label="Colour theme">
+	@buttongroup.ButtonGroup(buttongroup.Props{Attributes: templ.Attributes{"aria-label": "Colour theme"}}) {
 		@themeButton("system", "monitor", "Match system theme")
 		@themeButton("light", "sun", "Light theme")
 		@themeButton("dark", "moon", "Dark theme")
-	</div>
+	}
 }
 
 templ themeButton(mode, ico, lbl string) {
-	<button
-		type="button"
-		class="inline-flex size-7 items-center justify-center rounded-md hover:bg-accent hover:text-foreground aria-pressed:bg-accent aria-pressed:text-foreground"
-		title={ lbl }
-		aria-label={ lbl }
-		aria-pressed="false"
-		data-theme-btn={ mode }
-		data-on:click={ "window.msbdSetTheme(" + jsExpr(mode) + ")" }
-	>
+	@button.Button(button.Props{Variant: button.VariantGhost, Size: button.SizeSm, Type: button.TypeButton, Class: "inline-flex size-7 items-center justify-center rounded-md hover:bg-accent hover:text-foreground aria-pressed:bg-accent aria-pressed:text-foreground", Attributes: templ.Attributes{"title": lbl, "aria-label": lbl, "aria-pressed": "false", "data-theme-btn": mode, "data-on:click": "window.msbdSetTheme(" + jsExpr(mode) + ")"}}) {
 		@icon.Icon(ico)(icon.Props{Class: "size-4"})
-	</button>
+	}
 }
 
 func pageTitle(m Meta) string {
@@ -270,14 +232,14 @@ templ accountBox(m Meta) {
 				}
 			</div>
 			<div class="flex items-center gap-3">
-				<button
-					type="button"
-					class="hover:text-foreground"
-					data-on:click={ openDialogJS("change-password") }
-				>Change password</button>
+				@button.Button(button.Props{Variant: button.VariantGhost, Size: button.SizeSm, Type: button.TypeButton, Class: "hover:text-foreground", Attributes: templ.Attributes{"data-on:click": openDialogJS("change-password")}}) {
+					Change password
+				}
 				if m.CanSignOut {
 					<form method="post" action="/logout" class="contents">
-						<button type="submit" class="hover:text-foreground">Sign out</button>
+						@button.Button(button.Props{Variant: button.VariantGhost, Size: button.SizeSm, Type: button.TypeSubmit, Class: "hover:text-foreground"}) {
+							Sign out
+						}
 					</form>
 				}
 			</div>
@@ -288,7 +250,7 @@ templ accountBox(m Meta) {
 // LoadingPanel is a neutral placeholder shown while a section loads.
 templ LoadingPanel() {
 	<div class="flex items-center gap-2 text-sm text-muted-foreground" role="status">
-		@icon.LoaderCircle(icon.Props{Class: "size-4 animate-spin"})
+		@spinner.Spinner()
 		Loading…
 	</div>
 }
@@ -297,7 +259,7 @@ templ LoadingPanel() {
 templ TableSkeleton(rows int) {
 	<div class="space-y-2 p-4" role="status" aria-label="Loading">
 		for range rows {
-			<div class="h-8 w-full animate-pulse rounded bg-muted"></div>
+			@skeleton.Skeleton(skeleton.Props{Class: "h-8 w-full"})
 		}
 	</div>
 }
@@ -314,30 +276,28 @@ templ PageHeader(title string) {
 
 // Toaster is the live region transient toasts are appended into.
 templ Toaster() {
+	@toast.Toaster()
 	<div id="toaster" aria-live="polite" aria-atomic="false"></div>
 }
 
 // Notify renders a single toast. Handlers append it to #toaster over SSE; the
-// templui toast script auto-shows it via its MutationObserver.
+// shadcn-templ toast script auto-shows it via its MutationObserver.
 //
 // Errors are STICKY (duration 0) so a long SDK message can actually be read and
 // copied; successes auto-dismiss.
-templ Notify(variant toast.Variant, title, desc string) {
-	@toast.Toast(toast.Props{
-		Variant:     variant,
-		Title:       title,
-		Description: desc,
-		Position:    toast.PositionBottomRight,
-		Duration:    toastDuration(variant),
-		Dismissible: true,
-		Icon:        true,
-	})
+templ Notify(variant toast.Type, title, desc string) {
+	if variant == toast.TypeError {
+		<div data-templ-toast data-templ-type="error" data-templ-title={ title } data-templ-description={ desc } data-templ-timeout="-1"></div>
+	} else {
+		@toast.Toast(toast.Props{Type: variant, Title: title, Description: desc, Timeout: toastDuration(variant)})
+	}
 }
 
-// toastDuration keeps errors on screen until dismissed.
-func toastDuration(v toast.Variant) int {
-	if v == toast.VariantError {
-		return 0
+// The beta13 marker ignores a zero timeout. Negative timeouts are truthy in
+// its marker reader but create no timer, so errors remain sticky.
+func toastDuration(v toast.Type) int {
+	if v == toast.TypeError {
+		return -1
 	}
 	return 4000
 }
@@ -365,18 +325,22 @@ templ ClearInline(id string) {
 
 // EmptyState is the friendly zero-data placeholder with a call to action.
 templ EmptyState(ico, title, desc string) {
-	<div class="flex flex-col items-center justify-center gap-3 px-6 py-12 text-center">
-		<div class="rounded-full bg-muted p-3 text-muted-foreground">
-			@icon.Icon(ico)(icon.Props{Class: "size-6"})
-		</div>
-		<div class="space-y-1">
-			<p class="font-medium">{ title }</p>
-			<p class="text-sm text-muted-foreground">{ desc }</p>
-		</div>
-		<div class="flex items-center gap-2">
+	@empty.Empty() {
+		@empty.Header() {
+			@empty.Media(empty.MediaProps{Variant: empty.MediaVariantIcon}) {
+				@icon.Icon(ico)(icon.Props{Class: "size-6"})
+			}
+			@empty.Title() {
+				{ title }
+			}
+			@empty.Description() {
+				{ desc }
+			}
+		}
+		@empty.Content() {
 			{ children... }
-		</div>
-	</div>
+		}
+	}
 }
 
 // Copyable renders a monospace value with a copy-to-clipboard button.
@@ -399,13 +363,7 @@ templ SearchBox(placeholder string) {
 		<span class="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground">
 			@icon.Search(icon.Props{Class: "size-4"})
 		</span>
-		<input
-			type="search"
-			class="h-9 w-full rounded-md border bg-background pl-8 pr-3 text-sm shadow-xs outline-none focus-visible:ring-2 focus-visible:ring-ring"
-			placeholder={ placeholder }
-			aria-label={ placeholder }
-			data-bind="q"
-		/>
+		@input.Input(input.Props{Type: "search", Class: "pl-8", Placeholder: placeholder, Attributes: templ.Attributes{"aria-label": placeholder, "data-bind": "q"}})
 	</div>
 }
 
@@ -438,6 +396,6 @@ func ariaSort(dir string) string {
 // flight. Pair with data-indicator on the enclosing element.
 templ Busy(signal string) {
 	<span data-show={ "$" + signal } class="inline-flex" role="status" aria-label="Working">
-		@icon.LoaderCircle(icon.Props{Class: "size-4 animate-spin"})
+		@spinner.Spinner()
 	</span>
 }
