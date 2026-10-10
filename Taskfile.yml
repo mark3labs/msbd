@@ -39,6 +39,9 @@ tasks:
 
   dashboard:scripts:
     desc: Build the pinned shadcn-templ component JS bundle and embedded URL manifest (no Node required)
+    sources:
+      - components.json
+      - internal/dashboard/components/**/*.js
     cmds:
       - '{{.SHADCN_TEMPL}} bundle'
 
@@ -71,14 +74,16 @@ tasks:
       - templ generate --watch --proxy="http://localhost:8099" --proxyport=7332 --open-browser=false
 
   dev:scripts:
-    desc: Watch shadcn-templ component sources and rebuild the readable development bundle
+    desc: Watch shadcn-templ component sources and rebuild the minified bundle
+    # The CLI's --watch forces unminified output, dirtying the committed bundle.
+    # Task watches the inputs instead, using the same build as task dashboard.
     cmds:
-      - '{{.SHADCN_TEMPL}} bundle --watch'
+      - task --watch dashboard:scripts
 
   dev:tailwind:
     desc: Watch the dashboard Tailwind CSS (rebuilds output.css on .templ changes)
     cmds:
-      - tailwindcss -i internal/dashboard/assets/css/input.css -o internal/dashboard/assets/css/output.css --watch
+      - tailwindcss -i internal/dashboard/assets/css/input.css -o internal/dashboard/assets/css/output.css --minify --watch
 
   dev:server:
     desc: air hot-reload of the msbd binary (CGO; rebuilds + restarts on .go changes)
@@ -107,7 +112,7 @@ tasks:
     ignore_error: true
     cmds:
       - pkill -f "templ generate --watch" || true
-      - pkill -f "shadcn-templ.*bundle --watch" || true
+      - pkill -f "task --watch dashboard:scripts" || true
       - pkill -f "air --build.cmd" || true
       - pkill -f "tailwindcss -i internal/dashboard/assets/css/input.css" || true
       - pkill -f "tmp/bin/msbd serve" || true

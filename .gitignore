@@ -2,6 +2,7 @@
 /bin/
 /dist/
 /tmp/
+/.task/
 *.test
 *.out
 

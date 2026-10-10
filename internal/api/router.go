@@ -443,8 +443,7 @@ func decode(r *http.Request, v any) error {
 func (s *Server) decodeBody(w http.ResponseWriter, r *http.Request, v any, limit int64) bool {
 	r.Body = http.MaxBytesReader(w, r.Body, limit)
 	if err := decode(r, v); err != nil {
-		var mbe *http.MaxBytesError
-		if errors.As(err, &mbe) {
+		if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
 			writeErr(w, http.StatusRequestEntityTooLarge, "payload_too_large",
 				"request body exceeds limit")
 			return false
